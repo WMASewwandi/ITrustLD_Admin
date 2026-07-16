@@ -1,0 +1,26 @@
+{
+  "name": "itrustld_admin",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev ",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "framer-motion": "^12.42.2",
+    "lucide-react": "^0.544.0",
+    "next": "^16.2.10",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/forms": "^0.5.11",
+    "autoprefixer": "^10.5.2",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^16.2.10",
+    "postcss": "^8.5.17",
+    "tailwindcss": "^3.4.19"
+  }
+}
