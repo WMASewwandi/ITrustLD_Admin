@@ -165,13 +165,13 @@ function RatesTable({ title, columns, rows, emptyLabel, renderCells, onEdit, onD
   return (
     <section className="admin-card admin-fade-up overflow-visible p-0">
       {title ? (
-        <div className="border-b border-slate-200 px-5 py-4">
-          <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+        <div className="border-b border-white/10 px-5 py-4">
+          <h2 className="text-lg font-semibold text-white">{title}</h2>
         </div>
       ) : null}
       <div className="overflow-x-auto">
         <table className="min-w-[720px] w-full text-left text-[13px]">
-          <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+          <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
             <tr>
               {columns.map((col) => (
                 <th key={col} className="px-4 py-3">
@@ -182,7 +182,7 @@ function RatesTable({ title, columns, rows, emptyLabel, renderCells, onEdit, onD
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.id} className="border-t border-slate-100 text-slate-700">
+              <tr key={row.id} className="border-t border-white/10 text-slate-300">
                 {renderCells(row)}
                 <td className="px-4 py-3">
                   <ActionButtons onEdit={() => onEdit(row)} onDelete={() => onDelete(row.id)} />
@@ -417,7 +417,7 @@ export default function RatesPanel({ method }) {
   return (
     <div>
       <div className="admin-fade-up flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">{titleForMethod(method)}</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-white">{titleForMethod(method)}</h1>
         <button
           type="button"
           onClick={openAdd}
@@ -438,10 +438,10 @@ export default function RatesPanel({ method }) {
           onDelete={removeDeposit}
           renderCells={(row) => (
             <>
-              <td className="px-4 py-3 font-medium text-slate-900">{row.id}</td>
+              <td className="px-4 py-3 font-medium text-white">{row.id}</td>
               <td className="px-4 py-3">{row.adminId}</td>
               <td className="px-4 py-3">{row.topupMethod}</td>
-              <td className="px-4 py-3 font-semibold text-slate-900">{row.depositRate}</td>
+              <td className="px-4 py-3 font-semibold text-white">{row.depositRate}</td>
               <td className="px-4 py-3">{row.changedDate}</td>
             </>
           )}
@@ -456,10 +456,10 @@ export default function RatesPanel({ method }) {
           onDelete={removeWithdrawal}
           renderCells={(row) => (
             <>
-              <td className="px-4 py-3 font-medium text-slate-900">{row.id}</td>
+              <td className="px-4 py-3 font-medium text-white">{row.id}</td>
               <td className="px-4 py-3">{row.adminId}</td>
               <td className="px-4 py-3">{row.cashoutMethod}</td>
-              <td className="px-4 py-3 font-semibold text-slate-900">{row.withdrawRate}</td>
+              <td className="px-4 py-3 font-semibold text-white">{row.withdrawRate}</td>
               <td className="px-4 py-3">{row.changedDate}</td>
             </>
           )}
@@ -469,7 +469,7 @@ export default function RatesPanel({ method }) {
       {showPointSection ? (
         <div className="mt-8">
           <div className="admin-fade-up flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            <h1 className="text-2xl font-bold tracking-tight text-white">
               {pointSectionTitle(method)}
             </h1>
             <button
@@ -491,9 +491,9 @@ export default function RatesPanel({ method }) {
               onDelete={removePoint}
               renderCells={(row) => (
                 <>
-                  <td className="px-4 py-3 font-medium text-slate-900">{row.id}</td>
+                  <td className="px-4 py-3 font-medium text-white">{row.id}</td>
                   <td className="px-4 py-3">{row.paymentOption}</td>
-                  <td className="px-4 py-3 font-semibold text-slate-900">{row.rate}</td>
+                  <td className="px-4 py-3 font-semibold text-white">{row.rate}</td>
                   <td className="px-4 py-3">{row.applicableDate}</td>
                 </>
               )}
@@ -509,13 +509,13 @@ export default function RatesPanel({ method }) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-start justify-between gap-3">
-              <h3 className="text-lg font-semibold text-slate-900">
+              <h3 className="text-lg font-semibold text-white">
                 {modalTitleForMethod(method, modal.mode)}
               </h3>
               <button
                 type="button"
                 onClick={() => setModal(null)}
-                className="text-slate-400 hover:text-slate-900"
+                className="text-slate-400 hover:text-white"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -528,7 +528,7 @@ export default function RatesPanel({ method }) {
               className="space-y-4"
             >
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                <span className="mb-1.5 block text-sm font-medium text-slate-300">
                   Deposit / Withdraw Method
                 </span>
                 <select
@@ -553,7 +553,7 @@ export default function RatesPanel({ method }) {
               >
                 {showDepositField ? (
                   <label className="block">
-                    <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                    <span className="mb-1.5 block text-sm font-medium text-slate-300">
                       Deposit Rate
                     </span>
                     <input
@@ -570,7 +570,7 @@ export default function RatesPanel({ method }) {
                 ) : null}
                 {showWithdrawField ? (
                   <label className="block">
-                    <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                    <span className="mb-1.5 block text-sm font-medium text-slate-300">
                       Withdrawal Rate
                     </span>
                     <input
@@ -610,13 +610,13 @@ export default function RatesPanel({ method }) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-start justify-between gap-3">
-              <h3 className="text-lg font-semibold text-slate-900">
+              <h3 className="text-lg font-semibold text-white">
                 {isPointEdit ? "Edit Point Withdrawal Rate" : "Add New Point Withdrawal Rate"}
               </h3>
               <button
                 type="button"
                 onClick={() => setPointModal(null)}
-                className="text-slate-400 hover:text-slate-900"
+                className="text-slate-400 hover:text-white"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -629,7 +629,7 @@ export default function RatesPanel({ method }) {
               className="space-y-4"
             >
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                <span className="mb-1.5 block text-sm font-medium text-slate-300">
                   Payment Option
                 </span>
                 <select
@@ -651,7 +651,7 @@ export default function RatesPanel({ method }) {
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                <span className="mb-1.5 block text-sm font-medium text-slate-300">
                   Point Withdrawal Rate
                 </span>
                 <input
@@ -667,7 +667,7 @@ export default function RatesPanel({ method }) {
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                <span className="mb-1.5 block text-sm font-medium text-slate-300">
                   Applicable Date
                 </span>
                 <input

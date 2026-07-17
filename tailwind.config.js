@@ -19,12 +19,13 @@ module.exports = {
         "theme-gray-border": "#E0E6ED",
         "theme-red-action": "#FF0000",
         "theme-orange": "#FF8329",
-        /* Admin shell palette (screenshot-aligned) */
+        /* Admin shell palette — dark workspace */
         "admin-chrome": "#28293D",
         "admin-chrome-deep": "#1F2030",
         "admin-chrome-lift": "#323348",
-        "admin-canvas": "#F0F1F6",
-        "admin-surface": "#FFFFFF",
+        "admin-canvas": "#070B16",
+        "admin-surface": "#141625",
+        "admin-surface-raised": "#1A1B2A",
         "admin-teal": "#236B6B",
         "admin-teal-deep": "#1A5555",
         "admin-accent": "#3B82F6",
@@ -34,8 +35,8 @@ module.exports = {
         poppins: ["Poppins", "sans-serif"]
       },
       boxShadow: {
-        "admin-card": "0 1px 2px rgba(40, 41, 61, 0.04), 0 8px 24px rgba(40, 41, 61, 0.06)",
-        "admin-soft": "0 1px 3px rgba(40, 41, 61, 0.06)",
+        "admin-card": "0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 28px rgba(0, 0, 0, 0.35)",
+        "admin-soft": "0 1px 3px rgba(0, 0, 0, 0.35)",
       }
     }
   },

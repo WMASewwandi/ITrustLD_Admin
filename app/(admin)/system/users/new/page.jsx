@@ -17,7 +17,7 @@ const SHIFTS = ["Shift A", "Shift B"];
 
 function FieldLabel({ children, required }) {
   return (
-    <span className="mb-1.5 block text-sm font-medium text-slate-700">
+    <span className="mb-1.5 block text-sm font-medium text-slate-300">
       {children}
       {required ? <span className="ml-0.5 text-admin-danger">*</span> : null}
     </span>
@@ -55,7 +55,7 @@ export default function NewSystemUserPage() {
         }}
         className="admin-card admin-fade-up mx-auto max-w-4xl p-6 sm:p-8"
       >
-        <h1 className="mb-6 text-2xl font-bold tracking-tight text-slate-900">Create System User</h1>
+        <h1 className="mb-6 text-2xl font-bold tracking-tight text-white">Create System User</h1>
 
         <div className="grid gap-5 sm:grid-cols-2">
           <label className="block min-w-0">

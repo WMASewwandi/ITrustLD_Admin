@@ -115,7 +115,7 @@ export default function RolesPage() {
           <Shield className="h-3 w-3" />
           Access control
         </p>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Manage System Roles</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-white">Manage System Roles</h1>
         <p className="mt-1 text-sm text-slate-500">
           Configure role activities and permissions for customer and admin personas.
         </p>
@@ -132,7 +132,7 @@ export default function RolesPage() {
                 <Shield className="h-4 w-4" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">{role.title}</h2>
+                <h2 className="text-lg font-semibold text-white">{role.title}</h2>
                 <p className="text-xs text-slate-400">{role.description}</p>
               </div>
             </div>
@@ -141,7 +141,7 @@ export default function RolesPage() {
               {role.permissions.map((p) => (
                 <li
                   key={p.id}
-                  className="flex items-center gap-2 rounded-xl border border-slate-100 bg-white/[0.02] px-3 py-2 text-sm text-slate-600"
+                  className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-slate-400"
                 >
                   <span
                     className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md ${
@@ -176,10 +176,10 @@ export default function RolesPage() {
           <div className="admin-card max-h-[85vh] w-full max-w-lg overflow-auto p-5" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900">{editing.title}</h3>
+                <h3 className="text-lg font-semibold text-white">{editing.title}</h3>
                 <p className="mt-1 text-sm text-slate-500">Toggle permissions for this role.</p>
               </div>
-              <button type="button" onClick={() => setEditRole(null)} className="text-slate-400 hover:text-slate-900">
+              <button type="button" onClick={() => setEditRole(null)} className="text-slate-400 hover:text-white">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -188,14 +188,14 @@ export default function RolesPage() {
               {editing.permissions.map((p) => (
                 <label
                   key={p.id}
-                  className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:border-admin-teal/30"
+                  className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 transition hover:border-admin-teal/30"
                 >
-                  <span className="text-sm text-slate-700">{p.label}</span>
+                  <span className="text-sm text-slate-300">{p.label}</span>
                   <input
                     type="checkbox"
                     checked={p.enabled}
                     onChange={() => togglePermission(editing.id, p.id)}
-                    className="h-4 w-4 rounded border-slate-300"
+                    className="h-4 w-4 rounded border-white/20"
                   />
                 </label>
               ))}
@@ -205,7 +205,7 @@ export default function RolesPage() {
               <button
                 type="button"
                 onClick={() => setEditRole(null)}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600"
+                className="rounded-xl border border-white/10 px-4 py-2 text-sm text-slate-400"
               >
                 Close
               </button>

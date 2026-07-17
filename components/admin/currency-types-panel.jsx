@@ -27,7 +27,7 @@ function ActiveCheckbox({ checked, onChange }) {
       type="checkbox"
       checked={checked}
       onChange={onChange}
-      className="h-4 w-4 cursor-pointer rounded border-slate-300 accent-theme-green-action"
+      className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action"
       title={checked ? "Active" : "Set as active"}
     />
   );
@@ -64,8 +64,8 @@ function ModalShell({ title, onClose, children, onSave }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">
-          <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-900">
+          <h3 className="text-lg font-semibold text-white">{title}</h3>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-white">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -144,8 +144,8 @@ export default function CurrencyTypesPanel() {
   return (
     <div className="mt-5">
       <section className="admin-card admin-fade-up overflow-visible p-0">
-        <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-lg font-semibold text-slate-900">Currency Types</h2>
+        <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-lg font-semibold text-white">Currency Types</h2>
           <button
             type="button"
             onClick={openAdd}
@@ -157,7 +157,7 @@ export default function CurrencyTypesPanel() {
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-[720px] w-full text-left text-[13px]">
-            <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+            <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
               <tr>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Code</th>
@@ -169,8 +169,8 @@ export default function CurrencyTypesPanel() {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} className="border-t border-slate-100 text-slate-700">
-                  <td className="px-4 py-3 font-medium text-slate-900">{row.name}</td>
+                <tr key={row.id} className="border-t border-white/10 text-slate-300">
+                  <td className="px-4 py-3 font-medium text-white">{row.name}</td>
                   <td className="px-4 py-3">{row.code}</td>
                   <td className="px-4 py-3">{row.symbol}</td>
                   <td className="px-4 py-3">{row.description}</td>
@@ -207,7 +207,7 @@ export default function CurrencyTypesPanel() {
           onSave={save}
         >
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">Name</span>
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">Name</span>
             <input
               required
               value={modal.name}
@@ -217,7 +217,7 @@ export default function CurrencyTypesPanel() {
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">Code</span>
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">Code</span>
             <input
               required
               value={modal.code}
@@ -227,7 +227,7 @@ export default function CurrencyTypesPanel() {
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">Symbol</span>
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">Symbol</span>
             <input
               required
               value={modal.symbol}
@@ -237,7 +237,7 @@ export default function CurrencyTypesPanel() {
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">Description</span>
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">Description</span>
             <input
               value={modal.description}
               onChange={(e) => setModal((m) => ({ ...m, description: e.target.value }))}
@@ -250,9 +250,9 @@ export default function CurrencyTypesPanel() {
               type="checkbox"
               checked={modal.active}
               onChange={(e) => setModal((m) => ({ ...m, active: e.target.checked }))}
-              className="h-4 w-4 cursor-pointer rounded border-slate-300 accent-theme-green-action"
+              className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action"
             />
-            <span className="text-sm font-medium text-slate-700">Active</span>
+            <span className="text-sm font-medium text-slate-300">Active</span>
           </label>
         </ModalShell>
       ) : null}
