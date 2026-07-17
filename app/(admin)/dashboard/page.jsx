@@ -4,7 +4,7 @@ import Breadcrumb from "@/components/admin/breadcrumb";
 import {
   Banknote,
   Briefcase,
-  ChevronDown,
+  ChevronDown, 
   DollarSign,
   HandCoins,
   MoreVertical,
@@ -348,6 +348,4 @@ export default function DashboardPage() {
       </div>
     </div>
   );
-}
-
 }
