@@ -9,15 +9,16 @@ body {
 }
 
 body {
-  @apply font-poppins bg-admin-canvas text-slate-800 antialiased;
+  @apply font-poppins bg-admin-canvas text-slate-200 antialiased;
+  color-scheme: dark;
 }
 
-/* Light workspace canvas (screenshot palette, modernized) */
+/* Dark workspace canvas */
 .admin-canvas {
   background:
-    radial-gradient(ellipse 70% 45% at 0% 0%, rgba(35, 107, 107, 0.06), transparent 55%),
-    radial-gradient(ellipse 50% 40% at 100% 0%, rgba(59, 130, 246, 0.05), transparent 50%),
-    #f0f1f6;
+    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(104, 152, 255, 0.16), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 90% 0%, rgba(13, 159, 27, 0.1), transparent 50%),
+    #070b16;
 }
 
 .admin-canvas-dark {
@@ -29,19 +30,19 @@ body {
 
 .admin-grid-overlay {
   background-image:
-    linear-gradient(rgba(40, 41, 61, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(40, 41, 61, 0.035) 1px, transparent 1px);
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
   background-size: 48px 48px;
   mask-image: radial-gradient(ellipse at center, black 25%, transparent 78%);
 }
 
 .admin-glass {
-  @apply border border-slate-200/80 bg-white/90 shadow-admin-soft;
+  @apply border border-white/10 bg-admin-surface/90 shadow-admin-soft;
   backdrop-filter: blur(12px);
 }
 
 .admin-card {
-  @apply relative overflow-hidden rounded-2xl border border-slate-200/90 bg-admin-surface shadow-admin-card;
+  @apply relative overflow-hidden rounded-2xl border border-white/10 bg-admin-surface shadow-admin-card;
 }
 
 .admin-card::before {
@@ -64,7 +65,7 @@ body {
   height: 120px;
   border-radius: 9999px;
   filter: blur(40px);
-  opacity: 0.2;
+  opacity: 0.28;
   pointer-events: none;
 }
 
@@ -118,7 +119,7 @@ body {
   isolation: isolate;
   background-color: #1a1b2a;
   box-shadow:
-    4px 0 28px rgba(40, 41, 61, 0.22),
+    4px 0 28px rgba(0, 0, 0, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -157,7 +158,7 @@ body {
   isolation: isolate;
   background-color: #1a1b2a;
   box-shadow:
-    0 8px 28px rgba(40, 41, 61, 0.18),
+    0 8px 28px rgba(0, 0, 0, 0.35),
     inset 0 -1px 0 rgba(255, 255, 255, 0.06);
 }
 
@@ -220,44 +221,44 @@ aside nav {
 }
 
 .admin-table-wrap {
-  @apply overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-admin-soft;
+  @apply overflow-hidden rounded-2xl border border-white/10 bg-admin-surface shadow-admin-soft;
 }
 
 .admin-table-wrap table thead {
-  @apply bg-slate-50 text-slate-500;
+  @apply bg-white/5 text-slate-400;
 }
 
 .admin-table-wrap tbody tr {
-  @apply border-t border-slate-100 transition;
+  @apply border-t border-white/5 transition;
 }
 
 .admin-table-wrap tbody tr:hover {
-  background: rgba(35, 107, 107, 0.04);
+  background: rgba(45, 212, 191, 0.06);
 }
 
 .admin-table-wrap tbody tr:nth-child(even) {
-  background: rgba(240, 241, 246, 0.55);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .admin-table-wrap tbody tr:nth-child(even):hover {
-  background: rgba(35, 107, 107, 0.06);
+  background: rgba(45, 212, 191, 0.08);
 }
 
 /* Semantic content tokens (pages can use these) */
 .admin-title {
-  @apply text-3xl font-bold tracking-tight text-slate-900;
+  @apply text-3xl font-bold tracking-tight text-white;
 }
 
 .admin-subtitle {
-  @apply text-sm text-slate-500;
+  @apply text-sm text-slate-400;
 }
 
 .admin-muted {
-  @apply text-slate-500;
+  @apply text-slate-400;
 }
 
 .admin-label {
-  @apply text-[10px] font-semibold uppercase tracking-wide text-slate-400;
+  @apply text-[10px] font-semibold uppercase tracking-wide text-slate-500;
 }
 
 /* Colored metric cards — soft outer glow (text stays crisp white) */
@@ -277,14 +278,9 @@ aside nav {
     0 0 56px rgba(13, 148, 136, 0.28);
 }
 
-/* Notification count badges — neon red glow, crisp white digits */
+/* Notification count badges */
 .admin-badge-glow {
   @apply inline-flex items-center justify-center rounded-full bg-admin-danger font-bold text-white;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.18) inset,
-    0 0 8px rgba(225, 29, 72, 0.85),
-    0 0 16px rgba(225, 29, 72, 0.65),
-    0 0 28px rgba(255, 45, 85, 0.45);
 }
 
 .admin-btn-primary {
@@ -292,15 +288,15 @@ aside nav {
 }
 
 .admin-btn-secondary {
-  @apply inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900;
+  @apply inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/25 hover:bg-white/10 hover:text-white;
 }
 
 .admin-input {
-  @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-admin-teal/50 focus:ring-2 focus:ring-admin-teal/15;
+  @apply w-full rounded-xl border border-white/10 bg-admin-chrome-deep px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-admin-teal/50 focus:ring-2 focus:ring-admin-teal/20;
 }
 
 .admin-modal-overlay {
-  @apply fixed inset-0 z-[70] flex items-center justify-center bg-admin-chrome/50 p-4 backdrop-blur-sm;
+  @apply fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm;
 }
 
 @media (prefers-reduced-motion: reduce) {

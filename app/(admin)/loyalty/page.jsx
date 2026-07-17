@@ -157,7 +157,7 @@ function LoyaltyContent() {
     <div>
       <Breadcrumb items={[{ label: "Loyalty", href: "/loyalty" }, { label: pageTitle }]} />
 
-      <div className="mb-4 flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white/50 p-1">
+      <div className="mb-4 flex flex-wrap gap-1 rounded-xl border border-white/10 bg-admin-chrome-deep/80 p-1">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -169,7 +169,7 @@ function LoyaltyContent() {
             className={`rounded-lg px-3.5 py-2.5 text-sm font-semibold transition ${
               tab === t.id
                 ? "bg-gradient-to-r from-admin-teal to-[#236B6B] text-white shadow-lg shadow-[#236B6B]/15"
-                : "text-slate-500 hover:text-slate-900"
+                : "text-slate-500 hover:text-white"
             }`}
           >
             {t.label}
@@ -181,7 +181,7 @@ function LoyaltyContent() {
         <div className="admin-fade-up space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Loyalty Management</h1>
+              <h1 className="text-xl font-bold text-white sm:text-2xl">Loyalty Management</h1>
               <p className="mt-0.5 text-xs text-slate-400">
                 {isAffiliate
                   ? "Affiliate partners · point collection · bonus · loyalty levels"
@@ -197,7 +197,7 @@ function LoyaltyContent() {
                   className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
                     audience === a
                       ? "bg-gradient-to-r from-admin-teal to-admin-teal-deep text-white"
-                      : "border border-slate-200 text-slate-600 hover:text-slate-900"
+                      : "border border-white/10 text-slate-400 hover:text-white"
                   }`}
                 >
                   {a}
@@ -210,15 +210,15 @@ function LoyaltyContent() {
             <>
               {/* Affiliate Point Collection */}
               <section className="admin-card overflow-visible p-0">
-                <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <h2 className="text-lg font-semibold text-slate-900">Point Collection</h2>
+                <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <h2 className="text-lg font-semibold text-white">Point Collection</h2>
                   <div className="flex flex-wrap items-center gap-3">
-                    <label className="inline-flex items-center gap-2 text-sm text-slate-600">
+                    <label className="inline-flex items-center gap-2 text-sm text-slate-400">
                       <input
                         type="checkbox"
                         checked={activateAffPoints}
                         onChange={(e) => setActivateAffPoints(e.target.checked)}
-                        className="rounded border-slate-300"
+                        className="rounded border-white/20"
                       />
                       Activate Amount
                     </label>
@@ -246,7 +246,7 @@ function LoyaltyContent() {
                 </div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-left text-[13px]">
-                    <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+                    <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                       <tr>
                         <th className="px-4 py-3">ID</th>
                         <th className="px-4 py-3">Admin ID</th>
@@ -258,8 +258,8 @@ function LoyaltyContent() {
                     </thead>
                     <tbody>
                       {affiliatePoints.map((r) => (
-                        <tr key={r.id} className="border-t border-slate-100 text-slate-700">
-                          <td className="px-4 py-3 font-medium text-slate-900">{r.id}</td>
+                        <tr key={r.id} className="border-t border-white/10 text-slate-300">
+                          <td className="px-4 py-3 font-medium text-white">{r.id}</td>
                           <td className="px-4 py-3">{r.adminId}</td>
                           <td className="px-4 py-3">
                             <input
@@ -269,10 +269,10 @@ function LoyaltyContent() {
                                   prev.map((row) => (row.id === r.id ? { ...row, calAmount: e.target.value } : row))
                                 )
                               }
-                              className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900"
+                              className="w-20 rounded-lg border border-white/10 bg-admin-surface px-2 py-1.5 text-sm text-white"
                             />
                           </td>
-                          <td className="px-4 py-3 text-slate-600">{r.changedDate}</td>
+                          <td className="px-4 py-3 text-slate-400">{r.changedDate}</td>
                           <td className="px-4 py-3">
                             <input
                               type="checkbox"
@@ -288,7 +288,7 @@ function LoyaltyContent() {
                                   )
                                 )
                               }
-                              className="rounded border-slate-300"
+                              className="rounded border-white/20"
                             />
                           </td>
                           <td className="px-4 py-3">
@@ -315,15 +315,15 @@ function LoyaltyContent() {
 
               {/* Affiliate Bonus */}
               <section className="admin-card overflow-visible p-0">
-                <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <h2 className="text-lg font-semibold text-slate-900">Bonus</h2>
+                <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <h2 className="text-lg font-semibold text-white">Bonus</h2>
                   <div className="flex flex-wrap items-center gap-3">
-                    <label className="inline-flex items-center gap-2 text-sm text-slate-600">
+                    <label className="inline-flex items-center gap-2 text-sm text-slate-400">
                       <input
                         type="checkbox"
                         checked={activateAffBonus}
                         onChange={(e) => setActivateAffBonus(e.target.checked)}
-                        className="rounded border-slate-300"
+                        className="rounded border-white/20"
                       />
                       Activate Amount
                     </label>
@@ -351,7 +351,7 @@ function LoyaltyContent() {
                 </div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-left text-[13px]">
-                    <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+                    <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                       <tr>
                         <th className="px-4 py-3">ID</th>
                         <th className="px-4 py-3">Admin ID</th>
@@ -363,8 +363,8 @@ function LoyaltyContent() {
                     </thead>
                     <tbody>
                       {affiliateBonus.map((r) => (
-                        <tr key={r.id} className="border-t border-slate-100 text-slate-700">
-                          <td className="px-4 py-3 font-medium text-slate-900">{r.id}</td>
+                        <tr key={r.id} className="border-t border-white/10 text-slate-300">
+                          <td className="px-4 py-3 font-medium text-white">{r.id}</td>
                           <td className="px-4 py-3">{r.adminId}</td>
                           <td className="px-4 py-3">
                             <input
@@ -374,10 +374,10 @@ function LoyaltyContent() {
                                   prev.map((row) => (row.id === r.id ? { ...row, calAmount: e.target.value } : row))
                                 )
                               }
-                              className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900"
+                              className="w-24 rounded-lg border border-white/10 bg-admin-surface px-2 py-1.5 text-sm text-white"
                             />
                           </td>
-                          <td className="px-4 py-3 text-slate-600">{r.changedDate}</td>
+                          <td className="px-4 py-3 text-slate-400">{r.changedDate}</td>
                           <td className="px-4 py-3">
                             <input
                               type="checkbox"
@@ -393,7 +393,7 @@ function LoyaltyContent() {
                                   )
                                 )
                               }
-                              className="rounded border-slate-300"
+                              className="rounded border-white/20"
                             />
                           </td>
                           <td className="px-4 py-3">
@@ -421,10 +421,10 @@ function LoyaltyContent() {
               {/* Loyalty levels — Silver / Gold / Platinum */}
               {affiliateLevels.map((level, levelIdx) => (
                 <section key={level.name} className="admin-card overflow-visible p-0">
-                  <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                    <h2 className="text-lg font-semibold text-slate-900">Loyalty — {level.name}</h2>
+                  <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <h2 className="text-lg font-semibold text-white">Loyalty — {level.name}</h2>
                     <div className="flex flex-wrap items-center gap-3">
-                      <label className="inline-flex items-center gap-2 text-sm text-slate-600">
+                      <label className="inline-flex items-center gap-2 text-sm text-slate-400">
                         <input
                           type="checkbox"
                           checked={level.activate}
@@ -433,7 +433,7 @@ function LoyaltyContent() {
                               prev.map((lv, i) => (i === levelIdx ? { ...lv, activate: e.target.checked } : lv))
                             )
                           }
-                          className="rounded border-slate-300"
+                          className="rounded border-white/20"
                         />
                         Activate Amount
                       </label>
@@ -469,7 +469,7 @@ function LoyaltyContent() {
                   </div>
                   <div className="overflow-x-auto">
                     <table className="min-w-full text-left text-[13px]">
-                      <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+                      <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                         <tr>
                           <th className="px-4 py-3">ID</th>
                           <th className="px-4 py-3">Admin ID</th>
@@ -481,8 +481,8 @@ function LoyaltyContent() {
                       </thead>
                       <tbody>
                         {level.rows.map((r) => (
-                          <tr key={`${level.name}-${r.id}`} className="border-t border-slate-100 text-slate-700">
-                            <td className="px-4 py-3 font-medium text-slate-900">{r.id}</td>
+                          <tr key={`${level.name}-${r.id}`} className="border-t border-white/10 text-slate-300">
+                            <td className="px-4 py-3 font-medium text-white">{r.id}</td>
                             <td className="px-4 py-3">{r.adminId}</td>
                             <td className="px-4 py-3">
                               <input
@@ -501,10 +501,10 @@ function LoyaltyContent() {
                                     )
                                   )
                                 }
-                                className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900"
+                                className="w-20 rounded-lg border border-white/10 bg-admin-surface px-2 py-1.5 text-sm text-white"
                               />
                             </td>
-                            <td className="px-4 py-3 text-slate-600">{r.changedDate}</td>
+                            <td className="px-4 py-3 text-slate-400">{r.changedDate}</td>
                             <td className="px-4 py-3">
                               <input
                                 type="checkbox"
@@ -527,7 +527,7 @@ function LoyaltyContent() {
                                     )
                                   )
                                 }
-                                className="rounded border-slate-300"
+                                className="rounded border-white/20"
                               />
                             </td>
                             <td className="px-4 py-3">
@@ -565,15 +565,15 @@ function LoyaltyContent() {
             <>
               {/* Normal Users panels keep existing Point Collection / Bonus / Ranking */}
           <section className="admin-card overflow-visible p-0">
-            <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-lg font-semibold text-slate-900">Point Collection</h2>
+            <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-lg font-semibold text-white">Point Collection</h2>
               <div className="flex flex-wrap items-center gap-3">
-                <label className="inline-flex items-center gap-2 text-sm text-slate-600">
+                <label className="inline-flex items-center gap-2 text-sm text-slate-400">
                   <input
                     type="checkbox"
                     checked={activatePoints}
                     onChange={(e) => setActivatePoints(e.target.checked)}
-                    className="rounded border-slate-300"
+                    className="rounded border-white/20"
                   />
                   Activate Amount
                 </label>
@@ -601,7 +601,7 @@ function LoyaltyContent() {
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-[13px]">
-                <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+                <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                   <tr>
                     <th className="px-4 py-3">ID</th>
                     <th className="px-4 py-3">Admin ID</th>
@@ -613,8 +613,8 @@ function LoyaltyContent() {
                 </thead>
                 <tbody>
                   {pointRows.map((r) => (
-                    <tr key={r.id} className="border-t border-slate-100 text-slate-700">
-                      <td className="px-4 py-3 font-medium text-slate-900">{r.id}</td>
+                    <tr key={r.id} className="border-t border-white/10 text-slate-300">
+                      <td className="px-4 py-3 font-medium text-white">{r.id}</td>
                       <td className="px-4 py-3">{r.adminId}</td>
                       <td className="px-4 py-3">
                         <input
@@ -624,10 +624,10 @@ function LoyaltyContent() {
                               prev.map((row) => (row.id === r.id ? { ...row, calAmount: e.target.value } : row))
                             )
                           }
-                          className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900"
+                          className="w-20 rounded-lg border border-white/10 bg-admin-surface px-2 py-1.5 text-sm text-white"
                         />
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{r.changedDate}</td>
+                      <td className="px-4 py-3 text-slate-400">{r.changedDate}</td>
                       <td className="px-4 py-3">
                         <input
                           type="checkbox"
@@ -643,7 +643,7 @@ function LoyaltyContent() {
                               )
                             )
                           }
-                          className="rounded border-slate-300"
+                          className="rounded border-white/20"
                         />
                       </td>
                       <td className="px-4 py-3">
@@ -670,15 +670,15 @@ function LoyaltyContent() {
 
           {/* Bonus */}
           <section className="admin-card overflow-visible p-0">
-            <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-lg font-semibold text-slate-900">Bonus</h2>
+            <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-lg font-semibold text-white">Bonus</h2>
               <div className="flex flex-wrap items-center gap-3">
-                <label className="inline-flex items-center gap-2 text-sm text-slate-600">
+                <label className="inline-flex items-center gap-2 text-sm text-slate-400">
                   <input
                     type="checkbox"
                     checked={activateBonus}
                     onChange={(e) => setActivateBonus(e.target.checked)}
-                    className="rounded border-slate-300"
+                    className="rounded border-white/20"
                   />
                   Activate Amount
                 </label>
@@ -706,7 +706,7 @@ function LoyaltyContent() {
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-[13px]">
-                <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+                <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                   <tr>
                     <th className="px-4 py-3">ID</th>
                     <th className="px-4 py-3">Admin ID</th>
@@ -718,8 +718,8 @@ function LoyaltyContent() {
                 </thead>
                 <tbody>
                   {bonusRows.map((r) => (
-                    <tr key={r.id} className="border-t border-slate-100 text-slate-700">
-                      <td className="px-4 py-3 font-medium text-slate-900">{r.id}</td>
+                    <tr key={r.id} className="border-t border-white/10 text-slate-300">
+                      <td className="px-4 py-3 font-medium text-white">{r.id}</td>
                       <td className="px-4 py-3">{r.adminId}</td>
                       <td className="px-4 py-3">
                         <input
@@ -729,10 +729,10 @@ function LoyaltyContent() {
                               prev.map((row) => (row.id === r.id ? { ...row, bonusAmount: e.target.value } : row))
                             )
                           }
-                          className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900"
+                          className="w-24 rounded-lg border border-white/10 bg-admin-surface px-2 py-1.5 text-sm text-white"
                         />
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{r.changedDate}</td>
+                      <td className="px-4 py-3 text-slate-400">{r.changedDate}</td>
                       <td className="px-4 py-3">
                         <input
                           type="checkbox"
@@ -748,7 +748,7 @@ function LoyaltyContent() {
                               )
                             )
                           }
-                          className="rounded border-slate-300"
+                          className="rounded border-white/20"
                         />
                       </td>
                       <td className="px-4 py-3">
@@ -775,9 +775,9 @@ function LoyaltyContent() {
 
           {/* User Ranking */}
           <section className="admin-card overflow-visible p-0">
-            <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">User Ranking</h2>
+                <h2 className="text-lg font-semibold text-white">User Ranking</h2>
                 <p className="mt-0.5 text-xs text-slate-400">12-month evaluation · {audience}</p>
               </div>
               <button
@@ -790,7 +790,7 @@ function LoyaltyContent() {
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-[13px]">
-                <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+                <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                   <tr>
                     <th className="px-4 py-3">
                       <input
@@ -801,7 +801,7 @@ function LoyaltyContent() {
                           setRankSelectAll(checked);
                           setRanking((prev) => prev.map((u) => ({ ...u, selected: checked })));
                         }}
-                        className="rounded border-slate-300"
+                        className="rounded border-white/20"
                       />
                     </th>
                     <th className="px-4 py-3">User ID</th>
@@ -813,7 +813,7 @@ function LoyaltyContent() {
                 </thead>
                 <tbody>
                   {ranking.map((u) => (
-                    <tr key={u.id} className="border-t border-slate-100 text-slate-700 hover:bg-admin-teal/[0.05]">
+                    <tr key={u.id} className="border-t border-white/10 text-slate-300 hover:bg-admin-teal/[0.05]">
                       <td className="px-4 py-3">
                         <input
                           type="checkbox"
@@ -823,10 +823,10 @@ function LoyaltyContent() {
                               prev.map((row) => (row.id === u.id ? { ...row, selected: e.target.checked } : row))
                             )
                           }
-                          className="rounded border-slate-300"
+                          className="rounded border-white/20"
                         />
                       </td>
-                      <td className="px-4 py-3 font-medium text-slate-900">{u.id}</td>
+                      <td className="px-4 py-3 font-medium text-white">{u.id}</td>
                       <td className="px-4 py-3">{u.name}</td>
                       <td className="px-4 py-3 font-semibold text-[#FBBF24]">{u.points}</td>
                       <td className="px-4 py-3">
@@ -836,13 +836,13 @@ function LoyaltyContent() {
                               ? "bg-[#236B6B]/20 text-[#C084FC]"
                               : u.tier === "VIP"
                                 ? "bg-admin-teal/20 text-admin-teal"
-                                : "bg-slate-100 text-slate-600"
+                                : "bg-white/10 text-slate-400"
                           }`}
                         >
                           {u.tier}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{u.email}</td>
+                      <td className="px-4 py-3 text-slate-400">{u.email}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -854,10 +854,10 @@ function LoyaltyContent() {
         </div>
       ) : (
         <section className="admin-card overflow-visible p-0">
-          <div className="border-b border-slate-200 px-5 py-4">
+          <div className="border-b border-white/10 px-5 py-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">{pageTitle}</h1>
+                <h1 className="text-xl font-bold text-white sm:text-2xl">{pageTitle}</h1>
                 <p className="mt-0.5 text-xs text-slate-400">
                   {filtered.length} records
                   {tab === "bonus" && status === "Rejected"
@@ -881,7 +881,7 @@ function LoyaltyContent() {
                       className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                         status === value
                           ? "bg-teal-600 text-white"
-                          : "border border-slate-200 text-slate-500 hover:text-slate-900"
+                          : "border border-white/10 text-slate-500 hover:text-white"
                       }`}
                     >
                       {label}
@@ -892,12 +892,12 @@ function LoyaltyContent() {
             </div>
           </div>
 
-          <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+          <div className="border-b border-white/10 bg-white/5 px-5 py-4">
             <div className="grid gap-3 lg:grid-cols-12 lg:items-end">
               <FilterField label="Duration" className="lg:col-span-2">
                 <select value={duration} onChange={(e) => setDuration(e.target.value)} className={inputCls}>
                   {["Today", "Yesterday", "This Week", "This Month", "Custom"].map((d) => (
-                    <option key={d} value={d} className="bg-white">
+                    <option key={d} value={d} className="bg-admin-surface">
                       {d}
                     </option>
                   ))}
@@ -925,7 +925,7 @@ function LoyaltyContent() {
                       ? ["All", "Pending", "Claimed", "Rejected"]
                       : ["All", "Pending", "Completed", "Rejected"]
                     ).map((s) => (
-                      <option key={s} value={s} className="bg-white">
+                      <option key={s} value={s} className="bg-admin-surface">
                         {s}
                       </option>
                     ))}
@@ -960,7 +960,7 @@ function LoyaltyContent() {
           <div className="overflow-x-auto">
             {tab === "orders" ? (
               <table className="min-w-[1100px] w-full text-left text-[13px]">
-                <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+                <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                   <tr>
                     <th className="px-3 py-3">Trans ID</th>
                     <th className="px-3 py-3">Date</th>
@@ -976,7 +976,7 @@ function LoyaltyContent() {
                 </thead>
                 <tbody>
                   {filtered.map((r) => (
-                    <tr key={r.id} className="border-t border-slate-100 text-slate-700 hover:bg-admin-teal/[0.05]">
+                    <tr key={r.id} className="border-t border-white/10 text-slate-300 hover:bg-admin-teal/[0.05]">
                       <td className="px-3 py-3">
                         <CopyCell value={r.id} />
                       </td>
@@ -1014,7 +1014,7 @@ function LoyaltyContent() {
                             <button type="button" onClick={() => approve(r.id)} className="rounded-lg bg-theme-green-action p-1.5 text-white" title="Approve">
                               <Check className="h-3.5 w-3.5" />
                             </button>
-                            <button type="button" onClick={() => reopen(r.id)} className="rounded-lg bg-amber-500 p-1.5 text-white" title="Reopen">
+                            <button type="button" onClick={() => reopen(r.id)} className="rounded-lg bg-amber-500/150 p-1.5 text-white" title="Reopen">
                               <RefreshCw className="h-3.5 w-3.5" />
                             </button>
                           </div>
@@ -1038,7 +1038,7 @@ function LoyaltyContent() {
               </table>
             ) : tab === "bonus" ? (
               <table className="min-w-[1150px] w-full text-left text-[13px]">
-                <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+                <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                   <tr>
                     <th className="px-3 py-3">Trans ID</th>
                     <th className="px-3 py-3">Date</th>
@@ -1054,7 +1054,7 @@ function LoyaltyContent() {
                 </thead>
                 <tbody>
                   {filtered.map((r) => (
-                    <tr key={r.id} className="border-t border-slate-100 text-slate-700 hover:bg-admin-teal/[0.05]">
+                    <tr key={r.id} className="border-t border-white/10 text-slate-300 hover:bg-admin-teal/[0.05]">
                       <td className="px-3 py-3">
                         <CopyCell value={r.id} />
                       </td>
@@ -1109,7 +1109,7 @@ function LoyaltyContent() {
                             <button
                               type="button"
                               onClick={() => reopen(r.id)}
-                              className="rounded-lg bg-amber-500 p-1.5 text-white"
+                              className="rounded-lg bg-amber-500/150 p-1.5 text-white"
                               title="Reopen as pending"
                             >
                               <RefreshCw className="h-3.5 w-3.5" />
@@ -1127,7 +1127,7 @@ function LoyaltyContent() {
                           </p>
                         ) : null}
                       </td>
-                      <td className="px-3 py-3 text-xs text-slate-600">{r.admin || "—"}</td>
+                      <td className="px-3 py-3 text-xs text-slate-400">{r.admin || "—"}</td>
                     </tr>
                   ))}
                   {filtered.length === 0 ? (
@@ -1141,7 +1141,7 @@ function LoyaltyContent() {
               </table>
             ) : tab === "vouchers" && status === "Rejected" ? (
               <table className="min-w-[1200px] w-full text-left text-[13px]">
-                <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+                <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                   <tr>
                     <th className="px-3 py-3">Voucher ID</th>
                     <th className="px-3 py-3">Date</th>
@@ -1157,7 +1157,7 @@ function LoyaltyContent() {
                 </thead>
                 <tbody>
                   {filtered.map((r) => (
-                    <tr key={r.id} className="border-t border-slate-100 text-slate-700 hover:bg-admin-teal/[0.05]">
+                    <tr key={r.id} className="border-t border-white/10 text-slate-300 hover:bg-admin-teal/[0.05]">
                       <td className="px-3 py-3">
                         <CopyCell value={r.id} />
                       </td>
@@ -1198,7 +1198,7 @@ function LoyaltyContent() {
                           <button
                             type="button"
                             onClick={() => reopen(r.id)}
-                            className="rounded-lg bg-amber-500 p-1.5 text-white"
+                            className="rounded-lg bg-amber-500/150 p-1.5 text-white"
                             title="Reopen as pending"
                           >
                             <RefreshCw className="h-3.5 w-3.5" />
@@ -1218,7 +1218,7 @@ function LoyaltyContent() {
               </table>
             ) : tab === "vouchers" && status === "Claimed" ? (
               <table className="min-w-[1200px] w-full text-left text-[13px]">
-                <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+                <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                   <tr>
                     <th className="px-3 py-3">Voucher ID</th>
                     <th className="px-3 py-3">Date</th>
@@ -1233,7 +1233,7 @@ function LoyaltyContent() {
                 </thead>
                 <tbody>
                   {filtered.map((r) => (
-                    <tr key={r.id} className="border-t border-slate-100 text-slate-700 hover:bg-admin-teal/[0.05]">
+                    <tr key={r.id} className="border-t border-white/10 text-slate-300 hover:bg-admin-teal/[0.05]">
                       <td className="px-3 py-3">
                         <CopyCell value={r.id} />
                       </td>
@@ -1274,7 +1274,7 @@ function LoyaltyContent() {
               </table>
             ) : tab === "vouchers" ? (
               <table className="min-w-[1100px] w-full text-left text-[13px]">
-                <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+                <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                   <tr>
                     <th className="px-3 py-3">#</th>
                     <th className="px-3 py-3">Date</th>
@@ -1290,7 +1290,7 @@ function LoyaltyContent() {
                 </thead>
                 <tbody>
                   {filtered.map((r) => (
-                    <tr key={r.id} className="border-t border-slate-100 text-slate-700 hover:bg-admin-teal/[0.05]">
+                    <tr key={r.id} className="border-t border-white/10 text-slate-300 hover:bg-admin-teal/[0.05]">
                       <td className="px-3 py-3 font-medium text-slate-500">{r.id}</td>
                       <td className="px-3 py-3">
                         <CopyCell value={r.date} />
@@ -1343,7 +1343,7 @@ function LoyaltyContent() {
                             <button
                               type="button"
                               onClick={() => reopen(r.id)}
-                              className="rounded-lg bg-amber-500 p-1.5 text-white"
+                              className="rounded-lg bg-amber-500/150 p-1.5 text-white"
                               title="Reopen"
                             >
                               <RefreshCw className="h-3.5 w-3.5" />
@@ -1359,7 +1359,7 @@ function LoyaltyContent() {
                           <p className="mt-1 max-w-[120px] truncate text-[10px] text-rose-300">{r.rejectReason}</p>
                         ) : null}
                       </td>
-                      <td className="px-3 py-3 text-xs text-slate-600">{r.admin || r.claimedBy || "—"}</td>
+                      <td className="px-3 py-3 text-xs text-slate-400">{r.admin || r.claimedBy || "—"}</td>
                     </tr>
                   ))}
                   {filtered.length === 0 ? (

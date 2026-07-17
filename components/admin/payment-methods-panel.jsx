@@ -28,9 +28,9 @@ function formatLimit(value) {
 
 function FieldRow({ label, children }) {
   return (
-    <div className="grid grid-cols-[140px_1fr] items-start gap-x-3 gap-y-1 border-b border-slate-100 py-2.5 last:border-b-0 sm:grid-cols-[160px_1fr]">
+    <div className="grid grid-cols-[140px_1fr] items-start gap-x-3 gap-y-1 border-b border-white/10 py-2.5 last:border-b-0 sm:grid-cols-[160px_1fr]">
       <dt className="text-sm font-medium text-slate-500">{label}</dt>
-      <dd className="text-sm font-medium text-slate-900">{children}</dd>
+      <dd className="text-sm font-medium text-white">{children}</dd>
     </div>
   );
 }
@@ -41,14 +41,14 @@ function CheckboxControl({ checked, label, onChange }) {
       type="button"
       onClick={onChange}
       className={`inline-flex items-center gap-2 rounded-lg px-1 py-1 text-sm font-medium transition ${
-        checked ? "text-theme-green-action" : "text-slate-500 hover:text-slate-800"
+        checked ? "text-theme-green-action" : "text-slate-500 hover:text-slate-100"
       }`}
     >
       <span
         className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
           checked
             ? "border-theme-green-action bg-theme-green-action text-white"
-            : "border-slate-300 bg-white"
+            : "border-white/20 bg-admin-surface"
         }`}
       >
         {checked ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
@@ -132,11 +132,11 @@ export default function PaymentMethodsPanel() {
   return (
     <div className="mt-5">
       <div className="admin-fade-up flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Payment Method</h2>
+        <h2 className="text-2xl font-bold tracking-tight text-white">Payment Method</h2>
         <button
           type="button"
           onClick={openAdd}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-theme-green-action bg-white px-3.5 py-2 text-sm font-semibold text-theme-green-action shadow-sm transition hover:bg-theme-green-action/10"
+          className="inline-flex items-center gap-1.5 rounded-xl border border-theme-green-action bg-admin-surface px-3.5 py-2 text-sm font-semibold text-theme-green-action shadow-sm transition hover:bg-theme-green-action/10"
         >
           <Plus className="h-4 w-4" />
           Add Method
@@ -151,8 +151,8 @@ export default function PaymentMethodsPanel() {
               i % 2 === 1 ? "admin-fade-up-delay-1" : ""
             }`}
           >
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
-              <h3 className="text-base font-semibold text-slate-900">{row.name}</h3>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
+              <h3 className="text-base font-semibold text-white">{row.name}</h3>
               <CheckboxControl
                 checked={row.active}
                 label="Activate Method"
@@ -167,7 +167,7 @@ export default function PaymentMethodsPanel() {
               <FieldRow label="Maximum limit">{formatLimit(row.maxLimit)}</FieldRow>
             </dl>
 
-            <div className="border-t border-slate-100 px-5 py-3">
+            <div className="border-t border-white/10 px-5 py-3">
               <CheckboxControl
                 checked={row.priority}
                 label="This is the priority payment method"
@@ -175,7 +175,7 @@ export default function PaymentMethodsPanel() {
               />
             </div>
 
-            <div className="flex flex-wrap gap-2 border-t border-slate-200 px-5 py-3.5">
+            <div className="flex flex-wrap gap-2 border-t border-white/10 px-5 py-3.5">
               <button
                 type="button"
                 onClick={() => openEdit(row)}
@@ -211,7 +211,7 @@ export default function PaymentMethodsPanel() {
           >
             <div className="mb-1 flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900">
+                <h3 className="text-lg font-semibold text-white">
                   {modal.mode === "edit" ? "Edit Payment Method" : "Add Payment Method"}
                 </h3>
                 <p className="mt-1 text-sm text-slate-500">
@@ -223,7 +223,7 @@ export default function PaymentMethodsPanel() {
               <button
                 type="button"
                 onClick={() => setModal(null)}
-                className="shrink-0 text-slate-400 hover:text-slate-900"
+                className="shrink-0 text-slate-400 hover:text-white"
                 aria-label="Close"
               >
                 <X className="h-4 w-4" />
@@ -238,7 +238,7 @@ export default function PaymentMethodsPanel() {
               className="mt-5 space-y-4"
             >
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                <span className="mb-1.5 block text-sm font-medium text-slate-300">
                   Payment Method Name
                 </span>
                 <input
@@ -251,7 +251,7 @@ export default function PaymentMethodsPanel() {
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">Currency</span>
+                <span className="mb-1.5 block text-sm font-medium text-slate-300">Currency</span>
                 <select
                   required
                   value={modal.currency}
@@ -267,7 +267,7 @@ export default function PaymentMethodsPanel() {
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                <span className="mb-1.5 block text-sm font-medium text-slate-300">
                   Minimum Limit
                 </span>
                 <input
@@ -283,7 +283,7 @@ export default function PaymentMethodsPanel() {
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                <span className="mb-1.5 block text-sm font-medium text-slate-300">
                   Maximum Limit
                 </span>
                 <input

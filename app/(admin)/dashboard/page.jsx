@@ -4,7 +4,7 @@ import Breadcrumb from "@/components/admin/breadcrumb";
 import {
   Banknote,
   Briefcase,
-  ChevronDown, 
+  ChevronDown,
   DollarSign,
   HandCoins,
   MoreVertical,
@@ -30,14 +30,14 @@ function CardMenu() {
     <div className="flex shrink-0 items-center gap-1">
       <button
         type="button"
-        className="inline-flex items-center gap-1 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-teal-700"
+        className="inline-flex items-center gap-1 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-teal-500"
       >
         Export
         <ChevronDown className="h-3 w-3 opacity-90" />
       </button>
       <button
         type="button"
-        className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-50 hover:text-slate-700"
+        className="rounded-lg p-1.5 text-slate-500 transition hover:bg-white/10 hover:text-slate-200"
         aria-label="More options"
       >
         <MoreVertical className="h-4 w-4" />
@@ -50,7 +50,7 @@ function EllipsisOnly() {
   return (
     <button
       type="button"
-      className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-50 hover:text-slate-700"
+      className="rounded-lg p-1.5 text-slate-500 transition hover:bg-white/10 hover:text-slate-200"
       aria-label="More options"
     >
       <MoreVertical className="h-4 w-4" />
@@ -78,8 +78,8 @@ function BarChart({ values, labels }) {
         const y = padT + chartH - (t / max) * chartH;
         return (
           <g key={t}>
-            <line x1={padL} y1={y} x2={w - padR} y2={y} stroke="#e2e8f0" strokeWidth="1" />
-            <text x={padL - 6} y={y + 3} textAnchor="end" className="fill-slate-400" fontSize="9">
+            <line x1={padL} y1={y} x2={w - padR} y2={y} stroke="#2a2d3d" strokeWidth="1" />
+            <text x={padL - 6} y={y + 3} textAnchor="end" className="fill-slate-500" fontSize="9">
               {t.toFixed(1)}
             </text>
           </g>
@@ -91,12 +91,12 @@ function BarChart({ values, labels }) {
         const y = padT + chartH - barH;
         return (
           <g key={labels[i]}>
-            <rect x={x} y={y} width={barW} height={barH} rx="3" fill="#236B6B" opacity={v > 0.05 ? 1 : 0.55} />
+            <rect x={x} y={y} width={barW} height={barH} rx="3" fill="#2dd4bf" opacity={v > 0.05 ? 1 : 0.45} />
             <text
               x={x + barW / 2}
               y={h - 8}
               textAnchor="middle"
-              className="fill-slate-400"
+              className="fill-slate-500"
               fontSize="9"
             >
               {labels[i]}
@@ -135,7 +135,7 @@ function DotLineChart({ points, color = "#22c55e", height = 140, showDots = true
       />
       {showDots &&
         coords.map(([x, y], i) => (
-          <circle key={i} cx={x} cy={y} r="3.5" fill={color} stroke="#fff" strokeWidth="1.5" />
+          <circle key={i} cx={x} cy={y} r="3.5" fill={color} stroke="#141625" strokeWidth="1.5" />
         ))}
     </svg>
   );
@@ -153,7 +153,7 @@ function FlatLineChart({ days = 31, color = "#ef4444", height = 140 }) {
 
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="h-full w-full" preserveAspectRatio="none" aria-hidden>
-      <line x1={padX} y1={midY} x2={w - padX} y2={midY} stroke="#f1f5f9" strokeWidth="1" />
+      <line x1={padX} y1={midY} x2={w - padX} y2={midY} stroke="#2a2d3d" strokeWidth="1" />
       <polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" points={points} />
     </svg>
   );
@@ -181,9 +181,9 @@ function GrowthGauge({ percent = -99.92 }) {
 
   return (
     <svg viewBox="0 0 200 120" className="mx-auto h-36 w-full max-w-[220px]" role="img" aria-label="Company growth gauge">
-      <path d={track} fill="none" stroke="#e2e8f0" strokeWidth="14" strokeLinecap="round" />
+      <path d={track} fill="none" stroke="#2a2d3d" strokeWidth="14" strokeLinecap="round" />
       <path d={arc} fill="none" stroke="#EAB308" strokeWidth="14" strokeLinecap="round" />
-      <text x={cx} y={cy - 8} textAnchor="middle" className="fill-slate-900" fontSize="22" fontWeight="700">
+      <text x={cx} y={cy - 8} textAnchor="middle" className="fill-white" fontSize="22" fontWeight="700">
         {percent.toFixed(2)} %
       </text>
     </svg>
@@ -196,8 +196,8 @@ export default function DashboardPage() {
       <Breadcrumb items={[{ label: "Dashboard" }]} />
 
       <div className="admin-fade-up mb-6">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-500">Completed volumes, revenue and profit overview</p>
+        <h1 className="text-3xl font-bold tracking-tight text-white">Dashboard</h1>
+        <p className="mt-1 text-sm text-slate-400">Completed volumes, revenue and profit overview</p>
       </div>
 
       {/* Row 1 — deposits / withdrawals */}
@@ -210,9 +210,9 @@ export default function DashboardPage() {
                 <Banknote className="h-5 w-5" />
               </span>
               <div>
-                <p className="text-sm font-semibold text-slate-800">Total Completed Deposits</p>
-                <p className="mt-0.5 text-xs text-slate-400">2026</p>
-                <p className="mt-3 text-3xl font-bold tracking-tight text-slate-900">$ 505.95</p>
+                <p className="text-sm font-semibold text-slate-100">Total Completed Deposits</p>
+                <p className="mt-0.5 text-xs text-slate-500">2026</p>
+                <p className="mt-3 text-3xl font-bold tracking-tight text-white">$ 505.95</p>
               </div>
             </div>
             <CardMenu />
@@ -227,9 +227,9 @@ export default function DashboardPage() {
                 <HandCoins className="h-5 w-5" />
               </span>
               <div>
-                <p className="text-sm font-semibold text-slate-800">Total Completed Withdrawals</p>
-                <p className="mt-0.5 text-xs text-slate-400">2026</p>
-                <p className="mt-3 text-3xl font-bold tracking-tight text-slate-900">$ 0.00</p>
+                <p className="text-sm font-semibold text-slate-100">Total Completed Withdrawals</p>
+                <p className="mt-0.5 text-xs text-slate-500">2026</p>
+                <p className="mt-3 text-3xl font-bold tracking-tight text-white">$ 0.00</p>
               </div>
             </div>
             <CardMenu />
@@ -242,8 +242,8 @@ export default function DashboardPage() {
         <section className="admin-card admin-fade-up p-5 xl:col-span-6">
           <div className="mb-2 flex items-start justify-between gap-2">
             <div>
-              <h2 className="text-sm font-semibold text-slate-800">Total Monthly Revenue in (&apos;000 USD)</h2>
-              <p className="mt-0.5 text-xs text-slate-400">2026</p>
+              <h2 className="text-sm font-semibold text-slate-100">Total Monthly Revenue in (&apos;000 USD)</h2>
+              <p className="mt-0.5 text-xs text-slate-500">2026</p>
             </div>
             <EllipsisOnly />
           </div>
@@ -253,34 +253,34 @@ export default function DashboardPage() {
         <section className="admin-card admin-fade-up admin-fade-up-delay-1 flex flex-col p-5 xl:col-span-3">
           <div className="mb-1 flex items-start justify-between gap-2">
             <div>
-              <h2 className="text-sm font-semibold text-slate-800">Monthly Profit</h2>
-              <p className="mt-0.5 text-xs text-slate-400">2026</p>
+              <h2 className="text-sm font-semibold text-slate-100">Monthly Profit</h2>
+              <p className="mt-0.5 text-xs text-slate-500">2026</p>
             </div>
             <EllipsisOnly />
           </div>
           <div className="mt-2 h-36 flex-1">
             <DotLineChart points={MONTHLY_PROFIT} color="#22c55e" />
           </div>
-          <div className="mt-3 flex items-end justify-between border-t border-slate-100 pt-3">
-            <p className="text-base font-bold text-slate-900">LKR 0.00</p>
-            <p className="text-sm font-semibold text-red-500">0.00%</p>
+          <div className="mt-3 flex items-end justify-between border-t border-white/10 pt-3">
+            <p className="text-base font-bold text-white">LKR 0.00</p>
+            <p className="text-sm font-semibold text-red-400">0.00%</p>
           </div>
         </section>
 
         <section className="admin-card admin-fade-up admin-fade-up-delay-2 flex flex-col p-5 xl:col-span-3">
           <div className="mb-1 flex items-start justify-between gap-2">
             <div>
-              <h2 className="text-sm font-semibold text-slate-800">Daily Profit</h2>
-              <p className="mt-0.5 text-xs text-slate-400">July</p>
+              <h2 className="text-sm font-semibold text-slate-100">Daily Profit</h2>
+              <p className="mt-0.5 text-xs text-slate-500">July</p>
             </div>
             <EllipsisOnly />
           </div>
           <div className="mt-2 h-36 flex-1">
             <FlatLineChart days={DAILY_PROFIT.length} color="#ef4444" />
           </div>
-          <div className="mt-3 flex items-end justify-between border-t border-slate-100 pt-3">
-            <p className="text-base font-bold text-slate-900">LKR 0.00</p>
-            <p className="text-sm font-semibold text-red-500">0.00%</p>
+          <div className="mt-3 flex items-end justify-between border-t border-white/10 pt-3">
+            <p className="text-base font-bold text-white">LKR 0.00</p>
+            <p className="text-sm font-semibold text-red-400">0.00%</p>
           </div>
         </section>
       </div>
@@ -289,10 +289,10 @@ export default function DashboardPage() {
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <section className="admin-card admin-fade-up p-5">
           <div className="mb-4 flex items-start justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-800">All Time Transactions</h2>
+            <h2 className="text-sm font-semibold text-slate-100">All Time Transactions</h2>
             <EllipsisOnly />
           </div>
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-white/10">
             {PLATFORMS.map((p) => (
               <li key={p.name} className="flex items-center justify-between gap-3 py-3.5 first:pt-0 last:pb-0">
                 <div className="flex min-w-0 items-center gap-3">
@@ -302,11 +302,11 @@ export default function DashboardPage() {
                     {p.letter}
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-800">{p.name}</p>
-                    <p className="text-xs text-slate-400">Deposits</p>
+                    <p className="truncate text-sm font-semibold text-slate-100">{p.name}</p>
+                    <p className="text-xs text-slate-500">Deposits</p>
                   </div>
                 </div>
-                <p className="shrink-0 text-sm font-bold tabular-nums text-slate-900">{p.amount}</p>
+                <p className="shrink-0 text-sm font-bold tabular-nums text-white">{p.amount}</p>
               </li>
             ))}
           </ul>
@@ -314,7 +314,7 @@ export default function DashboardPage() {
 
         <section className="admin-card admin-fade-up admin-fade-up-delay-1 p-5">
           <div className="mb-2 flex items-start justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-800">Company Growth</h2>
+            <h2 className="text-sm font-semibold text-slate-100">Company Growth</h2>
             <EllipsisOnly />
           </div>
 
@@ -324,22 +324,22 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex flex-1 flex-col gap-4 sm:max-w-[200px]">
-              <div className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+              <div className="flex items-center gap-3 rounded-xl bg-white/5 px-3 py-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-400/15 text-amber-300">
                   <Briefcase className="h-4 w-4" />
                 </span>
                 <div>
-                  <p className="text-xs text-slate-400">2025</p>
-                  <p className="text-base font-bold text-slate-900">601.42 K</p>
+                  <p className="text-xs text-slate-500">2025</p>
+                  <p className="text-base font-bold text-white">601.42 K</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+              <div className="flex items-center gap-3 rounded-xl bg-white/5 px-3 py-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-300">
                   <DollarSign className="h-4 w-4" />
                 </span>
                 <div>
-                  <p className="text-xs text-slate-400">2026</p>
-                  <p className="text-base font-bold text-slate-900">0.51 K</p>
+                  <p className="text-xs text-slate-500">2026</p>
+                  <p className="text-base font-bold text-white">0.51 K</p>
                 </div>
               </div>
             </div>

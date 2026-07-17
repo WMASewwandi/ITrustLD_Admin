@@ -38,19 +38,19 @@ export default function RejectModal({ open, title = "Reject record", onClose, on
       <div className="admin-card w-full max-w-md p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="flex gap-3">
-            <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-admin-danger">
+            <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 text-rose-400">
               <AlertTriangle className="h-5 w-5" />
             </span>
             <div>
-              <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-              <p className="mt-1 text-sm text-slate-500">
+              <h3 className="text-lg font-semibold text-white">{title}</h3>
+              <p className="mt-1 text-sm text-slate-400">
                 {confirming
                   ? "Confirm — this reason will be shown to the customer."
                   : "Select a rejection reason shown to the customer."}
               </p>
             </div>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+          <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-500 hover:bg-white/10 hover:text-slate-200">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -79,7 +79,7 @@ export default function RejectModal({ open, title = "Reject record", onClose, on
             ) : null}
           </div>
         ) : (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
             Reason: <span className="font-semibold">{reason === "Custom" ? custom : reason}</span>
           </div>
         )}

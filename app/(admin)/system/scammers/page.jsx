@@ -63,9 +63,9 @@ export default function ScammersPage() {
       />
 
       <section className="admin-card admin-fade-up overflow-visible p-0">
-        <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Scammer Management</h1>
+            <h1 className="text-xl font-bold text-white sm:text-2xl">Scammer Management</h1>
             <p className="mt-0.5 text-xs text-slate-400">
               {filtered.length} flagged records · block suspicious platform / customer IDs
             </p>
@@ -80,7 +80,7 @@ export default function ScammersPage() {
           </button>
         </div>
 
-        <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+        <div className="border-b border-white/10 bg-white/5 px-5 py-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <FilterField label="Platform ID" className="lg:col-span-2">
               <input
@@ -113,7 +113,7 @@ export default function ScammersPage() {
 
         <div className="overflow-x-auto">
           <table className="min-w-[900px] w-full text-left text-[13px]">
-            <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+            <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
               <tr>
                 <th className="px-4 py-3">ID</th>
                 <th className="px-4 py-3">Platform ID</th>
@@ -126,8 +126,8 @@ export default function ScammersPage() {
             </thead>
             <tbody>
               {filtered.map((r) => (
-                <tr key={r.id} className="border-t border-slate-100 text-slate-700 transition hover:bg-admin-teal/[0.05]">
-                  <td className="px-4 py-3 font-medium text-slate-900">{r.id}</td>
+                <tr key={r.id} className="border-t border-white/10 text-slate-300 transition hover:bg-admin-teal/[0.05]">
+                  <td className="px-4 py-3 font-medium text-white">{r.id}</td>
                   <td className="px-4 py-3">
                     <CopyCell value={r.platformId} />
                   </td>
@@ -173,10 +173,10 @@ export default function ScammersPage() {
           <div className="admin-card w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-start justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900">Add Scammer</h3>
+                <h3 className="text-lg font-semibold text-white">Add Scammer</h3>
                 <p className="mt-1 text-sm text-slate-500">Flag a platform ID or customer for fraud watch.</p>
               </div>
-              <button type="button" onClick={() => setAddOpen(false)} className="text-slate-400 hover:text-slate-900">
+              <button type="button" onClick={() => setAddOpen(false)} className="text-slate-400 hover:text-white">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -219,7 +219,7 @@ export default function ScammersPage() {
               <button
                 type="button"
                 onClick={() => setAddOpen(false)}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600"
+                className="rounded-xl border border-white/10 px-4 py-2 text-sm text-slate-400"
               >
                 Cancel
               </button>

@@ -68,7 +68,7 @@ export default function SystemUsersPage() {
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-left text-[13px]">
-                  <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+                  <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                     <tr>
                       <th className="px-4 py-3 font-semibold">Name</th>
                       <th className="px-4 py-3 font-semibold">Email</th>
@@ -87,11 +87,11 @@ export default function SystemUsersPage() {
                       rows.map((u, i) => (
                         <tr
                           key={u.id}
-                          className={`border-t border-slate-100 text-slate-700 transition hover:bg-admin-teal/[0.04] ${
-                            i % 2 === 1 ? "bg-[#F7F8FB]" : "bg-white"
+                          className={`border-t border-white/10 text-slate-300 transition hover:bg-admin-teal/[0.04] ${
+                            i % 2 === 1 ? "bg-[#F7F8FB]" : "bg-admin-surface"
                           }`}
                         >
-                          <td className="px-4 py-3.5 font-medium text-slate-900">
+                          <td className="px-4 py-3.5 font-medium text-white">
                             <div className="flex items-center gap-2">
                               {u.name}
                               {u.online ? (
@@ -107,7 +107,7 @@ export default function SystemUsersPage() {
                             <button
                               type="button"
                               onClick={() => setEditUser({ ...u })}
-                              className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 shadow-sm transition hover:border-admin-teal/40 hover:text-admin-teal"
+                              className="rounded-lg border border-white/10 bg-admin-surface p-1.5 text-slate-500 shadow-sm transition hover:border-admin-teal/40 hover:text-admin-teal"
                               title="Edit"
                             >
                               <Pencil className="h-3.5 w-3.5" />
@@ -129,10 +129,10 @@ export default function SystemUsersPage() {
           <div className="admin-card w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-start justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900">Edit System User</h3>
+                <h3 className="text-lg font-semibold text-white">Edit System User</h3>
                 <p className="mt-1 text-sm text-slate-500">{editUser.role}</p>
               </div>
-              <button type="button" onClick={() => setEditUser(null)} className="text-slate-400 hover:text-slate-700">
+              <button type="button" onClick={() => setEditUser(null)} className="text-slate-400 hover:text-slate-200">
                 <X className="h-4 w-4" />
               </button>
             </div>

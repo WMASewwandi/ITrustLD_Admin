@@ -66,7 +66,7 @@ function WalletBadge({ name, color, logoUrl }) {
           {initials}
         </span>
       )}
-      <span className="text-base font-semibold text-slate-900">{name}</span>
+      <span className="text-base font-semibold text-white">{name}</span>
     </div>
   );
 }
@@ -80,10 +80,10 @@ function ModalShell({ title, subtitle, onClose, children, onSave }) {
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+            <h3 className="text-lg font-semibold text-white">{title}</h3>
             {subtitle ? <p className="mt-1 text-sm text-slate-500">{subtitle}</p> : null}
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-900">
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-white">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -114,9 +114,9 @@ function ModalShell({ title, subtitle, onClose, children, onSave }) {
 
 function FieldRow({ label, children }) {
   return (
-    <div className="grid grid-cols-[140px_1fr] items-start gap-x-3 gap-y-1 border-b border-slate-100 py-2.5 last:border-b-0 sm:grid-cols-[160px_1fr]">
+    <div className="grid grid-cols-[140px_1fr] items-start gap-x-3 gap-y-1 border-b border-white/10 py-2.5 last:border-b-0 sm:grid-cols-[160px_1fr]">
       <dt className="text-sm font-medium text-slate-500">{label}</dt>
-      <dd className="text-sm font-medium text-slate-900">{children}</dd>
+      <dd className="text-sm font-medium text-white">{children}</dd>
     </div>
   );
 }
@@ -238,11 +238,11 @@ function WalletSection({
   return (
     <section>
       <div className="admin-fade-up flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">{title}</h2>
+        <h2 className="text-2xl font-bold tracking-tight text-white">{title}</h2>
         <button
           type="button"
           onClick={openAdd}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+          className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-admin-surface px-3.5 py-2 text-sm font-semibold text-slate-300 shadow-sm transition hover:border-white/25 hover:bg-white/5"
         >
           <Plus className="h-4 w-4" />
           Add Wallet
@@ -257,7 +257,7 @@ function WalletSection({
               i % 2 === 1 ? "admin-fade-up-delay-1" : ""
             }`}
           >
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
               <WalletBadge name={row.name} color={row.badgeColor} logoUrl={row.logoUrl} />
               <button
                 type="button"
@@ -265,14 +265,14 @@ function WalletSection({
                 className={`inline-flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium transition ${
                   row.active
                     ? "text-theme-green-action"
-                    : "text-slate-500 hover:text-slate-800"
+                    : "text-slate-500 hover:text-slate-100"
                 }`}
               >
                 <span
                   className={`inline-flex h-5 w-5 items-center justify-center rounded border ${
                     row.active
                       ? "border-theme-green-action bg-theme-green-action text-white"
-                      : "border-slate-300 bg-white"
+                      : "border-white/20 bg-admin-surface"
                   }`}
                 >
                   {row.active ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
@@ -302,7 +302,7 @@ function WalletSection({
               </FieldRow>
             </dl>
 
-            <div className="flex flex-wrap gap-2 border-t border-slate-200 px-5 py-3.5">
+            <div className="flex flex-wrap gap-2 border-t border-white/10 px-5 py-3.5">
               <button
                 type="button"
                 onClick={() => openEdit(row)}
@@ -336,7 +336,7 @@ function WalletSection({
           onSave={save}
         >
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">Wallet Name</span>
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">Wallet Name</span>
             <input
               required
               value={modal.name}
@@ -347,13 +347,13 @@ function WalletSection({
           </label>
 
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">Logo</span>
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">Logo</span>
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="file"
                 accept="image/*"
                 onChange={onLogoChange}
-                className="block w-full text-sm text-slate-600 file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+                className="block w-full text-sm text-slate-400 file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-300 hover:file:bg-white/15"
               />
               {modal.logoName ? (
                 <span className="text-xs text-slate-500">{modal.logoName}</span>
@@ -364,18 +364,18 @@ function WalletSection({
           </label>
 
           <fieldset>
-            <legend className="mb-2 text-sm font-medium text-slate-700">Payment Methods</legend>
+            <legend className="mb-2 text-sm font-medium text-slate-300">Payment Methods</legend>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {paymentOptions.map((method) => (
                 <label
                   key={method}
-                  className="flex cursor-pointer items-center gap-2.5 rounded-lg px-1 py-0.5 text-sm text-slate-700 hover:bg-slate-50"
+                  className="flex cursor-pointer items-center gap-2.5 rounded-lg px-1 py-0.5 text-sm text-slate-300 hover:bg-white/5"
                 >
                   <input
                     type="checkbox"
                     checked={modal.paymentMethods.includes(method)}
                     onChange={() => toggleMethod(method)}
-                    className="h-4 w-4 cursor-pointer rounded border-slate-300 accent-theme-green-action"
+                    className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action"
                   />
                   {method}
                 </label>
@@ -384,7 +384,7 @@ function WalletSection({
           </fieldset>
 
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">Currency</span>
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">Currency</span>
             <select
               required
               value={modal.currency}
@@ -401,7 +401,7 @@ function WalletSection({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-700">Minimum Limit</span>
+              <span className="mb-1.5 block text-sm font-medium text-slate-300">Minimum Limit</span>
               <input
                 required
                 type="number"
@@ -414,7 +414,7 @@ function WalletSection({
               />
             </label>
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-700">Maximum Limit</span>
+              <span className="mb-1.5 block text-sm font-medium text-slate-300">Maximum Limit</span>
               <input
                 required
                 type="number"
@@ -429,7 +429,7 @@ function WalletSection({
           </div>
 
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">Platform Type</span>
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">Platform Type</span>
             <select
               required
               value={modal.platformType}
@@ -445,7 +445,7 @@ function WalletSection({
           </label>
 
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">
               Terms & Conditions
             </span>
             <textarea
@@ -466,18 +466,18 @@ function WalletSection({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-start justify-between gap-3">
-              <h3 className="text-lg font-semibold text-slate-900">
+              <h3 className="text-lg font-semibold text-white">
                 Terms & Conditions — {termsModal.name}
               </h3>
               <button
                 type="button"
                 onClick={() => setTermsModal(null)}
-                className="text-slate-400 hover:text-slate-900"
+                className="text-slate-400 hover:text-white"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <p className="text-sm leading-relaxed text-slate-600">
+            <p className="text-sm leading-relaxed text-slate-400">
               {termsModal.terms || fallbackTerms}
             </p>
             <div className="mt-5 flex justify-end">

@@ -19,6 +19,9 @@ import {
 } from "lucide-react";
 
 const ASSIGNEES = ["sacl", "withdraw.ex", "deposit.ex", "Authorizer", "admin"];
+/** Demo session admin — used for queue lock ownership */
+const CURRENT_ADMIN = "sacl";
+const PREVIEW_LIMIT = 10;
 
 function TransactionsContent() {
   const params = useSearchParams();
@@ -38,12 +41,23 @@ function TransactionsContent() {
   const [proof, setProof] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [assignOpen, setAssignOpen] = useState(null);
+  const [viewAll, setViewAll] = useState(false);
+  const [livePulse, setLivePulse] = useState(0);
 
   useEffect(() => {
     setTab(params.get("tab") === "withdrawals" ? "withdrawals" : "deposits");
     setStatus(params.get("status") || "Pending");
     setSelected([]);
+    setViewAll(false);
   }, [params]);
+
+  /** Near real-time refresh pulse (concept 3.5) */
+  useEffect(() => {
+    const id = setInterval(() => {
+      setLivePulse((n) => n + 1);
+    }, 12000);
+    return () => clearInterval(id);
+  }, []);
 
   const source = tab === "deposits" ? deposits : withdrawals;
 
@@ -59,10 +73,27 @@ function TransactionsContent() {
         .toLowerCase()
         .includes(s);
     });
-  }, [source, status, q, txId, platformId]);
+  }, [source, status, q, txId, platformId, livePulse]);
 
   const pageSize = Number(perPage) || 10;
-  const shown = filtered.slice(0, pageSize);
+  const previewCap = viewAll ? pageSize : Math.min(PREVIEW_LIMIT, pageSize);
+  const shown = filtered.slice(0, previewCap);
+  const hasMore = !viewAll && filtered.length > PREVIEW_LIMIT;
+
+  function isLockedByOther(r) {
+    return !!r.lockedBy && r.lockedBy !== CURRENT_ADMIN;
+  }
+
+  function claimRequest(id) {
+    const setter = tab === "deposits" ? setDeposits : setWithdrawals;
+    setter((prev) =>
+      prev.map((r) =>
+        r.id === id && !r.lockedBy
+          ? { ...r, assigned: CURRENT_ADMIN, lockedBy: CURRENT_ADMIN }
+          : r
+      )
+    );
+  }
 
   const pendingRows = source.filter((r) => r.status.includes("Pending"));
   const clientPayLkr = pendingRows.reduce(
@@ -95,14 +126,28 @@ function TransactionsContent() {
             : "Withdrawals";
 
   function approve(id) {
+    const row = source.find((r) => r.id === id);
+    if (row && isLockedByOther(row)) return;
     const setter = tab === "deposits" ? setDeposits : setWithdrawals;
-    setter((prev) => prev.map((r) => (r.id === id ? { ...r, status: "Completed" } : r)));
+    setter((prev) =>
+      prev.map((r) =>
+        r.id === id
+          ? { ...r, status: "Completed", lockedBy: null, assigned: r.assigned || CURRENT_ADMIN }
+          : r
+      )
+    );
   }
 
   function reject(reason) {
+    const row = source.find((r) => r.id === rejectId);
+    if (row && isLockedByOther(row)) return;
     const setter = tab === "deposits" ? setDeposits : setWithdrawals;
     setter((prev) =>
-      prev.map((r) => (r.id === rejectId ? { ...r, status: "Rejected", rejectReason: reason } : r))
+      prev.map((r) =>
+        r.id === rejectId
+          ? { ...r, status: "Rejected", rejectReason: reason, lockedBy: null }
+          : r
+      )
     );
     setRejectId(null);
   }
@@ -124,10 +169,64 @@ function TransactionsContent() {
     <div>
       <Breadcrumb
         items={[
-          { label: tab === "deposits" ? "Deposits" : "Withdrawals", href: `/transactions?tab=${tab}` },
+          { label: "Transactions", href: "/transactions?tab=deposits&status=Pending" },
+          { label: tab === "deposits" ? "Deposits" : "Withdrawals", href: `/transactions?tab=${tab}&status=${status}` },
           { label: title },
         ]}
       />
+
+      {/* Concept 3.1.5 — main tabs + status dropdown (not separate pages) */}
+      <div className="admin-fade-up mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="inline-flex rounded-xl border border-white/10 bg-admin-chrome-deep/80 p-1">
+          {[
+            { id: "deposits", label: "Deposits", count: deposits.filter((d) => d.status.includes("Pending")).length },
+            { id: "withdrawals", label: "Withdrawals", count: withdrawals.filter((w) => w.status.includes("Pending")).length },
+          ].map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => {
+                setTab(t.id);
+                setSelected([]);
+                setViewAll(false);
+              }}
+              className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                tab === t.id
+                  ? "bg-admin-teal text-white shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              {t.label}
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${tab === t.id ? "bg-white/20" : "bg-white/10"}`}>
+                {t.count}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="inline-flex items-center gap-2 text-xs text-slate-400">
+            Status filter
+            <select
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                setViewAll(false);
+              }}
+              className={`${inputCls} w-40`}
+            >
+              {["Pending", "Completed", "Rejected", "All"].map((s) => (
+                <option key={s} value={s} className="bg-admin-surface">
+                  {s}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-slate-400">
+            <span className="admin-live-dot h-1.5 w-1.5 rounded-full bg-theme-green-action" />
+            Live
+          </span>
+        </div>
+      </div>
 
       {/* Summary strips like screenshot */}
       <div className="admin-fade-up mb-4 grid gap-3 sm:grid-cols-2">
@@ -167,13 +266,13 @@ function TransactionsContent() {
 
       <section className="admin-card admin-fade-up overflow-visible p-0">
         {/* Header actions — screenshot layout */}
-        <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="mr-2 text-xl font-bold text-slate-900 sm:text-2xl">{title}</h1>
+            <h1 className="mr-2 text-xl font-bold text-white sm:text-2xl">{title}</h1>
             <button
               type="button"
               onClick={refresh}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3.5 py-2 text-xs font-semibold text-slate-900 transition hover:bg-slate-200"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
               Refresh
@@ -182,10 +281,10 @@ function TransactionsContent() {
               type="button"
               disabled={!selected.length}
               onClick={() => selected.length && setAssignOpen(selected[0])}
-              className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 transition disabled:opacity-40 ${
+              className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold text-white transition disabled:opacity-40 ${
                 tab === "withdrawals"
                   ? "bg-admin-teal enabled:hover:brightness-110"
-                  : "bg-slate-100 enabled:hover:bg-slate-200"
+                  : "bg-white/10 enabled:hover:bg-white/20"
               }`}
             >
               <UserPlus className="h-3.5 w-3.5" />
@@ -205,10 +304,10 @@ function TransactionsContent() {
               <select
                 value={perPage}
                 onChange={(e) => setPerPage(e.target.value)}
-                className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900"
+                className="rounded-lg border border-white/10 bg-admin-surface px-2 py-1.5 text-xs text-white"
               >
                 {["10", "25", "50", "100"].map((n) => (
-                  <option key={n} value={n} className="bg-white">
+                  <option key={n} value={n} className="bg-admin-surface">
                     {n}
                   </option>
                 ))}
@@ -218,13 +317,13 @@ function TransactionsContent() {
         </div>
 
         {/* Search row with teal search button (withdrawals screenshot) */}
-        <div className="border-b border-slate-200 px-5 py-3">
-          <div className="flex max-w-xl overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div className="border-b border-white/10 px-5 py-3">
+          <div className="flex max-w-xl overflow-hidden rounded-xl border border-white/10 bg-admin-surface">
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search…"
-              className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400"
+              className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-sm text-white outline-none placeholder:text-slate-500"
             />
             <button
               type="button"
@@ -237,12 +336,12 @@ function TransactionsContent() {
         </div>
 
         {/* Dense filter row */}
-        <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+        <div className="border-b border-white/10 bg-white/5 px-5 py-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <FilterField label="Search in">
               <select value={status} onChange={(e) => setStatus(e.target.value)} className={inputCls}>
                 {["All", "Pending", "Completed", "Rejected"].map((s) => (
-                  <option key={s} value={s} className="bg-white">
+                  <option key={s} value={s} className="bg-admin-surface">
                     {s}
                   </option>
                 ))}
@@ -251,7 +350,7 @@ function TransactionsContent() {
             <FilterField label="Duration">
               <select value={duration} onChange={(e) => setDuration(e.target.value)} className={inputCls}>
                 {["Today", "Yesterday", "This Week", "This Month", "Custom"].map((d) => (
-                  <option key={d} value={d} className="bg-white">
+                  <option key={d} value={d} className="bg-admin-surface">
                     {d}
                   </option>
                 ))}
@@ -281,14 +380,14 @@ function TransactionsContent() {
         <div className="overflow-x-auto">
           {tab === "withdrawals" ? (
             <table className="min-w-[1280px] w-full text-left text-[13px]">
-              <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+              <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                 <tr>
                   <th className="px-3 py-3">
                     <input
                       type="checkbox"
                       checked={shown.length > 0 && selected.length === shown.length}
                       onChange={(e) => toggleAll(e.target.checked)}
-                      className="rounded border-slate-300"
+                      className="rounded border-white/20"
                     />
                   </th>
                   <th className="px-3 py-3">Tran. ID</th>
@@ -307,13 +406,13 @@ function TransactionsContent() {
               </thead>
               <tbody>
                 {shown.map((r) => (
-                  <tr key={r.id} className="border-t border-slate-100 text-slate-700 transition hover:bg-admin-teal/[0.05]">
+                  <tr key={r.id} className="border-t border-white/10 text-slate-300 transition hover:bg-admin-teal/[0.05]">
                     <td className="px-3 py-3">
                       <input
                         type="checkbox"
                         checked={selected.includes(r.id)}
                         onChange={() => toggleOne(r.id)}
-                        className="rounded border-slate-300"
+                        className="rounded border-white/20"
                       />
                     </td>
                     <td className="px-3 py-3">
@@ -335,10 +434,20 @@ function TransactionsContent() {
                       <CopyCell value={r.cashoutAmt || r.amount} />
                     </td>
                     <td className="px-3 py-3">
-                      <CopyCell value={r.platformId} />
+                      <button
+                        type="button"
+                        onClick={() => setProof(r)}
+                        className="inline-flex items-center gap-1.5 text-left"
+                        title="Today's transaction count for this platform user"
+                      >
+                        <CopyCell value={r.platformId} />
+                        {r.todayTxCount ? (
+                          <span className="admin-badge-glow h-5 min-w-5 px-1.5 text-[10px]">{r.todayTxCount}</span>
+                        ) : null}
+                      </button>
                     </td>
                     <td className="px-3 py-3">
-                      <span className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium">
+                      <span className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs font-medium">
                         {r.method}
                       </span>
                     </td>
@@ -350,51 +459,90 @@ function TransactionsContent() {
                     </td>
                     <td className="px-3 py-3">
                       {r.status.includes("Pending") ? (
-                        <div className="flex gap-1">
-                          <button
-                            type="button"
-                            onClick={() => setRejectId(r.id)}
-                            className="rounded-lg bg-[#E11D48] p-1.5 text-white shadow-sm"
-                            title="Reject"
+                        isLockedByOther(r) ? (
+                          <span
+                            className="cursor-not-allowed text-[11px] text-amber-300/90"
+                            title={`This request is locked by ${r.lockedBy}.`}
                           >
-                            <AlertTriangle className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => approve(r.id)}
-                            className="rounded-lg bg-theme-green-action p-1.5 text-white shadow-sm"
-                            title="Approve"
-                          >
-                            <Check className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                            Locked
+                          </span>
+                        ) : (
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setRejectId(r.id)}
+                              className="rounded-lg bg-[#E11D48] p-1.5 text-white shadow-sm"
+                              title="Reject withdrawal — this action cannot be undone."
+                            >
+                              <AlertTriangle className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => approve(r.id)}
+                              className="rounded-lg bg-theme-green-action p-1.5 text-white shadow-sm"
+                              title="Approve withdrawal"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setProof(r)}
+                              className="rounded-lg bg-white/10 p-1.5 text-white"
+                              title="View proof and same-day transactions"
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )
                       ) : (
-                        <span className="text-slate-300">—</span>
+                        <button
+                          type="button"
+                          onClick={() => setProof(r)}
+                          className="rounded-lg bg-white/10 p-1.5 text-white"
+                          title="View proof"
+                        >
+                          <FileText className="h-3.5 w-3.5" />
+                        </button>
                       )}
                     </td>
                     <td className="px-3 py-3">
                       <StatusPill status={r.status} />
                       {r.rejectReason ? (
-                        <p className="mt-1 max-w-[120px] truncate text-[10px] text-rose-300" title={r.rejectReason}>
+                        <p className="mt-1 max-w-[140px] text-[10px] leading-snug text-rose-300" title={r.rejectReason}>
                           {r.rejectReason}
                         </p>
                       ) : null}
                     </td>
                     <td className="px-3 py-3">
-                      <button
-                        type="button"
-                        onClick={() => setAssignOpen(r.id)}
-                        className="text-xs font-semibold text-teal-400 underline-offset-2 hover:underline"
-                      >
-                        {r.assigned && r.assigned !== "—" ? r.assigned : "Assign"}
-                      </button>
+                      {isLockedByOther(r) ? (
+                        <span className="text-[11px] text-amber-300" title={`Locked by ${r.lockedBy}`}>
+                          {r.lockedBy}
+                        </span>
+                      ) : !r.lockedBy && r.status.includes("Pending") ? (
+                        <button
+                          type="button"
+                          onClick={() => claimRequest(r.id)}
+                          className="text-xs font-semibold text-teal-300 underline-offset-2 hover:underline"
+                          title="Pick from queue — locks this request to you"
+                        >
+                          Pick
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setAssignOpen(r.id)}
+                          className="text-xs font-semibold text-teal-400 underline-offset-2 hover:underline"
+                        >
+                          {r.assigned && r.assigned !== "—" ? r.assigned : "Assign"}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
                 {shown.length === 0 ? (
                   <tr>
                     <td colSpan={13} className="px-4 py-14 text-center text-slate-400">
-                      No Results Found
+                      No results found
                     </td>
                   </tr>
                 ) : null}
@@ -402,14 +550,14 @@ function TransactionsContent() {
             </table>
           ) : (
             <table className="min-w-[1200px] w-full text-left text-[13px]">
-              <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+              <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                 <tr>
                   <th className="px-3 py-3">
                     <input
                       type="checkbox"
                       checked={shown.length > 0 && selected.length === shown.length}
                       onChange={(e) => toggleAll(e.target.checked)}
-                      className="rounded border-slate-300"
+                      className="rounded border-white/20"
                     />
                   </th>
                   <th className="px-3 py-3">Tran. ID</th>
@@ -428,13 +576,13 @@ function TransactionsContent() {
               </thead>
               <tbody>
                 {shown.map((r) => (
-                  <tr key={r.id} className="border-t border-slate-100 text-slate-700 transition hover:bg-admin-teal/[0.05]">
+                  <tr key={r.id} className="border-t border-white/10 text-slate-300 transition hover:bg-admin-teal/[0.05]">
                     <td className="px-3 py-3">
                       <input
                         type="checkbox"
                         checked={selected.includes(r.id)}
                         onChange={() => toggleOne(r.id)}
-                        className="rounded border-slate-300"
+                        className="rounded border-white/20"
                       />
                     </td>
                     <td className="px-3 py-3">
@@ -450,12 +598,12 @@ function TransactionsContent() {
                       <CopyCell value={`${r.userId} ${r.customer}`} />
                     </td>
                     <td className="px-3 py-3">
-                      <span className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs">{r.method}</span>
+                      <span className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs">{r.method}</span>
                     </td>
                     <td className="px-3 py-3">
                       <CopyCell value={r.clientPay || r.amount} />
                     </td>
-                    <td className="px-3 py-3 font-medium text-slate-900">{r.platform || "—"}</td>
+                    <td className="px-3 py-3 font-medium text-white">{r.platform || "—"}</td>
                     <td className="px-3 py-3">
                       <CopyCell value={r.deposited || r.amount} />
                     </td>
@@ -526,6 +674,22 @@ function TransactionsContent() {
             </table>
           )}
         </div>
+
+        {/* Progressive disclosure — concept 3.3 */}
+        {hasMore ? (
+          <div className="border-t border-white/10 px-5 py-4 text-center">
+            <p className="mb-2 text-xs text-slate-500">
+              Showing latest {shown.length} of {filtered.length} {title.toLowerCase()}
+            </p>
+            <button
+              type="button"
+              onClick={() => setViewAll(true)}
+              className="rounded-xl border border-teal-300/30 bg-teal-400/10 px-4 py-2 text-sm font-semibold text-teal-200 transition hover:bg-teal-400/20"
+            >
+              View all {title}
+            </button>
+          </div>
+        ) : null}
       </section>
 
       <RejectModal
@@ -537,12 +701,14 @@ function TransactionsContent() {
 
       {assignOpen ? (
         <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-admin-chrome/50 p-4 backdrop-blur-sm"
+          className="admin-modal-overlay"
           onClick={() => setAssignOpen(null)}
         >
           <div className="admin-card w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold text-slate-900">Assign executive</h3>
-            <p className="mt-1 text-sm text-slate-500">Select who handles this deposit queue item.</p>
+            <h3 className="text-lg font-semibold text-white">Assign & lock</h3>
+            <p className="mt-1 text-sm text-slate-400">
+              Assigning locks the request so other admins cannot process it.
+            </p>
             <div className="mt-4 space-y-2">
               {ASSIGNEES.filter((a) => a !== "—").map((name) => (
                 <button
@@ -552,12 +718,14 @@ function TransactionsContent() {
                     const ids = selected.length && selected.includes(assignOpen) ? selected : [assignOpen];
                     const setter = tab === "deposits" ? setDeposits : setWithdrawals;
                     setter((prev) =>
-                      prev.map((r) => (ids.includes(r.id) ? { ...r, assigned: name } : r))
+                      prev.map((r) =>
+                        ids.includes(r.id) ? { ...r, assigned: name, lockedBy: name } : r
+                      )
                     );
                     setAssignOpen(null);
                     setSelected([]);
                   }}
-                  className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-700 transition hover:border-admin-teal/40 hover:bg-admin-teal/10"
+                  className="flex w-full items-center justify-between rounded-xl border border-white/10 px-4 py-2.5 text-sm text-slate-300 transition hover:border-admin-teal/40 hover:bg-admin-teal/10"
                 >
                   {name}
                   <UserPlus className="h-3.5 w-3.5 text-slate-400" />
@@ -567,7 +735,7 @@ function TransactionsContent() {
             <button
               type="button"
               onClick={() => setAssignOpen(null)}
-              className="mt-4 w-full rounded-xl border border-slate-200 py-2 text-sm text-slate-500"
+              className="mt-4 w-full rounded-xl border border-white/10 py-2 text-sm text-slate-500"
             >
               Cancel
             </button>
@@ -576,54 +744,79 @@ function TransactionsContent() {
       ) : null}
 
       {proof ? (
-        <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-admin-chrome/50 p-4 backdrop-blur-sm"
-          onClick={() => setProof(null)}
-        >
-          <div className="admin-card max-h-[85vh] w-full max-w-2xl overflow-auto p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="admin-modal-overlay" onClick={() => setProof(null)}>
+          <div
+            className="admin-card max-h-[90vh] w-full max-w-3xl overflow-auto p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="mb-4 flex items-start justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900">Transaction Proof</h3>
-                <p className="text-sm text-slate-500">
+                <h3 className="text-lg font-semibold text-white">Transaction Proof</h3>
+                <p className="text-sm text-slate-400">
                   {proof.id} · {proof.customer}
+                  {proof.todayTxCount ? ` · ${proof.todayTxCount} tx today` : ""}
                 </p>
               </div>
-              <button type="button" onClick={() => setProof(null)} className="text-slate-400 hover:text-slate-900">
+              <button type="button" onClick={() => setProof(null)} className="rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white">
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="mb-4 flex h-40 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400">
+            <div className="mb-4 flex h-40 items-center justify-center rounded-xl border border-dashed border-white/10 bg-white/5 text-sm text-slate-400">
               Payment slip / proof preview
             </div>
-            <dl className="grid gap-2 text-sm sm:grid-cols-2">
-              <div className="rounded-lg bg-slate-50 px-3 py-2">
-                <dt className="text-slate-400">Client Pay</dt>
-                <dd className="font-medium">{proof.clientPay || proof.amount}</dd>
+            <dl className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-lg bg-white/5 px-3 py-2">
+                <dt className="text-slate-400">Cashout / Client Pay</dt>
+                <dd className="font-medium text-white">{proof.cashoutAmt || proof.clientPay || proof.amount}</dd>
               </div>
-              <div className="rounded-lg bg-slate-50 px-3 py-2">
-                <dt className="text-slate-400">Deposited</dt>
-                <dd className="font-medium">{proof.deposited || proof.amount}</dd>
+              <div className="rounded-lg bg-white/5 px-3 py-2">
+                <dt className="text-slate-400">Receiving Amount</dt>
+                <dd className="font-medium text-white">{proof.receiving || proof.deposited || proof.amount}</dd>
               </div>
-              <div className="rounded-lg bg-slate-50 px-3 py-2">
+              <div className="rounded-lg bg-white/5 px-3 py-2">
                 <dt className="text-slate-400">Platform ID</dt>
-                <dd className="font-medium">{proof.platformId}</dd>
+                <dd className="font-medium text-white">{proof.platformId}</dd>
               </div>
-              <div className="rounded-lg bg-slate-50 px-3 py-2">
+              <div className="rounded-lg bg-white/5 px-3 py-2">
                 <dt className="text-slate-400">Account</dt>
-                <dd className="font-medium">{proof.account}</dd>
+                <dd className="font-medium text-white">{proof.account}</dd>
               </div>
             </dl>
-            <h4 className="mb-2 mt-5 text-sm font-semibold text-slate-900">Same-day transactions</h4>
-            <div className="space-y-2 text-sm">
-              {source
-                .filter((r) => r.customer === proof.customer)
-                .map((r) => (
-                  <div key={r.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
-                    <span>{r.id}</span>
-                    <span>{r.amount}</span>
-                    <StatusPill status={r.status} />
-                  </div>
-                ))}
+            {proof.rejectReason ? (
+              <div className="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
+                Rejection reason (customer-facing): <span className="font-semibold">{proof.rejectReason}</span>
+              </div>
+            ) : null}
+            <h4 className="mb-2 mt-5 text-sm font-semibold text-white">
+              Same-day transactions grid
+            </h4>
+            <div className="overflow-x-auto rounded-xl border border-white/10">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th className="px-3 py-2">Tran. ID</th>
+                    <th className="px-3 py-2">Amount</th>
+                    <th className="px-3 py-2">Method</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Proof</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {source
+                    .filter((r) => r.userId === proof.userId || r.customer === proof.customer)
+                    .map((r) => (
+                      <tr key={r.id} className="border-t border-white/10 text-slate-300">
+                        <td className="px-3 py-2 font-medium text-white">{r.id}</td>
+                        <td className="px-3 py-2">{r.cashoutAmt || r.amount}</td>
+                        <td className="px-3 py-2">{r.method}</td>
+                        <td className="px-3 py-2">
+                          <StatusPill status={r.status} />
+                        </td>
+                        <td className="px-3 py-2">{r.proof ? "Attached" : "—"}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

@@ -30,7 +30,7 @@ function ActiveCheckbox({ checked, onChange }) {
       type="checkbox"
       checked={checked}
       onChange={onChange}
-      className="h-4 w-4 cursor-pointer rounded border-slate-300 accent-theme-green-action"
+      className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action"
       title={checked ? "Active" : "Set as active"}
     />
   );
@@ -62,8 +62,8 @@ function ActionButtons({ onEdit, onDelete }) {
 function SectionCard({ title, actionLabel, onAdd, children, delay }) {
   return (
     <section className={`admin-card admin-fade-up overflow-visible p-0 ${delay || ""}`}>
-      <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+      <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-lg font-semibold text-white">{title}</h2>
         <button
           type="button"
           onClick={onAdd}
@@ -86,8 +86,8 @@ function ModalShell({ title, onClose, children, onSave }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">
-          <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-900">
+          <h3 className="text-lg font-semibold text-white">{title}</h3>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-white">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -207,7 +207,7 @@ export default function PayAccountsPanel() {
     <div className="mt-5 space-y-5">
       <SectionCard title="Bank Account" actionLabel="Add Account" onAdd={openAddBank}>
         <table className="min-w-[720px] w-full text-left text-[13px]">
-          <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+          <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
             <tr>
               <th className="px-4 py-3">Account Number</th>
               <th className="px-4 py-3">Name</th>
@@ -219,8 +219,8 @@ export default function PayAccountsPanel() {
           </thead>
           <tbody>
             {banks.map((row) => (
-              <tr key={row.id} className="border-t border-slate-100 text-slate-700">
-                <td className="px-4 py-3 font-medium text-slate-900">{row.accountNumber}</td>
+              <tr key={row.id} className="border-t border-white/10 text-slate-300">
+                <td className="px-4 py-3 font-medium text-white">{row.accountNumber}</td>
                 <td className="px-4 py-3">{row.name}</td>
                 <td className="px-4 py-3">{row.bank}</td>
                 <td className="px-4 py-3">{row.branch}</td>
@@ -256,7 +256,7 @@ export default function PayAccountsPanel() {
         delay="admin-fade-up-delay-1"
       >
         <table className="min-w-[480px] w-full text-left text-[13px]">
-          <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+          <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
             <tr>
               <th className="px-4 py-3">Skrill Email</th>
               <th className="px-4 py-3">Set as Active</th>
@@ -265,8 +265,8 @@ export default function PayAccountsPanel() {
           </thead>
           <tbody>
             {skrill.map((row) => (
-              <tr key={row.id} className="border-t border-slate-100 text-slate-700">
-                <td className="px-4 py-3 font-medium text-slate-900">{row.email}</td>
+              <tr key={row.id} className="border-t border-white/10 text-slate-300">
+                <td className="px-4 py-3 font-medium text-white">{row.email}</td>
                 <td className="px-4 py-3">
                   <ActiveCheckbox
                     checked={row.active}
@@ -299,7 +299,7 @@ export default function PayAccountsPanel() {
         delay="admin-fade-up-delay-2"
       >
         <table className="min-w-[480px] w-full text-left text-[13px]">
-          <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+          <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
             <tr>
               <th className="px-4 py-3">Neteller Email</th>
               <th className="px-4 py-3">Set as Active</th>
@@ -308,8 +308,8 @@ export default function PayAccountsPanel() {
           </thead>
           <tbody>
             {neteller.map((row) => (
-              <tr key={row.id} className="border-t border-slate-100 text-slate-700">
-                <td className="px-4 py-3 font-medium text-slate-900">{row.email}</td>
+              <tr key={row.id} className="border-t border-white/10 text-slate-300">
+                <td className="px-4 py-3 font-medium text-white">{row.email}</td>
                 <td className="px-4 py-3">
                   <ActiveCheckbox
                     checked={row.active}
@@ -342,7 +342,7 @@ export default function PayAccountsPanel() {
           onSave={saveBank}
         >
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">Account Number</span>
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">Account Number</span>
             <input
               required
               value={bankModal.accountNumber}
@@ -352,7 +352,7 @@ export default function PayAccountsPanel() {
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">Name</span>
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">Name</span>
             <input
               required
               value={bankModal.name}
@@ -362,7 +362,7 @@ export default function PayAccountsPanel() {
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">Bank</span>
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">Bank</span>
             <input
               required
               value={bankModal.bank}
@@ -372,7 +372,7 @@ export default function PayAccountsPanel() {
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">Branch</span>
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">Branch</span>
             <input
               required
               value={bankModal.branch}
@@ -391,7 +391,7 @@ export default function PayAccountsPanel() {
           onSave={() => saveWallet("skrill")}
         >
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">Skrill Email</span>
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">Skrill Email</span>
             <input
               required
               type="email"
@@ -411,7 +411,7 @@ export default function PayAccountsPanel() {
           onSave={() => saveWallet("neteller")}
         >
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">Neteller Email</span>
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">Neteller Email</span>
             <input
               required
               type="email"

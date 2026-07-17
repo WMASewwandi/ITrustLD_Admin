@@ -44,7 +44,7 @@ function KycBadge({ value }) {
     );
   }
   return (
-    <span className="inline-flex rounded-full bg-amber-500 px-2.5 py-0.5 text-[11px] font-semibold text-white">
+    <span className="inline-flex rounded-full bg-amber-500/90 px-2.5 py-0.5 text-[11px] font-semibold text-white">
       Pending
     </span>
   );
@@ -154,33 +154,38 @@ function UsersContent() {
       <Breadcrumb items={[{ label: "User Management", href: "/users?filter=pending" }, { label: title }]} />
 
       <section className="admin-card admin-fade-up overflow-visible p-0">
-        <div className="border-b border-slate-200 px-5 py-4">
+        <div className="border-b border-white/10 px-5 py-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">{title}</h1>
+              <h1 className="text-xl font-bold text-white sm:text-2xl">{title}</h1>
               <p className="mt-0.5 text-xs text-slate-400">
                 KYC queue · NIC / Address verification · ban requires reason
               </p>
             </div>
-            <select
-              value={filter}
-              onChange={(e) => {
-                setFilter(e.target.value);
-                setPage(1);
-              }}
-              className={`${inputCls} w-full sm:w-56`}
-            >
-              {FILTERS.map((f) => (
-                <option key={f.value} value={f.value} className="bg-white">
-                  {f.label}
-                </option>
-              ))}
-            </select>
+            <label className="block w-full sm:w-64">
+              <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                Filter Pending Users
+              </span>
+              <select
+                value={filter}
+                onChange={(e) => {
+                  setFilter(e.target.value);
+                  setPage(1);
+                }}
+                className={inputCls}
+              >
+                {FILTERS.map((f) => (
+                  <option key={f.value} value={f.value} className="bg-admin-surface">
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
 
         {/* Field filters like screenshot */}
-        <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+        <div className="border-b border-white/10 bg-white/5 px-5 py-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <FilterField label="Email">
               <input
@@ -218,7 +223,7 @@ function UsersContent() {
               <button
                 type="button"
                 onClick={runSearch}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:brightness-110"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110"
               >
                 <Search className="h-3.5 w-3.5" />
                 Search
@@ -228,7 +233,7 @@ function UsersContent() {
         </div>
 
         {/* Table controls */}
-        <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
           <label className="inline-flex items-center gap-2 text-xs text-slate-500">
             Show
             <select
@@ -237,10 +242,10 @@ function UsersContent() {
                 setPerPage(Number(e.target.value));
                 setPage(1);
               }}
-              className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900"
+              className="rounded-lg border border-white/10 bg-admin-surface px-2 py-1.5 text-xs text-white"
             >
               {[10, 25, 50, 100].map((n) => (
-                <option key={n} value={n} className="bg-white">
+                <option key={n} value={n} className="bg-admin-surface">
                   {n}
                 </option>
               ))}
@@ -263,14 +268,14 @@ function UsersContent() {
 
         <div className="overflow-x-auto">
           <table className="min-w-[1100px] w-full text-left text-[13px]">
-            <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+            <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
               <tr>
                 <th className="px-3 py-3">
                   <input
                     type="checkbox"
                     checked={shown.length > 0 && selected.length === shown.length}
                     onChange={(e) => toggleAll(e.target.checked)}
-                    className="rounded border-slate-300"
+                    className="rounded border-white/20"
                   />
                 </th>
                 <th className="px-3 py-3">Account ID</th>
@@ -285,19 +290,19 @@ function UsersContent() {
             </thead>
             <tbody>
               {shown.map((u) => (
-                <tr key={u.id} className="border-t border-slate-100 text-slate-700 transition hover:bg-admin-teal/[0.05]">
+                <tr key={u.id} className="border-t border-white/10 text-slate-300 transition hover:bg-admin-teal/[0.05]">
                   <td className="px-3 py-3">
                     <input
                       type="checkbox"
                       checked={selected.includes(u.id)}
                       onChange={() => toggleOne(u.id)}
-                      className="rounded border-slate-300"
+                      className="rounded border-white/20"
                     />
                   </td>
                   <td className="px-3 py-3">
                     <CopyCell value={u.accountId} sub={u.id} />
                   </td>
-                  <td className="px-3 py-3 font-medium text-slate-900">{u.name}</td>
+                  <td className="px-3 py-3 font-medium text-white">{u.name}</td>
                   <td className="px-3 py-3">
                     <CopyCell value={u.email} />
                   </td>
@@ -357,7 +362,7 @@ function UsersContent() {
                     <div className="flex gap-1.5">
                       <button
                         type="button"
-                        className="rounded-lg border border-slate-200 p-1.5 text-slate-500 transition hover:border-admin-teal/40 hover:text-slate-900"
+                        className="rounded-lg border border-white/10 p-1.5 text-slate-500 transition hover:border-admin-teal/40 hover:text-white"
                         title="View profile"
                       >
                         <Eye className="h-3.5 w-3.5" />
@@ -366,7 +371,7 @@ function UsersContent() {
                         <button
                           type="button"
                           onClick={() => setBanOpen(u.id)}
-                          className="inline-flex items-center gap-1 rounded-lg border border-rose-400/30 px-2 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10"
+                          className="inline-flex items-center gap-1 rounded-lg border border-rose-400/30 px-2 py-1 text-xs text-rose-300 transition hover:bg-rose-500/150/10"
                           title="Ban user — requires reason"
                         >
                           <Ban className="h-3.5 w-3.5" />
@@ -393,7 +398,7 @@ function UsersContent() {
         </div>
 
         {/* Footer pagination */}
-        <div className="flex flex-col gap-3 border-t border-slate-200 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-t border-white/10 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-slate-400">
             Showing {filtered.length === 0 ? 0 : start + 1} to {Math.min(start + perPage, filtered.length)} of{" "}
             {filtered.length} entries
@@ -403,7 +408,7 @@ function UsersContent() {
               type="button"
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 disabled:opacity-35"
+              className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-400 disabled:opacity-35"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
               Previous
@@ -416,7 +421,7 @@ function UsersContent() {
                   type="button"
                   onClick={() => setPage(n)}
                   className={`min-w-8 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
-                    page === n ? "bg-admin-teal text-white" : "border border-slate-200 text-slate-600"
+                    page === n ? "bg-admin-teal text-white" : "border border-white/10 text-slate-400"
                   }`}
                 >
                   {n}
@@ -426,7 +431,7 @@ function UsersContent() {
               type="button"
               disabled={page >= totalPages}
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 disabled:opacity-35"
+              className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-400 disabled:opacity-35"
             >
               Next
               <ChevronRight className="h-3.5 w-3.5" />
