@@ -178,9 +178,9 @@ function NavInner() {
           </Link>
         </div>
 
-        {/* Horizontal top nav — centered */}
-        <nav className="pointer-events-none absolute inset-x-0 top-1/2 hidden -translate-y-1/2 justify-center xl:flex">
-          <div className="pointer-events-auto flex items-center gap-0.5">
+        {/* Horizontal top nav — centered between logo and controls */}
+        <nav className="hidden min-w-0 flex-1 justify-center xl:flex">
+          <div className="flex items-center gap-0.5">
             {TOP_NAV.map((cat, catIndex) => {
               const active = categoryActive(pathname, search, cat);
               const isOpen = open === cat.id;
@@ -192,7 +192,7 @@ function NavInner() {
                   <Link
                     key={cat.id}
                     href={cat.href}
-                    className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[12.5px] font-medium transition ${
+                    className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 py-2 text-[12.5px] font-medium transition ${
                       active
                         ? "bg-white/10 font-semibold text-white/90 shadow-[inset_0_-2px_0_0_rgba(255,255,255,0.9)]"
                         : "text-white/75 hover:bg-white/5 hover:text-white"
@@ -207,7 +207,7 @@ function NavInner() {
                   <button
                     type="button"
                     onClick={() => setOpen(isOpen ? null : cat.id)}
-                    className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[12.5px] font-medium transition ${
+                    className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 py-2 text-[12.5px] font-medium transition ${
                       active
                         ? "bg-white/10 font-semibold text-white/90 shadow-[inset_0_-2px_0_0_rgba(255,255,255,0.9)]"
                         : "text-white/75 hover:bg-white/5 hover:text-white"
