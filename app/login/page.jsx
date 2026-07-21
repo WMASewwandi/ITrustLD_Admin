@@ -29,19 +29,20 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="admin-canvas-dark relative min-h-screen overflow-hidden text-white">
+    <div className="admin-canvas-dark relative flex min-h-dvh w-full flex-col overflow-hidden text-white">
       <div className="pointer-events-none absolute -left-32 top-0 h-[28rem] w-[28rem] rounded-full bg-admin-teal/25 blur-[120px]" />
       <div className="pointer-events-none absolute -right-24 bottom-0 h-[30rem] w-[30rem] rounded-full bg-admin-accent/15 blur-[130px]" />
       <div className="pointer-events-none absolute left-1/3 top-1/2 h-64 w-64 -translate-y-1/2 rounded-full bg-theme-green-action/10 blur-[100px]" />
 
-      <div className="relative mx-auto grid min-h-screen max-w-[1200px] items-center gap-10 px-4 py-12 lg:grid-cols-2 lg:px-8">
-        <section className="admin-fade-up hidden lg:block">
+      <div className="relative grid min-h-dvh w-full flex-1 lg:grid-cols-2">
+        {/* Brand panel — full-height left pane on desktop */}
+        <section className="admin-fade-up relative hidden flex-col justify-center border-r border-white/10 px-10 py-12 xl:px-16 lg:flex">
           <img
             src="/assets/img/logos/logo-itrustld-wide.png"
             alt="iTrustLD"
             className="h-11 w-auto object-contain"
           />
-          <p className="mt-8 inline-flex items-center gap-2 rounded-full border border-admin-teal/40 bg-admin-teal/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-teal-200">
+          <p className="mt-8 inline-flex w-fit items-center gap-2 rounded-full border border-admin-teal/40 bg-admin-teal/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-teal-200">
             <Lock className="h-3 w-3" />
             Secure operations console
           </p>
@@ -73,10 +74,11 @@ export default function LoginPage() {
           </div>
         </section>
 
-        <section className="admin-fade-up admin-fade-up-delay-2 mx-auto w-full max-w-md">
-          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-admin-chrome/90 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
-            <div className="relative text-center lg:text-left">
-              <div className="mb-5 flex justify-center lg:hidden">
+        {/* Sign-in — full window on mobile, full pane on desktop */}
+        <section className="admin-fade-up admin-fade-up-delay-2 flex min-h-dvh w-full flex-col bg-admin-chrome/40 backdrop-blur-xl lg:min-h-0">
+          <div className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-5 py-8 sm:px-8 lg:px-12">
+            <div className="text-center lg:text-left">
+              <div className="mb-6 flex justify-center lg:hidden">
                 <img
                   src="/assets/img/logos/logo-itrustld-wide.png"
                   alt="iTrustLD"
@@ -86,13 +88,13 @@ export default function LoginPage() {
               <p className="inline-flex items-center gap-2 rounded-full border border-admin-teal/35 bg-admin-teal/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-teal-200">
                 Admin Portal
               </p>
-              <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white">
+              <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
                 Welcome <span className="text-theme-green-action">Back</span>
               </h2>
               <p className="mt-2 text-sm text-white/55">Sign in to manage iTrustLD operations.</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="relative mt-8 space-y-4">
+            <form onSubmit={handleSubmit} className="mt-8 space-y-4">
               <div>
                 <label htmlFor="email" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-white/60">
                   Email
@@ -103,7 +105,7 @@ export default function LoginPage() {
                   autoComplete="username"
                   defaultValue="admin@itrustld.com"
                   placeholder="admin@itrustld.com"
-                  className="w-full rounded-xl border border-white/12 bg-admin-chrome-deep px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-admin-teal/60 focus:ring-2 focus:ring-admin-teal/20"
+                  className="w-full rounded-xl border border-white/12 bg-admin-chrome-deep px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-admin-teal/60 focus:ring-2 focus:ring-admin-teal/20"
                 />
               </div>
 
@@ -117,7 +119,7 @@ export default function LoginPage() {
                   autoComplete="current-password"
                   defaultValue="admin123"
                   placeholder="Enter password"
-                  className="w-full rounded-xl border border-white/12 bg-admin-chrome-deep px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-admin-teal/60 focus:ring-2 focus:ring-admin-teal/20"
+                  className="w-full rounded-xl border border-white/12 bg-admin-chrome-deep px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-admin-teal/60 focus:ring-2 focus:ring-admin-teal/20"
                 />
               </div>
 
@@ -131,7 +133,7 @@ export default function LoginPage() {
               </button>
             </form>
 
-            <div className="relative mt-6 grid grid-cols-3 gap-2 text-center">
+            <div className="mt-6 grid grid-cols-3 gap-2 text-center">
               {[
                 ["Queues", "Live"],
                 ["Shift", "A / B"],
@@ -144,7 +146,7 @@ export default function LoginPage() {
               ))}
             </div>
 
-            <p className="relative mt-6 text-center text-xs text-white/40">
+            <p className="mt-auto pt-8 text-center text-xs text-white/40 lg:text-left">
               User site is separate.{" "}
               <Link href="http://localhost:3000" className="text-teal-300 transition hover:text-white">
                 Open user web

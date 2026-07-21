@@ -167,7 +167,7 @@ export default function ScammersPage() {
 
       {addOpen ? (
         <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-admin-chrome/50 p-4 backdrop-blur-sm"
+          className="admin-modal-overlay"
           onClick={() => setAddOpen(false)}
         >
           <div className="admin-card w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>

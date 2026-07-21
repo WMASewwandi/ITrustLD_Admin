@@ -296,7 +296,61 @@ aside nav {
 }
 
 .admin-modal-overlay {
-  @apply fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm;
+  @apply fixed inset-0 z-[70] flex bg-black/60 backdrop-blur-sm;
+  /* Mobile: edge-to-edge full screen */
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
+}
+
+/* Modal panel — first child fills the viewport on mobile */
+.admin-modal-overlay > * {
+  width: 100% !important;
+  max-width: none !important;
+  height: 100dvh !important;
+  max-height: none !important;
+  border-radius: 0 !important;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (min-width: 640px) {
+  .admin-modal-overlay {
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+  }
+
+  .admin-modal-overlay > * {
+    width: 100% !important;
+    height: auto !important;
+    max-height: 90vh !important;
+    border-radius: 1rem !important;
+    /* Restore Tailwind max-width utilities (max-w-sm / md / lg / …) */
+    max-width: var(--admin-modal-max-w, 28rem) !important;
+  }
+
+  .admin-modal-overlay > .max-w-sm {
+    --admin-modal-max-w: 24rem;
+  }
+  .admin-modal-overlay > .max-w-md {
+    --admin-modal-max-w: 28rem;
+  }
+  .admin-modal-overlay > .max-w-lg {
+    --admin-modal-max-w: 32rem;
+  }
+  .admin-modal-overlay > .max-w-xl {
+    --admin-modal-max-w: 36rem;
+  }
+  .admin-modal-overlay > .max-w-2xl {
+    --admin-modal-max-w: 42rem;
+  }
+  .admin-modal-overlay > .max-w-3xl {
+    --admin-modal-max-w: 48rem;
+  }
+  .admin-modal-overlay > .max-w-4xl {
+    --admin-modal-max-w: 56rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

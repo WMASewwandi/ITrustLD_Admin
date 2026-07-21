@@ -11,6 +11,8 @@ import {
   Check,
   ChevronDown,
   Clock3,
+  Eye,
+  FileImage,
   FileText,
   RefreshCw,
   Search,
@@ -22,6 +24,132 @@ const ASSIGNEES = ["sacl", "withdraw.ex", "deposit.ex", "Authorizer", "admin"];
 /** Demo session admin — used for queue lock ownership */
 const CURRENT_ADMIN = "sacl";
 const PREVIEW_LIMIT = 10;
+
+/** Build the proofs the customer already submitted for a transaction (demo). */
+function getSubmittedProofs(record) {
+  if (!record?.proof) return [];
+  const amount = record.clientPay || record.cashoutAmt || record.amount;
+  const base = {
+    uploadedAt: record.date,
+    method: record.method,
+    amount,
+    account: record.account,
+    customer: record.customer,
+  };
+  const proofs = [
+    {
+      id: `${record.id}-slip`,
+      name: `payment_slip_${String(record.id).slice(-6)}.jpg`,
+      kind: "Bank / wallet slip",
+      size: "248 KB",
+      ...base,
+    },
+  ];
+  if (String(record.method || "").toLowerCase().includes("bank") || record.clientPayLkr >= 10000) {
+    proofs.push({
+      id: `${record.id}-receipt`,
+      name: `transfer_receipt_${String(record.id).slice(-6)}.png`,
+      kind: "Transfer receipt",
+      size: "186 KB",
+      ...base,
+    });
+  }
+  return proofs;
+}
+
+function SubmittedProofViewer({ proof, proofs, activeId, onSelect }) {
+  const active = proofs.find((p) => p.id === activeId) || proofs[0];
+  if (!active) {
+    return (
+      <div className="mb-4 flex h-48 flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 text-sm text-slate-400">
+        <FileText className="mb-2 h-8 w-8 opacity-50" />
+        No proof submitted by the customer
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_220px]">
+      <div className="overflow-hidden rounded-xl border border-white/10 bg-[#0c0f1a]">
+        <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-white">{active.name}</p>
+            <p className="text-[11px] text-slate-500">
+              Submitted by {active.customer} · {active.uploadedAt}
+            </p>
+          </div>
+          <span className="shrink-0 rounded-md bg-theme-green-action/15 px-2 py-0.5 text-[10px] font-semibold text-theme-green-action">
+            Customer proof
+          </span>
+        </div>
+        {/* Mock rendered slip — represents the file the user uploaded */}
+        <div className="flex min-h-[220px] items-center justify-center bg-gradient-to-b from-white/[0.04] to-transparent p-4 sm:min-h-[280px] sm:p-6">
+          <div className="w-full max-w-sm rounded-lg border border-slate-300/30 bg-[#f8fafc] p-4 text-slate-800 shadow-lg">
+            <div className="mb-3 flex items-start justify-between border-b border-slate-200 pb-2">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Payment proof</p>
+                <p className="text-sm font-bold text-slate-900">{active.method}</p>
+              </div>
+              <FileImage className="h-5 w-5 text-slate-400" />
+            </div>
+            <dl className="space-y-1.5 text-xs">
+              <div className="flex justify-between gap-3">
+                <dt className="text-slate-500">Reference</dt>
+                <dd className="font-semibold tabular-nums text-slate-900">{proof.id}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-slate-500">Amount</dt>
+                <dd className="font-semibold text-slate-900">{active.amount}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-slate-500">Account</dt>
+                <dd className="max-w-[160px] truncate font-medium text-slate-800">{active.account}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-slate-500">Date</dt>
+                <dd className="font-medium text-slate-800">{String(active.uploadedAt).slice(0, 10)}</dd>
+              </div>
+            </dl>
+            <p className="mt-3 rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700">
+              Uploaded by customer — read only
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-2">
+        <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          Submitted files ({proofs.length})
+        </p>
+        <ul className="space-y-1.5">
+          {proofs.map((p) => {
+            const selected = p.id === active.id;
+            return (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  onClick={() => onSelect(p.id)}
+                  className={`flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition ${
+                    selected ? "bg-white/12 text-white" : "text-slate-300 hover:bg-white/5"
+                  }`}
+                >
+                  <FileImage className={`mt-0.5 h-4 w-4 shrink-0 ${selected ? "text-white" : "text-slate-500"}`} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[12px] font-medium">{p.name}</span>
+                    <span className="block text-[10px] text-slate-500">
+                      {p.kind} · {p.size}
+                    </span>
+                  </span>
+                  {selected ? <Eye className="ml-auto mt-0.5 h-3.5 w-3.5 shrink-0 text-white/70" /> : null}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}
 
 function TransactionsContent() {
   const params = useSearchParams();
@@ -39,6 +167,7 @@ function TransactionsContent() {
   const [withdrawals, setWithdrawals] = useState(WITHDRAWALS);
   const [rejectId, setRejectId] = useState(null);
   const [proof, setProof] = useState(null);
+  const [activeProofId, setActiveProofId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [assignOpen, setAssignOpen] = useState(null);
   const [viewAll, setViewAll] = useState(false);
@@ -348,7 +477,18 @@ function TransactionsContent() {
               </select>
             </FilterField>
             <FilterField label="Duration">
-              <select value={duration} onChange={(e) => setDuration(e.target.value)} className={inputCls}>
+              <select
+                value={duration}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setDuration(next);
+                  if (next !== "Custom") {
+                    setFrom("");
+                    setTo("");
+                  }
+                }}
+                className={inputCls}
+              >
                 {["Today", "Yesterday", "This Week", "This Month", "Custom"].map((d) => (
                   <option key={d} value={d} className="bg-admin-surface">
                     {d}
@@ -356,12 +496,16 @@ function TransactionsContent() {
                 ))}
               </select>
             </FilterField>
-            <FilterField label="From">
-              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls} />
-            </FilterField>
-            <FilterField label="To">
-              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputCls} />
-            </FilterField>
+            {duration === "Custom" ? (
+              <>
+                <FilterField label="From">
+                  <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls} />
+                </FilterField>
+                <FilterField label="To">
+                  <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputCls} />
+                </FilterField>
+              </>
+            ) : null}
             <FilterField label="Transaction Id">
               <input value={txId} onChange={(e) => setTxId(e.target.value)} placeholder="1640…" className={inputCls} />
             </FilterField>
@@ -744,7 +888,13 @@ function TransactionsContent() {
       ) : null}
 
       {proof ? (
-        <div className="admin-modal-overlay" onClick={() => setProof(null)}>
+        <div
+          className="admin-modal-overlay"
+          onClick={() => {
+            setProof(null);
+            setActiveProofId(null);
+          }}
+        >
           <div
             className="admin-card max-h-[90vh] w-full max-w-3xl overflow-auto p-5"
             onClick={(e) => e.stopPropagation()}
@@ -757,13 +907,25 @@ function TransactionsContent() {
                   {proof.todayTxCount ? ` · ${proof.todayTxCount} tx today` : ""}
                 </p>
               </div>
-              <button type="button" onClick={() => setProof(null)} className="rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white">
+              <button
+                type="button"
+                onClick={() => {
+                  setProof(null);
+                  setActiveProofId(null);
+                }}
+                className="rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white"
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="mb-4 flex h-40 items-center justify-center rounded-xl border border-dashed border-white/10 bg-white/5 text-sm text-slate-400">
-              Payment slip / proof preview
-            </div>
+
+            <SubmittedProofViewer
+              proof={proof}
+              proofs={getSubmittedProofs(proof)}
+              activeId={activeProofId || getSubmittedProofs(proof)[0]?.id}
+              onSelect={setActiveProofId}
+            />
+
             <dl className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-lg bg-white/5 px-3 py-2">
                 <dt className="text-slate-400">Cashout / Client Pay</dt>
@@ -812,7 +974,23 @@ function TransactionsContent() {
                         <td className="px-3 py-2">
                           <StatusPill status={r.status} />
                         </td>
-                        <td className="px-3 py-2">{r.proof ? "Attached" : "—"}</td>
+                        <td className="px-3 py-2">
+                          {r.proof ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setProof(r);
+                                setActiveProofId(null);
+                              }}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-teal-300 hover:underline"
+                            >
+                              <Eye className="h-3 w-3" />
+                              View submitted
+                            </button>
+                          ) : (
+                            <span className="text-slate-500">Not submitted</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                 </tbody>
