@@ -895,7 +895,18 @@ function LoyaltyContent() {
           <div className="border-b border-white/10 bg-white/5 px-5 py-4">
             <div className="grid gap-3 lg:grid-cols-12 lg:items-end">
               <FilterField label="Duration" className="lg:col-span-2">
-                <select value={duration} onChange={(e) => setDuration(e.target.value)} className={inputCls}>
+                <select
+                  value={duration}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setDuration(next);
+                    if (next !== "Custom") {
+                      setFrom("");
+                      setTo("");
+                    }
+                  }}
+                  className={inputCls}
+                >
                   {["Today", "Yesterday", "This Week", "This Month", "Custom"].map((d) => (
                     <option key={d} value={d} className="bg-admin-surface">
                       {d}
@@ -903,12 +914,16 @@ function LoyaltyContent() {
                   ))}
                 </select>
               </FilterField>
-              <FilterField label="From" className="lg:col-span-2">
-                <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls} />
-              </FilterField>
-              <FilterField label="To" className="lg:col-span-2">
-                <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputCls} />
-              </FilterField>
+              {duration === "Custom" ? (
+                <>
+                  <FilterField label="From" className="lg:col-span-2">
+                    <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls} />
+                  </FilterField>
+                  <FilterField label="To" className="lg:col-span-2">
+                    <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputCls} />
+                  </FilterField>
+                </>
+              ) : null}
               <div className="flex items-end lg:col-span-2">
                 <button
                   type="button"

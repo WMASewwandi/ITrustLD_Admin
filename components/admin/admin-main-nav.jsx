@@ -100,6 +100,8 @@ function NavInner() {
 
   return (
     <header className="admin-topbar z-40 border-b border-white/10 text-white" ref={wrapRef}>
+      {/* Hide chrome while full-screen mobile menu is open (avoids duplicate nav) */}
+      <div className={mobile ? "hidden xl:block" : "block"}>
       {/* Bookmarks strip — concept 4.7 */}
       <div className="flex items-stretch border-b border-white/8 bg-gradient-to-r from-white/[0.04] via-transparent to-white/[0.03]">
         <div className="flex shrink-0 items-center gap-2 border-r border-white/8 bg-white/[0.03] px-3 py-2 sm:px-4">
@@ -286,25 +288,42 @@ function NavInner() {
               <span className="admin-badge-glow absolute -right-1 -top-1 h-4 min-w-4 px-1 text-[10px]">26</span>
             </button>
             {notifOpen ? (
-              <div className="absolute right-0 mt-2 w-80 overflow-hidden rounded-2xl border border-white/12 bg-[#1a1b2a]/95 shadow-[0_20px_50px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-                <div className="border-b border-white/10 bg-black/20 px-4 py-3">
-                  <p className="text-sm font-semibold text-white">Notifications</p>
-                  <p className="text-xs text-white/50">Section queues · live alerts</p>
-                </div>
-                <div className="max-h-64 overflow-auto py-1">
-                  {NOTIFS.map(([title, body, href]) => (
-                    <Link
-                      key={href}
-                      href={href}
+              <>
+                <div
+                  className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm sm:hidden"
+                  onClick={() => setNotifOpen(false)}
+                  aria-hidden
+                />
+                <div className="fixed inset-0 z-[61] flex h-dvh w-full flex-col bg-[#1a1b2a] sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 sm:h-auto sm:max-h-[min(24rem,70vh)] sm:w-80 sm:rounded-2xl sm:border sm:border-white/12 sm:bg-[#1a1b2a]/95 sm:shadow-[0_20px_50px_rgba(0,0,0,0.45)] sm:backdrop-blur-xl">
+                  <div className="flex shrink-0 items-start justify-between border-b border-white/10 bg-black/20 px-4 py-3 sm:py-3">
+                    <div>
+                      <p className="text-sm font-semibold text-white">Notifications</p>
+                      <p className="text-xs text-white/50">Section queues · live alerts</p>
+                    </div>
+                    <button
+                      type="button"
                       onClick={() => setNotifOpen(false)}
-                      className="block border-b border-white/5 px-4 py-3 transition hover:bg-white/[0.06]"
+                      className="rounded-lg p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white sm:hidden"
+                      aria-label="Close notifications"
                     >
-                      <p className="text-sm font-medium text-white">{title}</p>
-                      <p className="text-xs text-white/55">{body}</p>
-                    </Link>
-                  ))}
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto py-1 sm:max-h-64 sm:flex-none">
+                    {NOTIFS.map(([title, body, href]) => (
+                      <Link
+                        key={href}
+                        href={href}
+                        onClick={() => setNotifOpen(false)}
+                        className="block border-b border-white/5 px-4 py-4 transition hover:bg-white/[0.06] sm:py-3"
+                      >
+                        <p className="text-sm font-medium text-white">{title}</p>
+                        <p className="text-xs text-white/55">{body}</p>
+                      </Link>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </>
             ) : null}
           </div>
 
@@ -324,80 +343,165 @@ function NavInner() {
               <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[#1a1b2a] bg-theme-green-action" />
             </button>
             {profileOpen ? (
-              <div className="absolute right-0 mt-2 w-52 overflow-hidden rounded-2xl border border-white/12 bg-[#1a1b2a]/95 py-1 shadow-[0_20px_50px_rgba(0,0,0,0.45)]">
-                <div className="border-b border-white/10 px-4 py-3">
-                  <p className="text-sm font-semibold text-white">Super Admin</p>
-                  <p className="text-[11px] text-white/50">System Admin</p>
+              <>
+                <div
+                  className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm sm:hidden"
+                  onClick={() => setProfileOpen(false)}
+                  aria-hidden
+                />
+                <div className="fixed inset-0 z-[61] flex h-dvh w-full flex-col bg-[#1a1b2a] sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 sm:h-auto sm:w-52 sm:rounded-2xl sm:border sm:border-white/12 sm:bg-[#1a1b2a]/95 sm:py-1 sm:shadow-[0_20px_50px_rgba(0,0,0,0.45)]">
+                  <div className="flex shrink-0 items-start justify-between border-b border-white/10 px-4 py-4 sm:py-3">
+                    <div>
+                      <p className="text-sm font-semibold text-white">Super Admin</p>
+                      <p className="text-[11px] text-white/50">System Admin</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setProfileOpen(false)}
+                      className="rounded-lg p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white sm:hidden"
+                      aria-label="Close profile menu"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto py-1 sm:flex-none">
+                    <Link
+                      href="/performance"
+                      onClick={() => setProfileOpen(false)}
+                      className="block px-4 py-4 text-sm text-white/90 hover:bg-white/5 sm:py-2.5"
+                    >
+                      My Performance
+                    </Link>
+                    <Link
+                      href="/team-performance"
+                      onClick={() => setProfileOpen(false)}
+                      className="block px-4 py-4 text-sm text-white/90 hover:bg-white/5 sm:py-2.5"
+                    >
+                      Team Performance
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={logout}
+                      className="flex w-full items-center gap-2 px-4 py-4 text-sm text-rose-300 hover:bg-white/5 sm:py-2.5"
+                    >
+                      <LogOut className="h-3.5 w-3.5" />
+                      Logout
+                    </button>
+                  </div>
                 </div>
-                <Link href="/performance" onClick={() => setProfileOpen(false)} className="block px-4 py-2.5 text-sm text-white/90 hover:bg-white/5">
-                  My Performance
-                </Link>
-                <Link href="/team-performance" onClick={() => setProfileOpen(false)} className="block px-4 py-2.5 text-sm text-white/90 hover:bg-white/5">
-                  Team Performance
-                </Link>
-                <button type="button" onClick={logout} className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-rose-300 hover:bg-white/5">
-                  <LogOut className="h-3.5 w-3.5" />
-                  Logout
-                </button>
-              </div>
+              </>
             ) : null}
           </div>
         </div>
       </div>
+      </div>
 
-      {/* Mobile / tablet accordion menu */}
+      {/* Mobile / tablet — full-screen menu */}
       {mobile ? (
-        <div className="max-h-[70vh] overflow-y-auto border-t border-white/10 bg-[#141625] px-3 py-3 xl:hidden">
-          {TOP_NAV.map((cat) => {
-            const active = categoryActive(pathname, search, cat);
-            if (cat.href) {
-              return (
-                <Link
-                  key={cat.id}
-                  href={cat.href}
-                  onClick={() => setMobile(false)}
-                  className={`mb-1 block rounded-xl px-3 py-2.5 text-sm ${
-                    active ? "bg-white/10 font-semibold text-white/90" : "text-white/85"
-                  }`}
-                >
-                  {cat.label}
-                </Link>
-              );
-            }
-            return (
-              <details key={cat.id} className="mb-1 rounded-xl border border-white/10 bg-white/[0.03]" open={active}>
-                <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2.5 text-sm font-medium text-white">
-                  <span className="inline-flex items-center gap-2">
+        <div className="fixed inset-0 z-[55] flex h-dvh w-full flex-col bg-[#141625] xl:hidden">
+          <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-3 py-3">
+            <button
+              type="button"
+              onClick={() => setMobile(false)}
+              className="rounded-xl border border-white/15 bg-black/25 p-2.5 text-white"
+              aria-label="Close menu"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <Link href="/dashboard" onClick={() => setMobile(false)} className="inline-flex items-center">
+              <img
+                src="/assets/img/logos/logo-itrustld-wide.png"
+                alt="iTrustLD"
+                className="h-8 w-auto object-contain"
+              />
+            </Link>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobile(false);
+                  setNotifOpen(true);
+                }}
+                className="relative rounded-xl border border-white/15 bg-black/25 p-2.5 text-white/85"
+                aria-label="Notifications"
+              >
+                <Bell className="h-4 w-4" />
+                <span className="admin-badge-glow absolute -right-1 -top-1 h-4 min-w-4 px-1 text-[10px]">26</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobile(false);
+                  setProfileOpen(true);
+                }}
+                className="relative flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-admin-teal text-white"
+                aria-label="Profile menu"
+              >
+                <User className="h-4 w-4" />
+                <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[#141625] bg-theme-green-action" />
+              </button>
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
+            {TOP_NAV.map((cat) => {
+              const active = categoryActive(pathname, search, cat);
+              if (cat.href) {
+                return (
+                  <Link
+                    key={cat.id}
+                    href={cat.href}
+                    onClick={() => setMobile(false)}
+                    className={`mb-1 block rounded-xl px-3 py-3 text-sm ${
+                      active ? "bg-white/10 font-semibold text-white/90" : "text-white/85"
+                    }`}
+                  >
                     {cat.label}
-                    {cat.badge ? <span className="admin-badge-glow h-4 min-w-4 px-1 text-[9px]">{cat.badge}</span> : null}
-                  </span>
-                  <ChevronDown className="h-3.5 w-3.5 text-white/50" />
-                </summary>
-                <div className="space-y-2 px-2 pb-3">
-                  {(cat.groups || []).map((group) => (
-                    <div key={group.label}>
-                      <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/40">
-                        {group.label}
-                      </p>
-                      {(group.items || []).map((item) => (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          onClick={() => setMobile(false)}
-                          className="flex items-center justify-between rounded-lg px-3 py-2 text-[13px] text-white/85 hover:bg-white/5"
-                        >
-                          {item.label}
-                          {item.badge ? (
-                            <span className="admin-badge-glow h-4 min-w-4 px-1 text-[9px]">{item.badge}</span>
-                          ) : null}
-                        </Link>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </details>
-            );
-          })}
+                  </Link>
+                );
+              }
+              return (
+                <details key={cat.id} className="mb-1 rounded-xl border border-white/10 bg-white/[0.03]" open={active}>
+                  <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-3 text-sm font-medium text-white">
+                    <span className="inline-flex items-center gap-2">
+                      {cat.label}
+                      {cat.badge ? <span className="admin-badge-glow h-4 min-w-4 px-1 text-[9px]">{cat.badge}</span> : null}
+                    </span>
+                    <ChevronDown className="h-3.5 w-3.5 text-white/50" />
+                  </summary>
+                  <div className="space-y-2 px-2 pb-3">
+                    {(cat.groups || []).map((group) => (
+                      <div key={group.label}>
+                        <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                          {group.label}
+                        </p>
+                        {(group.items || []).map((item) => (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={() => setMobile(false)}
+                            className="flex items-center justify-between rounded-lg px-3 py-2.5 text-[13px] text-white/85 hover:bg-white/5"
+                          >
+                            {item.label}
+                            {item.badge ? (
+                              <span className="admin-badge-glow h-4 min-w-4 px-1 text-[9px]">{item.badge}</span>
+                            ) : null}
+                          </Link>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              );
+            })}
+          </div>
+
+          <div className="shrink-0 border-t border-white/10 px-4 py-3 text-[11px] text-slate-400">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="admin-live-dot h-1.5 w-1.5 rounded-full bg-theme-green-action" />
+              Live ops · near real-time refresh
+            </span>
+          </div>
         </div>
       ) : null}
     </header>

@@ -170,7 +170,7 @@ export default function RolesPage() {
 
       {editing ? (
         <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-admin-chrome/50 p-4 backdrop-blur-sm"
+          className="admin-modal-overlay"
           onClick={() => setEditRole(null)}
         >
           <div className="admin-card max-h-[85vh] w-full max-w-lg overflow-auto p-5" onClick={(e) => e.stopPropagation()}>
