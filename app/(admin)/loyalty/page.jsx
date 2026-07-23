@@ -16,7 +16,7 @@ import {
   LOYALTY_RANKING_USERS,
   VOUCHERS,
 } from "@/lib/mock-data";
-import { AlertTriangle, Check, Filter, Mail, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { AlertTriangle, Check, Mail, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 
 const TABS = [
   { id: "orders", label: "Orders" },
@@ -893,68 +893,12 @@ function LoyaltyContent() {
           </div>
 
           <div className="border-b border-white/10 bg-white/5 px-5 py-4">
-            <div className="grid gap-3 lg:grid-cols-12 lg:items-end">
-              <FilterField label="Duration" className="lg:col-span-2">
-                <select
-                  value={duration}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setDuration(next);
-                    if (next !== "Custom") {
-                      setFrom("");
-                      setTo("");
-                    }
-                  }}
-                  className={inputCls}
-                >
-                  {["Today", "Yesterday", "This Week", "This Month", "Custom"].map((d) => (
-                    <option key={d} value={d} className="bg-admin-surface">
-                      {d}
-                    </option>
-                  ))}
-                </select>
-              </FilterField>
-              {duration === "Custom" ? (
-                <>
-                  <FilterField label="From" className="lg:col-span-2">
-                    <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls} />
-                  </FilterField>
-                  <FilterField label="To" className="lg:col-span-2">
-                    <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputCls} />
-                  </FilterField>
-                </>
-              ) : null}
-              <div className="flex items-end lg:col-span-2">
-                <button
-                  type="button"
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-admin-teal px-4 py-2 text-sm font-semibold text-white"
-                >
-                  <Filter className="h-3.5 w-3.5" />
-                  Filter
-                </button>
-              </div>
-              {tab === "vouchers" && (status === "Claimed" || status === "Rejected") ? null : (
-                <FilterField label="Status" className="lg:col-span-2">
-                  <select value={status} onChange={(e) => setStatus(e.target.value)} className={inputCls}>
-                    {(tab === "bonus" || tab === "vouchers"
-                      ? ["All", "Pending", "Claimed", "Rejected"]
-                      : ["All", "Pending", "Completed", "Rejected"]
-                    ).map((s) => (
-                      <option key={s} value={s} className="bg-admin-surface">
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </FilterField>
-              )}
-              <FilterField
-                label="Search"
-                className={
-                  tab === "vouchers" && (status === "Claimed" || status === "Rejected")
-                    ? "lg:col-span-4"
-                    : "lg:col-span-2"
-                }
-              >
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
+              {/* Separate search bar — left */}
+              <div className="min-w-0 flex-1">
+                <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  Search
+                </span>
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                   <input
@@ -962,14 +906,84 @@ function LoyaltyContent() {
                     onChange={(e) => setQ(e.target.value)}
                     placeholder={
                       tab === "vouchers"
-                        ? "Search Platform ID, Voucher Token…"
+                        ? "Search voucher token or amount…"
                         : "Search…"
                     }
                     className={`${inputCls} pl-9`}
                   />
                 </div>
-              </FilterField>
+              </div>
+
+              {/* Horizontal filters — right */}
+              <div className="min-w-0 flex-1">
+                <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  Filter
+                </span>
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+                  {tab === "vouchers" && (status === "Claimed" || status === "Rejected") ? null : (
+                    <FilterField label="Status" className="min-w-[140px] flex-1">
+                      <select value={status} onChange={(e) => setStatus(e.target.value)} className={inputCls}>
+                        {(tab === "bonus" || tab === "vouchers"
+                          ? ["All", "Pending", "Claimed", "Rejected"]
+                          : ["All", "Pending", "Completed", "Rejected"]
+                        ).map((s) => (
+                          <option key={s} value={s} className="bg-admin-surface">
+                            {s === "All" ? "All Statuses" : s}
+                          </option>
+                        ))}
+                      </select>
+                    </FilterField>
+                  )}
+                  <FilterField label="From" className="min-w-[140px] flex-1">
+                    <input
+                      type="date"
+                      value={from}
+                      onChange={(e) => {
+                        setFrom(e.target.value);
+                        setDuration("Custom");
+                      }}
+                      className={inputCls}
+                    />
+                  </FilterField>
+                  <FilterField label="To" className="min-w-[140px] flex-1">
+                    <input
+                      type="date"
+                      value={to}
+                      onChange={(e) => {
+                        setTo(e.target.value);
+                        setDuration("Custom");
+                      }}
+                      className={inputCls}
+                    />
+                  </FilterField>
+                  <div className="flex shrink-0 gap-2 pb-0.5">
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110"
+                    >
+                      Apply
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQ("");
+                        setFrom("");
+                        setTo("");
+                        setDuration("Today");
+                        if (!(tab === "vouchers" && (status === "Claimed" || status === "Rejected"))) {
+                          setStatus("All");
+                        }
+                      }}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:bg-white/5 hover:text-white"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      Reset
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
+            <p className="mt-3 text-xs text-slate-500">Showing {filtered.length} results</p>
           </div>
 
           <div className="overflow-x-auto">
