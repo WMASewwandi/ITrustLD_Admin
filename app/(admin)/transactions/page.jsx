@@ -1,9 +1,9 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Breadcrumb from "@/components/admin/breadcrumb";
-import RejectModal from "@/components/admin/reject-modal";
+import RejectReasonPanel from "@/components/admin/reject-reason-panel";
 import CopyCell, { FilterField, StatusPill, inputCls } from "@/components/admin/queue-ui";
 import { DEPOSITS, WITHDRAWALS } from "@/lib/mock-data";
 import {
@@ -57,13 +57,159 @@ function getSubmittedProofs(record) {
   return proofs;
 }
 
-function SubmittedProofViewer({ proof, proofs, activeId, onSelect }) {
+function ProofSummaryFields({ proof }) {
+  return (
+    <dl className="grid gap-2 text-sm">
+      <div className="rounded-lg bg-white/5 px-3 py-2">
+        <dt className="text-slate-400">Platform</dt>
+        <dd className="font-medium text-white">{proof.platform || "—"}</dd>
+      </div>
+      <div className="rounded-lg bg-white/5 px-3 py-2">
+        <dt className="text-slate-400">Method</dt>
+        <dd className="font-medium text-white">{proof.method || "—"}</dd>
+      </div>
+      <div className="rounded-lg bg-white/5 px-3 py-2">
+        <dt className="text-slate-400">Client Pay</dt>
+        <dd className="font-medium text-white">{proof.clientPay || "—"}</dd>
+      </div>
+      <div className="rounded-lg bg-white/5 px-3 py-2">
+        <dt className="text-slate-400">Cashout</dt>
+        <dd className="font-medium text-white">{proof.cashoutAmt || "—"}</dd>
+      </div>
+      <div className="rounded-lg bg-white/5 px-3 py-2">
+        <dt className="text-slate-400">Receiving Amount</dt>
+        <dd className="font-medium text-white">{proof.receiving || proof.deposited || proof.amount || "—"}</dd>
+      </div>
+      <div className="rounded-lg bg-white/5 px-3 py-2">
+        <dt className="mb-0.5 text-slate-400">Account</dt>
+        <dd>
+          <CopyCell value={proof.account} />
+        </dd>
+      </div>
+      <div className="rounded-lg bg-white/5 px-3 py-2">
+        <dt className="mb-0.5 text-slate-400">Platform ID</dt>
+        <dd>
+          <CopyCell value={proof.platformId} />
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
+function ProofImageCard({ proof, file }) {
+  const amount = file?.amount || proof.clientPay || proof.cashoutAmt || proof.amount;
+  const method = file?.method || proof.method;
+  const account = file?.account || proof.account;
+  const uploadedAt = file?.uploadedAt || proof.date;
+  const name = file?.name || `payment_slip_${String(proof.id).slice(-6)}.jpg`;
+
+  return (
+    <div className="w-full max-w-sm rounded-lg border border-slate-300/30 bg-[#f8fafc] p-4 text-slate-800 shadow-lg">
+      <div className="mb-3 flex items-start justify-between border-b border-slate-200 pb-2">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Payment proof</p>
+          <p className="text-sm font-bold text-slate-900">{method}</p>
+          <p className="mt-0.5 text-[11px] text-slate-500">{name}</p>
+        </div>
+        <FileImage className="h-5 w-5 text-slate-400" />
+      </div>
+      <dl className="space-y-1.5 text-xs">
+        <div className="flex justify-between gap-3">
+          <dt className="text-slate-500">Reference</dt>
+          <dd className="font-semibold tabular-nums text-slate-900">{proof.id}</dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt className="text-slate-500">Amount</dt>
+          <dd className="font-semibold text-slate-900">{amount}</dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt className="text-slate-500">Account</dt>
+          <dd className="max-w-[160px] truncate font-medium text-slate-800">{account}</dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt className="text-slate-500">Date</dt>
+          <dd className="font-medium text-slate-800">{String(uploadedAt).slice(0, 10)}</dd>
+        </div>
+      </dl>
+      <p className="mt-3 rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700">
+        Uploaded by customer — read only
+      </p>
+    </div>
+  );
+}
+
+/** Full-screen image popup — click anywhere to close */
+function ProofImageLightbox({ open, proof, file, onClose }) {
+  if (!open || !proof) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+      onClick={onClose}
+      role="presentation"
+    >
+      <p className="pointer-events-none absolute bottom-6 left-0 right-0 text-center text-xs text-white/60">
+        Tap anywhere to close
+      </p>
+      <div className="pointer-events-none max-h-[85vh] w-full max-w-md overflow-auto">
+        <ProofImageCard proof={proof} file={file} />
+      </div>
+    </div>
+  );
+}
+
+function SubmittedFilesList({ proofs, activeId, onSelect, onViewImage }) {
+  const active = proofs.find((p) => p.id === activeId) || proofs[0];
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-2">
+      <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+        Submitted files ({proofs.length})
+      </p>
+      {proofs.length === 0 ? (
+        <p className="px-2 py-3 text-xs text-slate-500">No files submitted</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {proofs.map((p) => {
+            const selected = p.id === active?.id;
+            return (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelect(p.id);
+                    onViewImage?.(p);
+                  }}
+                  className={`flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition ${
+                    selected ? "bg-white/12 text-white" : "text-slate-300 hover:bg-white/5"
+                  }`}
+                >
+                  <FileImage className={`mt-0.5 h-4 w-4 shrink-0 ${selected ? "text-white" : "text-slate-500"}`} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[12px] font-medium">{p.name}</span>
+                    <span className="block text-[10px] text-slate-500">
+                      {p.kind} · {p.size}
+                    </span>
+                  </span>
+                  <Eye className="ml-auto mt-0.5 h-3.5 w-3.5 shrink-0 text-teal-300/80" />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function SubmittedProofViewer({ proof, proofs, activeId, onOpenImage }) {
   const active = proofs.find((p) => p.id === activeId) || proofs[0];
   if (!active) {
     return (
-      <div className="mb-4 flex h-48 flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 text-sm text-slate-400">
-        <FileText className="mb-2 h-8 w-8 opacity-50" />
-        No proof submitted by the customer
+      <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_220px]">
+        <div className="flex h-48 flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 text-sm text-slate-400">
+          <FileText className="mb-2 h-8 w-8 opacity-50" />
+          No proof submitted by the customer
+        </div>
+        <ProofSummaryFields proof={proof} />
       </div>
     );
   }
@@ -82,71 +228,17 @@ function SubmittedProofViewer({ proof, proofs, activeId, onSelect }) {
             Customer proof
           </span>
         </div>
-        {/* Mock rendered slip — represents the file the user uploaded */}
-        <div className="flex min-h-[220px] items-center justify-center bg-gradient-to-b from-white/[0.04] to-transparent p-4 sm:min-h-[280px] sm:p-6">
-          <div className="w-full max-w-sm rounded-lg border border-slate-300/30 bg-[#f8fafc] p-4 text-slate-800 shadow-lg">
-            <div className="mb-3 flex items-start justify-between border-b border-slate-200 pb-2">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Payment proof</p>
-                <p className="text-sm font-bold text-slate-900">{active.method}</p>
-              </div>
-              <FileImage className="h-5 w-5 text-slate-400" />
-            </div>
-            <dl className="space-y-1.5 text-xs">
-              <div className="flex justify-between gap-3">
-                <dt className="text-slate-500">Reference</dt>
-                <dd className="font-semibold tabular-nums text-slate-900">{proof.id}</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-slate-500">Amount</dt>
-                <dd className="font-semibold text-slate-900">{active.amount}</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-slate-500">Account</dt>
-                <dd className="max-w-[160px] truncate font-medium text-slate-800">{active.account}</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-slate-500">Date</dt>
-                <dd className="font-medium text-slate-800">{String(active.uploadedAt).slice(0, 10)}</dd>
-              </div>
-            </dl>
-            <p className="mt-3 rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700">
-              Uploaded by customer — read only
-            </p>
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={() => onOpenImage?.(active)}
+          className="flex min-h-[220px] w-full items-center justify-center bg-gradient-to-b from-white/[0.04] to-transparent p-4 transition hover:from-white/[0.07] sm:min-h-[280px] sm:p-6"
+          title="View full image"
+        >
+          <ProofImageCard proof={proof} file={active} />
+        </button>
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-2">
-        <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-          Submitted files ({proofs.length})
-        </p>
-        <ul className="space-y-1.5">
-          {proofs.map((p) => {
-            const selected = p.id === active.id;
-            return (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(p.id)}
-                  className={`flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition ${
-                    selected ? "bg-white/12 text-white" : "text-slate-300 hover:bg-white/5"
-                  }`}
-                >
-                  <FileImage className={`mt-0.5 h-4 w-4 shrink-0 ${selected ? "text-white" : "text-slate-500"}`} />
-                  <span className="min-w-0">
-                    <span className="block truncate text-[12px] font-medium">{p.name}</span>
-                    <span className="block text-[10px] text-slate-500">
-                      {p.kind} · {p.size}
-                    </span>
-                  </span>
-                  {selected ? <Eye className="ml-auto mt-0.5 h-3.5 w-3.5 shrink-0 text-white/70" /> : null}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+      <ProofSummaryFields proof={proof} />
     </div>
   );
 }
@@ -168,6 +260,9 @@ function TransactionsContent() {
   const [rejectId, setRejectId] = useState(null);
   const [proof, setProof] = useState(null);
   const [activeProofId, setActiveProofId] = useState(null);
+  const [proofRejectOpen, setProofRejectOpen] = useState(false);
+  const [imageLightbox, setImageLightbox] = useState(null);
+  const proofBodyRef = useRef(null);
   const [refreshing, setRefreshing] = useState(false);
   const [assignOpen, setAssignOpen] = useState(null);
   const [viewAll, setViewAll] = useState(false);
@@ -254,6 +349,30 @@ function TransactionsContent() {
             ? "Deposits"
             : "Withdrawals";
 
+  function openProof(r) {
+    setProof(r);
+    setActiveProofId(null);
+    setProofRejectOpen(false);
+    setRejectId(null);
+    // Show submitted proof at top (same-day "View submitted" is below the fold)
+    requestAnimationFrame(() => {
+      proofBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+
+  function openSubmittedImage(record, file) {
+    const proofs = getSubmittedProofs(record);
+    const active = file || proofs[0] || null;
+    setImageLightbox({ proof: record, file: active });
+  }
+
+  function closeProof() {
+    setProof(null);
+    setActiveProofId(null);
+    setProofRejectOpen(false);
+    setImageLightbox(null);
+  }
+
   function approve(id) {
     const row = source.find((r) => r.id === id);
     if (row && isLockedByOther(row)) return;
@@ -265,20 +384,29 @@ function TransactionsContent() {
           : r
       )
     );
+    if (proof?.id === id) closeProof();
   }
 
-  function reject(reason) {
-    const row = source.find((r) => r.id === rejectId);
+  function reject(reason, id) {
+    const targetId = id ?? rejectId;
+    if (!targetId) return;
+    const row = source.find((r) => r.id === targetId);
     if (row && isLockedByOther(row)) return;
     const setter = tab === "deposits" ? setDeposits : setWithdrawals;
     setter((prev) =>
       prev.map((r) =>
-        r.id === rejectId
+        r.id === targetId
           ? { ...r, status: "Rejected", rejectReason: reason, lockedBy: null }
           : r
       )
     );
+    if (proof?.id === targetId) closeProof();
     setRejectId(null);
+    setProofRejectOpen(false);
+  }
+
+  function toggleRowReject(id) {
+    setRejectId((prev) => (prev === id ? null : id));
   }
 
   function toggleAll(checked) {
@@ -445,78 +573,87 @@ function TransactionsContent() {
           </div>
         </div>
 
-        {/* Search row with teal search button (withdrawals screenshot) */}
-        <div className="border-b border-white/10 px-5 py-3">
-          <div className="flex max-w-xl overflow-hidden rounded-xl border border-white/10 bg-admin-surface">
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search…"
-              className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-sm text-white outline-none placeholder:text-slate-500"
-            />
-            <button
-              type="button"
-              className="inline-flex items-center justify-center bg-admin-teal px-4 text-white transition hover:brightness-110"
-              title="Search"
-            >
-              <Search className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Dense filter row */}
+        {/* Search (left) + Filter (right) side by side */}
         <div className="border-b border-white/10 bg-white/5 px-5 py-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            <FilterField label="Search in">
-              <select value={status} onChange={(e) => setStatus(e.target.value)} className={inputCls}>
-                {["All", "Pending", "Completed", "Rejected"].map((s) => (
-                  <option key={s} value={s} className="bg-admin-surface">
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </FilterField>
-            <FilterField label="Duration">
-              <select
-                value={duration}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  setDuration(next);
-                  if (next !== "Custom") {
-                    setFrom("");
-                    setTo("");
-                  }
-                }}
-                className={inputCls}
-              >
-                {["Today", "Yesterday", "This Week", "This Month", "Custom"].map((d) => (
-                  <option key={d} value={d} className="bg-admin-surface">
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </FilterField>
-            {duration === "Custom" ? (
-              <>
-                <FilterField label="From">
-                  <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls} />
+          <div className="grid gap-4 lg:grid-cols-2 lg:items-end">
+            <div>
+              <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                Search
+              </span>
+              <div className="flex overflow-hidden rounded-xl border border-white/10 bg-admin-surface">
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Search…"
+                  className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-sm text-white outline-none placeholder:text-slate-500"
+                />
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center bg-admin-teal px-4 text-white transition hover:brightness-110"
+                  title="Search"
+                >
+                  <Search className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                Filter
+              </span>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <FilterField label="Search in">
+                  <select value={status} onChange={(e) => setStatus(e.target.value)} className={inputCls}>
+                    {["All", "Pending", "Completed", "Rejected"].map((s) => (
+                      <option key={s} value={s} className="bg-admin-surface">
+                        {s}
+                      </option>
+                    ))}
+                  </select>
                 </FilterField>
-                <FilterField label="To">
-                  <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputCls} />
+                <FilterField label="Duration">
+                  <select
+                    value={duration}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setDuration(next);
+                      if (next !== "Custom") {
+                        setFrom("");
+                        setTo("");
+                      }
+                    }}
+                    className={inputCls}
+                  >
+                    {["Today", "Yesterday", "This Week", "This Month", "Custom"].map((d) => (
+                      <option key={d} value={d} className="bg-admin-surface">
+                        {d}
+                      </option>
+                    ))}
+                  </select>
                 </FilterField>
-              </>
-            ) : null}
-            <FilterField label="Transaction Id">
-              <input value={txId} onChange={(e) => setTxId(e.target.value)} placeholder="1640…" className={inputCls} />
-            </FilterField>
-            <FilterField label="Platform Id">
-              <input
-                value={platformId}
-                onChange={(e) => setPlatformId(e.target.value)}
-                placeholder="Plat. ID"
-                className={inputCls}
-              />
-            </FilterField>
+                {duration === "Custom" ? (
+                  <>
+                    <FilterField label="From">
+                      <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls} />
+                    </FilterField>
+                    <FilterField label="To">
+                      <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputCls} />
+                    </FilterField>
+                  </>
+                ) : null}
+                <FilterField label="Transaction Id">
+                  <input value={txId} onChange={(e) => setTxId(e.target.value)} placeholder="1640…" className={inputCls} />
+                </FilterField>
+                <FilterField label="Platform Id">
+                  <input
+                    value={platformId}
+                    onChange={(e) => setPlatformId(e.target.value)}
+                    placeholder="Plat. ID"
+                    className={inputCls}
+                  />
+                </FilterField>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -580,7 +717,7 @@ function TransactionsContent() {
                     <td className="px-3 py-3">
                       <button
                         type="button"
-                        onClick={() => setProof(r)}
+                        onClick={() => openProof(r)}
                         className="inline-flex items-center gap-1.5 text-left"
                         title="Today's transaction count for this platform user"
                       >
@@ -602,51 +739,40 @@ function TransactionsContent() {
                       <CopyCell value={r.account} />
                     </td>
                     <td className="px-3 py-3">
-                      {r.status.includes("Pending") ? (
-                        isLockedByOther(r) ? (
-                          <span
-                            className="cursor-not-allowed text-[11px] text-amber-300/90"
-                            title={`This request is locked by ${r.lockedBy}.`}
-                          >
-                            Locked
-                          </span>
-                        ) : (
-                          <div className="flex gap-1">
-                            <button
-                              type="button"
-                              onClick={() => setRejectId(r.id)}
-                              className="rounded-lg bg-[#E11D48] p-1.5 text-white shadow-sm"
-                              title="Reject withdrawal — this action cannot be undone."
-                            >
-                              <AlertTriangle className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => approve(r.id)}
-                              className="rounded-lg bg-theme-green-action p-1.5 text-white shadow-sm"
-                              title="Approve withdrawal"
-                            >
-                              <Check className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setProof(r)}
-                              className="rounded-lg bg-white/10 p-1.5 text-white"
-                              title="View proof and same-day transactions"
-                            >
-                              <FileText className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        )
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setProof(r)}
-                          className="rounded-lg bg-white/10 p-1.5 text-white"
-                          title="View proof"
+                      {isLockedByOther(r) ? (
+                        <span
+                          className="cursor-not-allowed text-[11px] text-amber-300/90"
+                          title={`This request is locked by ${r.lockedBy}.`}
                         >
-                          <FileText className="h-3.5 w-3.5" />
-                        </button>
+                          Locked
+                        </span>
+                      ) : (
+                        <div className="relative flex gap-1">
+                          <button
+                            type="button"
+                            onClick={() => toggleRowReject(r.id)}
+                            className="rounded-lg bg-[#E11D48] p-1.5 text-white shadow-sm"
+                            title="Reject — reason required"
+                          >
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => approve(r.id)}
+                            className="rounded-lg bg-theme-green-action p-1.5 text-white shadow-sm"
+                            title="Approve"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                          </button>
+                          {rejectId === r.id ? (
+                            <div className="absolute right-0 top-full z-50 mt-1 w-72">
+                              <RejectReasonPanel
+                                onCancel={() => setRejectId(null)}
+                                onConfirm={(reason) => reject(reason, r.id)}
+                              />
+                            </div>
+                          ) : null}
+                        </div>
                       )}
                     </td>
                     <td className="px-3 py-3">
@@ -757,7 +883,7 @@ function TransactionsContent() {
                     <td className="px-3 py-3">
                       <button
                         type="button"
-                        onClick={() => setProof(r)}
+                        onClick={() => openProof(r)}
                         className={`rounded-lg p-1.5 ${r.proof ? "bg-theme-green-action/15 text-theme-green-action" : "bg-white/5 text-slate-400"}`}
                         title="View proof"
                       >
@@ -765,13 +891,20 @@ function TransactionsContent() {
                       </button>
                     </td>
                     <td className="px-3 py-3">
-                      {r.status.includes("Pending") ? (
-                        <div className="flex gap-1">
+                      {isLockedByOther(r) ? (
+                        <span
+                          className="cursor-not-allowed text-[11px] text-amber-300/90"
+                          title={`This request is locked by ${r.lockedBy}.`}
+                        >
+                          Locked
+                        </span>
+                      ) : (
+                        <div className="relative flex gap-1">
                           <button
                             type="button"
-                            onClick={() => setRejectId(r.id)}
+                            onClick={() => toggleRowReject(r.id)}
                             className="rounded-lg bg-[#E11D48] p-1.5 text-white shadow-sm"
-                            title="Reject"
+                            title="Reject — reason required"
                           >
                             <AlertTriangle className="h-3.5 w-3.5" />
                           </button>
@@ -783,9 +916,15 @@ function TransactionsContent() {
                           >
                             <Check className="h-3.5 w-3.5" />
                           </button>
+                          {rejectId === r.id ? (
+                            <div className="absolute right-0 top-full z-50 mt-1 w-72">
+                              <RejectReasonPanel
+                                onCancel={() => setRejectId(null)}
+                                onConfirm={(reason) => reject(reason, r.id)}
+                              />
+                            </div>
+                          ) : null}
                         </div>
-                      ) : (
-                        <span className="text-slate-300">—</span>
                       )}
                     </td>
                     <td className="px-3 py-3">
@@ -836,13 +975,6 @@ function TransactionsContent() {
         ) : null}
       </section>
 
-      <RejectModal
-        open={!!rejectId}
-        title={tab === "deposits" ? "Reject deposit" : "Reject withdrawal"}
-        onClose={() => setRejectId(null)}
-        onConfirm={reject}
-      />
-
       {assignOpen ? (
         <div
           className="admin-modal-overlay"
@@ -888,18 +1020,12 @@ function TransactionsContent() {
       ) : null}
 
       {proof ? (
-        <div
-          className="admin-modal-overlay"
-          onClick={() => {
-            setProof(null);
-            setActiveProofId(null);
-          }}
-        >
+        <div className="admin-modal-overlay" onClick={closeProof}>
           <div
-            className="admin-card max-h-[90vh] w-full max-w-3xl overflow-auto p-5"
+            className="admin-card flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden p-0"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-4 flex items-start justify-between">
+            <div className="flex items-start justify-between border-b border-white/10 px-5 py-4">
               <div>
                 <h3 className="text-lg font-semibold text-white">Transaction Proof</h3>
                 <p className="text-sm text-slate-400">
@@ -909,93 +1035,160 @@ function TransactionsContent() {
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setProof(null);
-                  setActiveProofId(null);
-                }}
+                onClick={closeProof}
                 className="rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <SubmittedProofViewer
-              proof={proof}
-              proofs={getSubmittedProofs(proof)}
-              activeId={activeProofId || getSubmittedProofs(proof)[0]?.id}
-              onSelect={setActiveProofId}
+            <div ref={proofBodyRef} className="min-h-0 flex-1 overflow-auto px-5 py-4">
+              <div id="proof-submitted-top">
+                <SubmittedProofViewer
+                  proof={proof}
+                  proofs={getSubmittedProofs(proof)}
+                  activeId={activeProofId || getSubmittedProofs(proof)[0]?.id}
+                  onOpenImage={(file) => openSubmittedImage(proof, file)}
+                />
+              </div>
+
+              {proof.rejectReason ? (
+                <div className="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
+                  Rejection reason (customer-facing): <span className="font-semibold">{proof.rejectReason}</span>
+                </div>
+              ) : null}
+              <h4 className="mb-2 mt-5 text-sm font-semibold text-white">
+                Same-day transactions grid
+              </h4>
+              <div className="overflow-x-auto rounded-xl border border-white/10">
+                <table className="min-w-[640px] w-full text-left text-sm">
+                  <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
+                    <tr>
+                      <th className="px-3 py-2">Tran. ID</th>
+                      <th className="px-3 py-2">Platform ID</th>
+                      <th className="px-3 py-2">Amount</th>
+                      <th className="px-3 py-2">Method</th>
+                      <th className="px-3 py-2">Status</th>
+                      <th className="px-3 py-2">Proof</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {source
+                      .filter((r) => r.userId === proof.userId || r.customer === proof.customer)
+                      .map((r) => (
+                        <tr key={r.id} className="border-t border-white/10 text-slate-300">
+                          <td className="px-3 py-2">
+                            <CopyCell value={r.id} />
+                          </td>
+                          <td className="px-3 py-2">
+                            <CopyCell value={r.platformId} />
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2">{r.cashoutAmt || r.amount}</td>
+                          <td className="whitespace-nowrap px-3 py-2">{r.method}</td>
+                          <td className="px-3 py-2">
+                            <StatusPill status={r.status} />
+                          </td>
+                          <td className="px-3 py-2">
+                            {r.proof ? (
+                              <button
+                                type="button"
+                                onClick={() => openSubmittedImage(r)}
+                                className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-teal-300 hover:underline"
+                              >
+                                <Eye className="h-3 w-3" />
+                                View submitted
+                              </button>
+                            ) : (
+                              <span className="text-slate-500">Not submitted</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-4">
+                <SubmittedFilesList
+                  proofs={getSubmittedProofs(proof)}
+                  activeId={activeProofId || getSubmittedProofs(proof)[0]?.id}
+                  onSelect={setActiveProofId}
+                  onViewImage={(file) => openSubmittedImage(proof, file)}
+                />
+              </div>
+            </div>
+
+            <ProofImageLightbox
+              open={!!imageLightbox}
+              proof={imageLightbox?.proof}
+              file={imageLightbox?.file}
+              onClose={() => setImageLightbox(null)}
             />
 
-            <dl className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-lg bg-white/5 px-3 py-2">
-                <dt className="text-slate-400">Cashout / Client Pay</dt>
-                <dd className="font-medium text-white">{proof.cashoutAmt || proof.clientPay || proof.amount}</dd>
+            {isLockedByOther(proof) ? (
+              <div className="border-t border-amber-500/20 bg-amber-500/10 px-5 py-3 text-sm text-amber-200">
+                Locked by {proof.lockedBy} — claim or wait before approving or rejecting.
               </div>
-              <div className="rounded-lg bg-white/5 px-3 py-2">
-                <dt className="text-slate-400">Receiving Amount</dt>
-                <dd className="font-medium text-white">{proof.receiving || proof.deposited || proof.amount}</dd>
+            ) : proof.status === "Rejected" ? (
+              <div className="flex flex-col-reverse gap-2 border-t border-white/10 bg-white/[0.03] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2">
+                  <StatusPill status={proof.status} />
+                  <p className="text-xs text-slate-500">Rejected — you can approve again if needed.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => approve(proof.id)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110"
+                >
+                  <Check className="h-4 w-4" />
+                  Approve
+                </button>
               </div>
-              <div className="rounded-lg bg-white/5 px-3 py-2">
-                <dt className="text-slate-400">Platform ID</dt>
-                <dd className="font-medium text-white">{proof.platformId}</dd>
+            ) : (
+              <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4">
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2">
+                    <StatusPill status={proof.status} />
+                    <p className="text-xs text-slate-500">
+                      {proof.status === "Completed"
+                        ? "Already approved — you can still reject with a reason."
+                        : "Review submitted proof, then approve or reject with a customer-facing reason."}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setProofRejectOpen((v) => !v)}
+                      className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-semibold transition sm:flex-none ${
+                        proofRejectOpen
+                          ? "border-rose-400/60 bg-rose-500/25 text-rose-200"
+                          : "border-rose-400/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
+                      }`}
+                    >
+                      <X className="h-4 w-4" />
+                      Reject
+                    </button>
+                    {String(proof.status || "").includes("Pending") ? (
+                      <button
+                        type="button"
+                        onClick={() => approve(proof.id)}
+                        className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 sm:flex-none"
+                      >
+                        <Check className="h-4 w-4" />
+                        Approve
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+                {proofRejectOpen ? (
+                  <RejectReasonPanel
+                    className="mt-3"
+                    onCancel={() => setProofRejectOpen(false)}
+                    onConfirm={(reason) => reject(reason, proof.id)}
+                  />
+                ) : null}
               </div>
-              <div className="rounded-lg bg-white/5 px-3 py-2">
-                <dt className="text-slate-400">Account</dt>
-                <dd className="font-medium text-white">{proof.account}</dd>
-              </div>
-            </dl>
-            {proof.rejectReason ? (
-              <div className="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-                Rejection reason (customer-facing): <span className="font-semibold">{proof.rejectReason}</span>
-              </div>
-            ) : null}
-            <h4 className="mb-2 mt-5 text-sm font-semibold text-white">
-              Same-day transactions grid
-            </h4>
-            <div className="overflow-x-auto rounded-xl border border-white/10">
-              <table className="min-w-full text-left text-sm">
-                <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
-                  <tr>
-                    <th className="px-3 py-2">Tran. ID</th>
-                    <th className="px-3 py-2">Amount</th>
-                    <th className="px-3 py-2">Method</th>
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2">Proof</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {source
-                    .filter((r) => r.userId === proof.userId || r.customer === proof.customer)
-                    .map((r) => (
-                      <tr key={r.id} className="border-t border-white/10 text-slate-300">
-                        <td className="px-3 py-2 font-medium text-white">{r.id}</td>
-                        <td className="px-3 py-2">{r.cashoutAmt || r.amount}</td>
-                        <td className="px-3 py-2">{r.method}</td>
-                        <td className="px-3 py-2">
-                          <StatusPill status={r.status} />
-                        </td>
-                        <td className="px-3 py-2">
-                          {r.proof ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setProof(r);
-                                setActiveProofId(null);
-                              }}
-                              className="inline-flex items-center gap-1 text-xs font-semibold text-teal-300 hover:underline"
-                            >
-                              <Eye className="h-3 w-3" />
-                              View submitted
-                            </button>
-                          ) : (
-                            <span className="text-slate-500">Not submitted</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
+            )}
           </div>
         </div>
       ) : null}

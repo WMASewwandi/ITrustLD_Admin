@@ -1,15 +1,15 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectModal from "@/components/admin/reject-modal";
+import RejectReasonPanel from "@/components/admin/reject-reason-panel";
 import CopyCell, { FilterField, inputCls } from "@/components/admin/queue-ui";
 import { getKycDocuments, USERS } from "@/lib/mock-data";
 import {
   Ban,
   Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Eye,
@@ -34,27 +34,35 @@ function isPartnerValue(value) {
   return String(value).toLowerCase() === "yes" || value === "Affiliate";
 }
 
-function KycBadge({ value }) {
+function KycBadge({ value, onClick, title }) {
   const v = String(value || "");
+  let label = "Pending";
+  let cls = "bg-amber-500/90 text-white";
   if (v === "Verified") {
+    label = "Verified";
+    cls = "bg-theme-green-action/90 text-white";
+  } else if (v === "Rejected") {
+    label = "Rejected";
+    cls = "bg-[#E11D48] text-white";
+  }
+
+  const base =
+    "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition";
+
+  if (onClick) {
     return (
-      <span className="inline-flex rounded-full bg-theme-green-action/90 px-2.5 py-0.5 text-[11px] font-semibold text-white">
-        Verified
-      </span>
+      <button
+        type="button"
+        onClick={onClick}
+        title={title || `View ${label.toLowerCase()} documents`}
+        className={`${base} ${cls} hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-white/30`}
+      >
+        {label}
+      </button>
     );
   }
-  if (v === "Rejected") {
-    return (
-      <span className="inline-flex rounded-full bg-[#E11D48] px-2.5 py-0.5 text-[11px] font-semibold text-white">
-        Rejected
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex rounded-full bg-amber-500/90 px-2.5 py-0.5 text-[11px] font-semibold text-white">
-      Pending
-    </span>
-  );
+
+  return <span className={`${base} ${cls}`}>{label}</span>;
 }
 
 function PartnerBadge({ value, onClick, disabled }) {
@@ -120,30 +128,37 @@ function ConfirmModal({ open, title, message, confirmLabel = "Confirm", onClose,
   );
 }
 
-function KycDocsModal({ open, user, field, onClose }) {
+function KycDocsModal({ open, user, field, onClose, onApprove, onReject }) {
   const docs = open && user ? getKycDocuments(user, field) : [];
   const [activeId, setActiveId] = useState(null);
+  const [rejectOpen, setRejectOpen] = useState(false);
   const active = docs.find((d) => d.id === activeId) || docs[0];
   const label = field === "nic" ? "NIC" : "Address";
+  const status = user?.[field];
+  const canApprove = !user?.banned && (status === "Pending" || status === "Rejected");
+  const canReject = !user?.banned && (status === "Pending" || status === "Verified");
+  const canAct = canApprove || canReject;
 
   useEffect(() => {
     if (!open || !user) {
       setActiveId(null);
+      setRejectOpen(false);
       return;
     }
     const first = getKycDocuments(user, field)[0];
     setActiveId(first?.id ?? null);
+    setRejectOpen(false);
   }, [open, user, field]);
 
   if (!open || !user) return null;
 
   return (
-    <div className="admin-modal-overlay z-[80]" onClick={onClose}>
+    <div className="admin-modal-overlay z-[70]" onClick={onClose}>
       <div
-        className="admin-card max-h-[90vh] w-full max-w-2xl overflow-auto p-5 shadow-2xl"
+        className="admin-card flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden p-0 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="flex items-start justify-between gap-3 border-b border-white/10 px-5 py-4">
           <div>
             <h3 className="text-lg font-semibold text-white">{label} documents</h3>
             <p className="mt-1 text-sm text-slate-400">
@@ -159,138 +174,125 @@ function KycDocsModal({ open, user, field, onClose }) {
           </button>
         </div>
 
-        {docs.length === 0 ? (
-          <div className="flex h-40 flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 text-sm text-slate-400">
-            <FileText className="mb-2 h-8 w-8 opacity-50" />
-            No documents uploaded
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-[1fr_200px]">
-            <div className="overflow-hidden rounded-xl border border-white/10 bg-[#0c0f1a]">
-              <div className="border-b border-white/10 px-3 py-2">
-                <p className="truncate text-sm font-medium text-white">{active?.name}</p>
-                <p className="text-[11px] text-slate-500">
-                  {active?.kind} · Uploaded {active?.uploadedAt}
-                </p>
-              </div>
-              <div className="flex min-h-[200px] items-center justify-center bg-gradient-to-b from-white/[0.04] to-transparent p-6">
-                <div className="flex w-full max-w-xs flex-col items-center rounded-lg border border-slate-300/30 bg-[#f8fafc] p-6 text-center text-slate-800 shadow-lg">
-                  <FileImage className="mb-2 h-10 w-10 text-slate-400" />
-                  <p className="text-sm font-bold text-slate-900">{active?.kind}</p>
-                  <p className="mt-1 text-xs text-slate-500">{active?.name}</p>
-                  <p className="mt-3 rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700">
-                    Customer upload — read only
+        <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
+          {docs.length === 0 ? (
+            <div className="flex h-40 flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 text-sm text-slate-400">
+              <FileText className="mb-2 h-8 w-8 opacity-50" />
+              No documents uploaded
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-[1fr_200px]">
+              <div className="overflow-hidden rounded-xl border border-white/10 bg-[#0c0f1a]">
+                <div className="border-b border-white/10 px-3 py-2">
+                  <p className="truncate text-sm font-medium text-white">{active?.name}</p>
+                  <p className="text-[11px] text-slate-500">
+                    {active?.kind} · Uploaded {active?.uploadedAt}
                   </p>
                 </div>
+                <div className="flex min-h-[200px] items-center justify-center bg-gradient-to-b from-white/[0.04] to-transparent p-6">
+                  <div className="flex w-full max-w-xs flex-col items-center rounded-lg border border-slate-300/30 bg-[#f8fafc] p-6 text-center text-slate-800 shadow-lg">
+                    <FileImage className="mb-2 h-10 w-10 text-slate-400" />
+                    <p className="text-sm font-bold text-slate-900">{active?.kind}</p>
+                    <p className="mt-1 text-xs text-slate-500">{active?.name}</p>
+                    <p className="mt-3 rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700">
+                      Customer upload — read only
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-2">
+                <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  Uploaded files ({docs.length})
+                </p>
+                <ul className="space-y-1.5">
+                  {docs.map((doc) => {
+                    const selected = doc.id === active?.id;
+                    return (
+                      <li key={doc.id}>
+                        <button
+                          type="button"
+                          onClick={() => setActiveId(doc.id)}
+                          className={`flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition ${
+                            selected ? "bg-white/12 text-white" : "text-slate-300 hover:bg-white/5"
+                          }`}
+                        >
+                          <FileImage
+                            className={`mt-0.5 h-4 w-4 shrink-0 ${selected ? "text-white" : "text-slate-500"}`}
+                          />
+                          <span className="min-w-0">
+                            <span className="block truncate text-[12px] font-medium">{doc.name}</span>
+                            <span className="block text-[10px] text-slate-500">
+                              {doc.kind} · {doc.size}
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
             </div>
-            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-2">
-              <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                Uploaded files ({docs.length})
-              </p>
-              <ul className="space-y-1.5">
-                {docs.map((doc) => {
-                  const selected = doc.id === active?.id;
-                  return (
-                    <li key={doc.id}>
-                      <button
-                        type="button"
-                        onClick={() => setActiveId(doc.id)}
-                        className={`flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition ${
-                          selected ? "bg-white/12 text-white" : "text-slate-300 hover:bg-white/5"
-                        }`}
-                      >
-                        <FileImage
-                          className={`mt-0.5 h-4 w-4 shrink-0 ${selected ? "text-white" : "text-slate-500"}`}
-                        />
-                        <span className="min-w-0">
-                          <span className="block truncate text-[12px] font-medium">{doc.name}</span>
-                          <span className="block text-[10px] text-slate-500">
-                            {doc.kind} · {doc.size}
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+          )}
+        </div>
+
+        {canAct ? (
+          <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <KycBadge value={status} />
+                <p className="text-xs text-slate-500">
+                  {status === "Verified"
+                    ? "Already verified — you can still reject with a reason."
+                    : `Review uploaded ${label.toLowerCase()} documents, then approve or reject.`}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                {canReject ? (
+                  <button
+                    type="button"
+                    onClick={() => setRejectOpen((v) => !v)}
+                    className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-semibold transition sm:flex-none ${
+                      rejectOpen
+                        ? "border-rose-400/60 bg-rose-500/25 text-rose-200"
+                        : "border-rose-400/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
+                    }`}
+                  >
+                    <X className="h-4 w-4" />
+                    Reject
+                  </button>
+                ) : null}
+                {canApprove ? (
+                  <button
+                    type="button"
+                    onClick={onApprove}
+                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 sm:flex-none"
+                  >
+                    <Check className="h-4 w-4" />
+                    Approve
+                  </button>
+                ) : null}
+              </div>
             </div>
+            {rejectOpen ? (
+              <RejectReasonPanel
+                className="mt-3"
+                onCancel={() => setRejectOpen(false)}
+                onConfirm={(reason) => {
+                  setRejectOpen(false);
+                  onReject?.(reason);
+                }}
+              />
+            ) : null}
+          </div>
+        ) : (
+          <div className="flex items-center justify-between border-t border-white/10 px-5 py-3">
+            <KycBadge value={status} />
+            <button type="button" onClick={onClose} className="admin-btn-secondary">
+              Close
+            </button>
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function KycActionMenu({
-  open,
-  onToggle,
-  canDecide,
-  onApprove,
-  onReject,
-  onViewDocs,
-}) {
-  const ref = useRef(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDocClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) onToggle(false);
-    }
-    function onKey(e) {
-      if (e.key === "Escape") onToggle(false);
-    }
-    document.addEventListener("mousedown", onDocClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open, onToggle]);
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={() => onToggle(!open)}
-        className="inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-slate-300 transition hover:border-admin-teal/40 hover:text-white"
-      >
-        Actions
-        <ChevronDown className={`h-3 w-3 transition ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open ? (
-        <div className="absolute left-0 top-full z-50 mt-1 min-w-[180px] overflow-hidden rounded-lg border border-white/10 bg-admin-surface py-1 shadow-xl">
-          {canDecide ? (
-            <>
-              <button
-                type="button"
-                onClick={onApprove}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-green-action transition hover:bg-theme-green-action/10"
-              >
-                <Check className="h-3.5 w-3.5" />
-                Approve
-              </button>
-              <button
-                type="button"
-                onClick={onReject}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-[#FB7185] transition hover:bg-[#E11D48]/10"
-              >
-                <X className="h-3.5 w-3.5" />
-                Reject
-              </button>
-              <div className="my-1 border-t border-white/10" />
-            </>
-          ) : null}
-          <button
-            type="button"
-            onClick={onViewDocs}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-300 transition hover:bg-white/5"
-          >
-            <FileText className="h-3.5 w-3.5 text-slate-400" />
-            Uploaded documents
-          </button>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -310,8 +312,6 @@ function UsersContent() {
   const [rows, setRows] = useState(USERS);
   const [banOpen, setBanOpen] = useState(null);
   const [partnerConfirm, setPartnerConfirm] = useState(null);
-  const [kycMenu, setKycMenu] = useState(null);
-  const [kycReject, setKycReject] = useState(null);
   const [kycDocs, setKycDocs] = useState(null);
 
   useEffect(() => {
@@ -391,17 +391,21 @@ function UsersContent() {
     setRows((prev) =>
       prev.map((u) => {
         if (u.id !== id) return u;
-        return {
+        const next = {
           ...u,
           [field]: "Rejected",
           [`${field}RejectReason`]: reason,
         };
+        if (next.nic === "Verified" && next.address !== "Verified") {
+          next.status = "Only NIC Verified";
+        } else if (next.address === "Verified" && next.nic !== "Verified") {
+          next.status = "Only Address Verified";
+        } else if (next.nic !== "Verified" && next.address !== "Verified") {
+          next.status = "Pending";
+        }
+        return next;
       })
     );
-  }
-
-  function menuKey(id, field) {
-    return `${id}:${field}`;
   }
 
   return (
@@ -576,52 +580,18 @@ function UsersContent() {
                     />
                   </td>
                   <td className="px-3 py-3">
-                    <div className="flex flex-col gap-1.5">
-                      <KycBadge value={u.nic} />
-                      {!u.banned ? (
-                        <KycActionMenu
-                          open={kycMenu === menuKey(u.id, "nic")}
-                          onToggle={(next) => setKycMenu(next ? menuKey(u.id, "nic") : null)}
-                          canDecide={u.nic === "Pending"}
-                          onApprove={() => {
-                            setKycMenu(null);
-                            approveKyc(u.id, "nic");
-                          }}
-                          onReject={() => {
-                            setKycMenu(null);
-                            setKycReject({ id: u.id, field: "nic", name: u.name });
-                          }}
-                          onViewDocs={() => {
-                            setKycMenu(null);
-                            setKycDocs({ user: u, field: "nic" });
-                          }}
-                        />
-                      ) : null}
-                    </div>
+                    <KycBadge
+                      value={u.nic}
+                      onClick={() => setKycDocs({ user: u, field: "nic" })}
+                      title="View NIC documents"
+                    />
                   </td>
                   <td className="px-3 py-3">
-                    <div className="flex flex-col gap-1.5">
-                      <KycBadge value={u.address} />
-                      {!u.banned ? (
-                        <KycActionMenu
-                          open={kycMenu === menuKey(u.id, "address")}
-                          onToggle={(next) => setKycMenu(next ? menuKey(u.id, "address") : null)}
-                          canDecide={u.address === "Pending"}
-                          onApprove={() => {
-                            setKycMenu(null);
-                            approveKyc(u.id, "address");
-                          }}
-                          onReject={() => {
-                            setKycMenu(null);
-                            setKycReject({ id: u.id, field: "address", name: u.name });
-                          }}
-                          onViewDocs={() => {
-                            setKycMenu(null);
-                            setKycDocs({ user: u, field: "address" });
-                          }}
-                        />
-                      ) : null}
-                    </div>
+                    <KycBadge
+                      value={u.address}
+                      onClick={() => setKycDocs({ user: u, field: "address" })}
+                      title="View Address documents"
+                    />
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex gap-1.5">
@@ -738,21 +708,19 @@ function UsersContent() {
         }}
       />
 
-      <RejectModal
-        open={!!kycReject}
-        title={kycReject?.field === "nic" ? "Reject NIC" : "Reject Address"}
-        onClose={() => setKycReject(null)}
-        onConfirm={(reason) => {
-          rejectKyc(kycReject.id, kycReject.field, reason);
-          setKycReject(null);
-        }}
-      />
-
       <KycDocsModal
         open={!!kycDocs}
-        user={kycDocs?.user}
+        user={kycDocs?.user ? rows.find((u) => u.id === kycDocs.user.id) || kycDocs.user : null}
         field={kycDocs?.field}
         onClose={() => setKycDocs(null)}
+        onApprove={() => {
+          approveKyc(kycDocs.user.id, kycDocs.field);
+          setKycDocs(null);
+        }}
+        onReject={(reason) => {
+          rejectKyc(kycDocs.user.id, kycDocs.field, reason);
+          setKycDocs(null);
+        }}
       />
     </div>
   );
