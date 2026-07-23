@@ -1,17 +1,20 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectModal from "@/components/admin/reject-modal";
 import CopyCell, { FilterField, inputCls } from "@/components/admin/queue-ui";
-import { USERS } from "@/lib/mock-data";
+import { getKycDocuments, USERS } from "@/lib/mock-data";
 import {
   Ban,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Eye,
+  FileImage,
+  FileText,
   Search,
   X,
 } from "lucide-react";
@@ -26,6 +29,10 @@ const FILTERS = [
   { value: "only-nic", label: "Only NIC Verified" },
   { value: "banned", label: "Banned Customers" },
 ];
+
+function isPartnerValue(value) {
+  return String(value).toLowerCase() === "yes" || value === "Affiliate";
+}
 
 function KycBadge({ value }) {
   const v = String(value || "");
@@ -50,18 +57,241 @@ function KycBadge({ value }) {
   );
 }
 
-function PartnerBadge({ value }) {
-  const yes = String(value).toLowerCase() === "yes" || value === "Affiliate";
+function PartnerBadge({ value, onClick, disabled }) {
+  const yes = isPartnerValue(value);
   return (
-    <span
-      className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-semibold ${
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={yes ? "Change partner status to No" : "Change partner status to Yes"}
+      className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-semibold transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 ${
         yes
           ? "border-theme-green-action/40 bg-theme-green-action/10 text-theme-green-action"
           : "border-[#E11D48]/40 bg-[#E11D48]/10 text-[#FB7185]"
       }`}
     >
       {yes ? "Yes" : "No"}
-    </span>
+    </button>
+  );
+}
+
+function ConfirmModal({ open, title, message, confirmLabel = "Confirm", onClose, onConfirm }) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="admin-card w-full max-w-md rounded-t-2xl rounded-b-none p-5 shadow-2xl sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex justify-center sm:hidden">
+          <span className="h-1 w-10 rounded-full bg-white/20" />
+        </div>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-white">{title}</h3>
+            <p className="mt-1 text-sm text-slate-400">{message}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1 text-slate-500 hover:bg-white/10 hover:text-slate-200"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="mt-5 flex justify-end gap-2 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+          <button type="button" onClick={onClose} className="admin-btn-secondary">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="rounded-xl bg-admin-teal px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function KycDocsModal({ open, user, field, onClose }) {
+  const docs = open && user ? getKycDocuments(user, field) : [];
+  const [activeId, setActiveId] = useState(null);
+  const active = docs.find((d) => d.id === activeId) || docs[0];
+  const label = field === "nic" ? "NIC" : "Address";
+
+  useEffect(() => {
+    if (!open || !user) {
+      setActiveId(null);
+      return;
+    }
+    const first = getKycDocuments(user, field)[0];
+    setActiveId(first?.id ?? null);
+  }, [open, user, field]);
+
+  if (!open || !user) return null;
+
+  return (
+    <div className="admin-modal-overlay z-[80]" onClick={onClose}>
+      <div
+        className="admin-card max-h-[90vh] w-full max-w-2xl overflow-auto p-5 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-white">{label} documents</h3>
+            <p className="mt-1 text-sm text-slate-400">
+              {user.name} · {user.accountId}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1 text-slate-500 hover:bg-white/10 hover:text-slate-200"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {docs.length === 0 ? (
+          <div className="flex h-40 flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 text-sm text-slate-400">
+            <FileText className="mb-2 h-8 w-8 opacity-50" />
+            No documents uploaded
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-[1fr_200px]">
+            <div className="overflow-hidden rounded-xl border border-white/10 bg-[#0c0f1a]">
+              <div className="border-b border-white/10 px-3 py-2">
+                <p className="truncate text-sm font-medium text-white">{active?.name}</p>
+                <p className="text-[11px] text-slate-500">
+                  {active?.kind} · Uploaded {active?.uploadedAt}
+                </p>
+              </div>
+              <div className="flex min-h-[200px] items-center justify-center bg-gradient-to-b from-white/[0.04] to-transparent p-6">
+                <div className="flex w-full max-w-xs flex-col items-center rounded-lg border border-slate-300/30 bg-[#f8fafc] p-6 text-center text-slate-800 shadow-lg">
+                  <FileImage className="mb-2 h-10 w-10 text-slate-400" />
+                  <p className="text-sm font-bold text-slate-900">{active?.kind}</p>
+                  <p className="mt-1 text-xs text-slate-500">{active?.name}</p>
+                  <p className="mt-3 rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700">
+                    Customer upload — read only
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-2">
+              <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Uploaded files ({docs.length})
+              </p>
+              <ul className="space-y-1.5">
+                {docs.map((doc) => {
+                  const selected = doc.id === active?.id;
+                  return (
+                    <li key={doc.id}>
+                      <button
+                        type="button"
+                        onClick={() => setActiveId(doc.id)}
+                        className={`flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition ${
+                          selected ? "bg-white/12 text-white" : "text-slate-300 hover:bg-white/5"
+                        }`}
+                      >
+                        <FileImage
+                          className={`mt-0.5 h-4 w-4 shrink-0 ${selected ? "text-white" : "text-slate-500"}`}
+                        />
+                        <span className="min-w-0">
+                          <span className="block truncate text-[12px] font-medium">{doc.name}</span>
+                          <span className="block text-[10px] text-slate-500">
+                            {doc.kind} · {doc.size}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function KycActionMenu({
+  open,
+  onToggle,
+  canDecide,
+  onApprove,
+  onReject,
+  onViewDocs,
+}) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) onToggle(false);
+    }
+    function onKey(e) {
+      if (e.key === "Escape") onToggle(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, onToggle]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => onToggle(!open)}
+        className="inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-slate-300 transition hover:border-admin-teal/40 hover:text-white"
+      >
+        Actions
+        <ChevronDown className={`h-3 w-3 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open ? (
+        <div className="absolute left-0 top-full z-50 mt-1 min-w-[180px] overflow-hidden rounded-lg border border-white/10 bg-admin-surface py-1 shadow-xl">
+          {canDecide ? (
+            <>
+              <button
+                type="button"
+                onClick={onApprove}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-green-action transition hover:bg-theme-green-action/10"
+              >
+                <Check className="h-3.5 w-3.5" />
+                Approve
+              </button>
+              <button
+                type="button"
+                onClick={onReject}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-[#FB7185] transition hover:bg-[#E11D48]/10"
+              >
+                <X className="h-3.5 w-3.5" />
+                Reject
+              </button>
+              <div className="my-1 border-t border-white/10" />
+            </>
+          ) : null}
+          <button
+            type="button"
+            onClick={onViewDocs}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-300 transition hover:bg-white/5"
+          >
+            <FileText className="h-3.5 w-3.5 text-slate-400" />
+            Uploaded documents
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -79,6 +309,10 @@ function UsersContent() {
   const [selected, setSelected] = useState([]);
   const [rows, setRows] = useState(USERS);
   const [banOpen, setBanOpen] = useState(null);
+  const [partnerConfirm, setPartnerConfirm] = useState(null);
+  const [kycMenu, setKycMenu] = useState(null);
+  const [kycReject, setKycReject] = useState(null);
+  const [kycDocs, setKycDocs] = useState(null);
 
   useEffect(() => {
     setFilter(params.get("filter") || "pending");
@@ -143,10 +377,31 @@ function UsersContent() {
         const next = { ...u, [field]: "Verified" };
         if (next.nic === "Verified" && next.address === "Verified") {
           next.status = "Self Verified";
+        } else if (field === "nic" && next.address !== "Verified") {
+          next.status = "Only NIC Verified";
+        } else if (field === "address" && next.nic !== "Verified") {
+          next.status = "Only Address Verified";
         }
         return next;
       })
     );
+  }
+
+  function rejectKyc(id, field, reason) {
+    setRows((prev) =>
+      prev.map((u) => {
+        if (u.id !== id) return u;
+        return {
+          ...u,
+          [field]: "Rejected",
+          [`${field}RejectReason`]: reason,
+        };
+      })
+    );
+  }
+
+  function menuKey(id, field) {
+    return `${id}:${field}`;
   }
 
   return (
@@ -184,7 +439,6 @@ function UsersContent() {
           </div>
         </div>
 
-        {/* Field filters like screenshot */}
         <div className="border-b border-white/10 bg-white/5 px-5 py-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <FilterField label="Email">
@@ -232,7 +486,6 @@ function UsersContent() {
           </div>
         </div>
 
-        {/* Table controls */}
         <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
           <label className="inline-flex items-center gap-2 text-xs text-slate-500">
             Show
@@ -266,7 +519,7 @@ function UsersContent() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-visible">
           <table className="min-w-[1100px] w-full text-left text-[13px]">
             <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
               <tr>
@@ -308,53 +561,65 @@ function UsersContent() {
                   </td>
                   <td className="px-3 py-3">{u.mobile}</td>
                   <td className="px-3 py-3">
-                    <PartnerBadge value={u.partner} />
+                    <PartnerBadge
+                      value={u.partner}
+                      disabled={u.banned}
+                      onClick={() => {
+                        if (u.banned) return;
+                        const currentlyYes = isPartnerValue(u.partner);
+                        setPartnerConfirm({
+                          id: u.id,
+                          name: u.name,
+                          next: currentlyYes ? "No" : "Yes",
+                        });
+                      }}
+                    />
                   </td>
                   <td className="px-3 py-3">
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-1.5">
                       <KycBadge value={u.nic} />
-                      {u.nic === "Pending" && !u.banned ? (
-                        <div className="flex gap-1">
-                          <button
-                            type="button"
-                            onClick={() => approveKyc(u.id, "nic")}
-                            className="rounded bg-theme-green-action/20 p-0.5 text-theme-green-action"
-                            title="Approve NIC"
-                          >
-                            <Check className="h-3 w-3" />
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded bg-[#E11D48]/20 p-0.5 text-[#FB7185]"
-                            title="Reject NIC"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
+                      {!u.banned ? (
+                        <KycActionMenu
+                          open={kycMenu === menuKey(u.id, "nic")}
+                          onToggle={(next) => setKycMenu(next ? menuKey(u.id, "nic") : null)}
+                          canDecide={u.nic === "Pending"}
+                          onApprove={() => {
+                            setKycMenu(null);
+                            approveKyc(u.id, "nic");
+                          }}
+                          onReject={() => {
+                            setKycMenu(null);
+                            setKycReject({ id: u.id, field: "nic", name: u.name });
+                          }}
+                          onViewDocs={() => {
+                            setKycMenu(null);
+                            setKycDocs({ user: u, field: "nic" });
+                          }}
+                        />
                       ) : null}
                     </div>
                   </td>
                   <td className="px-3 py-3">
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-1.5">
                       <KycBadge value={u.address} />
-                      {u.address === "Pending" && !u.banned ? (
-                        <div className="flex gap-1">
-                          <button
-                            type="button"
-                            onClick={() => approveKyc(u.id, "address")}
-                            className="rounded bg-theme-green-action/20 p-0.5 text-theme-green-action"
-                            title="Approve Address"
-                          >
-                            <Check className="h-3 w-3" />
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded bg-[#E11D48]/20 p-0.5 text-[#FB7185]"
-                            title="Reject Address"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
+                      {!u.banned ? (
+                        <KycActionMenu
+                          open={kycMenu === menuKey(u.id, "address")}
+                          onToggle={(next) => setKycMenu(next ? menuKey(u.id, "address") : null)}
+                          canDecide={u.address === "Pending"}
+                          onApprove={() => {
+                            setKycMenu(null);
+                            approveKyc(u.id, "address");
+                          }}
+                          onReject={() => {
+                            setKycMenu(null);
+                            setKycReject({ id: u.id, field: "address", name: u.name });
+                          }}
+                          onViewDocs={() => {
+                            setKycMenu(null);
+                            setKycDocs({ user: u, field: "address" });
+                          }}
+                        />
                       ) : null}
                     </div>
                   </td>
@@ -371,7 +636,7 @@ function UsersContent() {
                         <button
                           type="button"
                           onClick={() => setBanOpen(u.id)}
-                          className="inline-flex items-center gap-1 rounded-lg border border-rose-400/30 px-2 py-1 text-xs text-rose-300 transition hover:bg-rose-500/150/10"
+                          className="inline-flex items-center gap-1 rounded-lg border border-rose-400/30 px-2 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10"
                           title="Ban user — requires reason"
                         >
                           <Ban className="h-3.5 w-3.5" />
@@ -397,7 +662,6 @@ function UsersContent() {
           </table>
         </div>
 
-        {/* Footer pagination */}
         <div className="flex flex-col gap-3 border-t border-white/10 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-slate-400">
             Showing {filtered.length === 0 ? 0 : start + 1} to {Math.min(start + perPage, filtered.length)} of{" "}
@@ -440,6 +704,26 @@ function UsersContent() {
         </div>
       </section>
 
+      <ConfirmModal
+        open={!!partnerConfirm}
+        title="Confirm partner status"
+        message={
+          partnerConfirm
+            ? `Set ${partnerConfirm.name} as partner: ${partnerConfirm.next}?`
+            : ""
+        }
+        confirmLabel={`Set to ${partnerConfirm?.next || "Yes"}`}
+        onClose={() => setPartnerConfirm(null)}
+        onConfirm={() => {
+          setRows((prev) =>
+            prev.map((u) =>
+              u.id === partnerConfirm.id ? { ...u, partner: partnerConfirm.next } : u
+            )
+          );
+          setPartnerConfirm(null);
+        }}
+      />
+
       <RejectModal
         open={!!banOpen}
         title="Ban customer"
@@ -452,6 +736,23 @@ function UsersContent() {
           );
           setBanOpen(null);
         }}
+      />
+
+      <RejectModal
+        open={!!kycReject}
+        title={kycReject?.field === "nic" ? "Reject NIC" : "Reject Address"}
+        onClose={() => setKycReject(null)}
+        onConfirm={(reason) => {
+          rejectKyc(kycReject.id, kycReject.field, reason);
+          setKycReject(null);
+        }}
+      />
+
+      <KycDocsModal
+        open={!!kycDocs}
+        user={kycDocs?.user}
+        field={kycDocs?.field}
+        onClose={() => setKycDocs(null)}
       />
     </div>
   );
