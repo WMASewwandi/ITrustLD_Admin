@@ -34,7 +34,7 @@ export default function CopyCell({ value, sub }) {
   );
 }
 
-export function StatusPill({ status }) {
+export function StatusPill({ status, onClick, title }) {
   const s = String(status || "");
   const tone = s.includes("Pending")
     ? "bg-amber-500 text-white"
@@ -43,11 +43,20 @@ export function StatusPill({ status }) {
       : s === "Rejected"
         ? "bg-admin-danger text-white"
         : "bg-white/10 text-slate-300";
-  return (
-    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${tone}`}>
-      {status}
-    </span>
-  );
+  const cls = `inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${tone}`;
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        title={title || "View details"}
+        className={`${cls} transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-white/30`}
+      >
+        {status}
+      </button>
+    );
+  }
+  return <span className={cls}>{status}</span>;
 }
 
 export function FilterField({ label, children, className = "" }) {

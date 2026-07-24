@@ -776,7 +776,11 @@ function TransactionsContent() {
                       )}
                     </td>
                     <td className="px-3 py-3">
-                      <StatusPill status={r.status} />
+                      <StatusPill
+                        status={r.status}
+                        onClick={() => openProof(r)}
+                        title="View proof and approve / reject"
+                      />
                       {r.rejectReason ? (
                         <p className="mt-1 max-w-[140px] text-[10px] leading-snug text-rose-300" title={r.rejectReason}>
                           {r.rejectReason}
@@ -928,7 +932,11 @@ function TransactionsContent() {
                       )}
                     </td>
                     <td className="px-3 py-3">
-                      <StatusPill status={r.status} />
+                      <StatusPill
+                        status={r.status}
+                        onClick={() => openProof(r)}
+                        title="View proof and approve / reject"
+                      />
                       {r.rejectReason ? (
                         <p className="mt-1 max-w-[120px] truncate text-[10px] text-rose-300" title={r.rejectReason}>
                           {r.rejectReason}
@@ -1129,50 +1137,43 @@ function TransactionsContent() {
               <div className="border-t border-amber-500/20 bg-amber-500/10 px-5 py-3 text-sm text-amber-200">
                 Locked by {proof.lockedBy} — claim or wait before approving or rejecting.
               </div>
-            ) : proof.status === "Rejected" ? (
-              <div className="flex flex-col-reverse gap-2 border-t border-white/10 bg-white/[0.03] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-2">
-                  <StatusPill status={proof.status} />
-                  <p className="text-xs text-slate-500">Rejected — you can approve again if needed.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => approve(proof.id)}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110"
-                >
-                  <Check className="h-4 w-4" />
-                  Approve
-                </button>
-              </div>
             ) : (
               <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4">
-                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-2">
                     <StatusPill status={proof.status} />
                     <p className="text-xs text-slate-500">
-                      {proof.status === "Completed"
-                        ? "Already approved — you can still reject with a reason."
-                        : "Review submitted proof, then approve or reject with a customer-facing reason."}
+                      {proof.status === "Rejected"
+                        ? "Rejected — you can approve again if needed."
+                        : proof.status === "Completed"
+                          ? "Already approved — you can still reject with a reason."
+                          : "Review submitted proof, then approve or reject with a customer-facing reason."}
                     </p>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setProofRejectOpen((v) => !v)}
-                      className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-semibold transition sm:flex-none ${
-                        proofRejectOpen
-                          ? "border-rose-400/60 bg-rose-500/25 text-rose-200"
-                          : "border-rose-400/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
-                      }`}
-                    >
-                      <X className="h-4 w-4" />
-                      Reject
-                    </button>
-                    {String(proof.status || "").includes("Pending") ? (
+                  <div className="flex shrink-0 flex-row flex-nowrap items-center gap-2">
+                    {proof.status === "Pending" ||
+                    String(proof.status || "").includes("Pending") ||
+                    proof.status === "Completed" ? (
+                      <button
+                        type="button"
+                        onClick={() => setProofRejectOpen((v) => !v)}
+                        className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${
+                          proofRejectOpen
+                            ? "border-rose-400/60 bg-rose-500/25 text-rose-200"
+                            : "border-rose-400/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
+                        }`}
+                      >
+                        <X className="h-4 w-4" />
+                        Reject
+                      </button>
+                    ) : null}
+                    {proof.status === "Rejected" ||
+                    proof.status === "Pending" ||
+                    String(proof.status || "").includes("Pending") ? (
                       <button
                         type="button"
                         onClick={() => approve(proof.id)}
-                        className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 sm:flex-none"
+                        className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110"
                       >
                         <Check className="h-4 w-4" />
                         Approve
@@ -1180,7 +1181,7 @@ function TransactionsContent() {
                     ) : null}
                   </div>
                 </div>
-                {proofRejectOpen ? (
+                {proofRejectOpen && proof.status !== "Rejected" ? (
                   <RejectReasonPanel
                     className="mt-3"
                     onCancel={() => setProofRejectOpen(false)}
