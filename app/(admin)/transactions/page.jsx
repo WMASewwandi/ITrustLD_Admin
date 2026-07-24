@@ -776,7 +776,11 @@ function TransactionsContent() {
                       )}
                     </td>
                     <td className="px-3 py-3">
-                      <StatusPill status={r.status} />
+                      <StatusPill
+                        status={r.status}
+                        onClick={() => openProof(r)}
+                        title="View proof and approve / reject"
+                      />
                       {r.rejectReason ? (
                         <p className="mt-1 max-w-[140px] text-[10px] leading-snug text-rose-300" title={r.rejectReason}>
                           {r.rejectReason}
@@ -928,7 +932,11 @@ function TransactionsContent() {
                       )}
                     </td>
                     <td className="px-3 py-3">
-                      <StatusPill status={r.status} />
+                      <StatusPill
+                        status={r.status}
+                        onClick={() => openProof(r)}
+                        title="View proof and approve / reject"
+                      />
                       {r.rejectReason ? (
                         <p className="mt-1 max-w-[120px] truncate text-[10px] text-rose-300" title={r.rejectReason}>
                           {r.rejectReason}

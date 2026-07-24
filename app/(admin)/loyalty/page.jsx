@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectModal from "@/components/admin/reject-modal";
+import RejectReasonPanel from "@/components/admin/reject-reason-panel";
 import CopyCell, { FilterField, StatusPill, inputCls } from "@/components/admin/queue-ui";
 import {
   AFFILIATE_BONUS_CONFIG,
@@ -25,6 +26,199 @@ const TABS = [
   { id: "management", label: "Loyalty Management" },
 ];
 
+function DetailField({ label, children }) {
+  return (
+    <div className="rounded-lg bg-white/5 px-3 py-2">
+      <dt className="mb-0.5 text-[11px] text-slate-400">{label}</dt>
+      <dd className="text-sm font-medium text-white">{children}</dd>
+    </div>
+  );
+}
+
+function LoyaltyDetailModal({ open, record, tab, onClose, onApprove, onReject, onReopen }) {
+  const [rejectOpen, setRejectOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) setRejectOpen(false);
+  }, [open, record?.id]);
+
+  if (!open || !record) return null;
+
+  const title =
+    tab === "bonus" ? "Bonus claim details" : tab === "vouchers" ? "Voucher claim details" : "Loyalty order details";
+  // Pending: both · Rejected: approve only · Completed/Claimed: reject only
+  const canApprove = record.status === "Pending" || record.status === "Rejected";
+  const canReject = record.status === "Pending" || record.status === "Completed" || record.status === "Claimed";
+
+  return (
+    <div className="admin-modal-overlay z-[80]" onClick={onClose}>
+      <div
+        className="admin-card flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden p-0 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-white/10 px-5 py-4">
+          <div>
+            <h3 className="text-lg font-semibold text-white">{title}</h3>
+            <p className="mt-1 text-sm text-slate-400">
+              {record.id} · {record.customer}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1 text-slate-500 hover:bg-white/10 hover:text-slate-200"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
+          <dl className="grid gap-2 sm:grid-cols-2">
+            <DetailField label="Date">
+              <CopyCell value={record.date} />
+            </DetailField>
+            <DetailField label="User">
+              <CopyCell value={`${record.userId} ${record.customer}`} />
+            </DetailField>
+            {tab === "orders" ? (
+              <>
+                <DetailField label="Loyalty Points">
+                  <span className="text-[#FBBF24]">{record.points}</span>
+                </DetailField>
+                <DetailField label="Withdraw Amount">
+                  <CopyCell value={record.amount} sub={record.amountUsd} />
+                </DetailField>
+                <DetailField label="Payment Method">
+                  <CopyCell value={record.method} />
+                </DetailField>
+                <DetailField label="Received Amount">
+                  <CopyCell value={record.received} />
+                </DetailField>
+                <DetailField label="Platform">
+                  <CopyCell value={record.platform} />
+                </DetailField>
+                <DetailField label="Account / Detail">
+                  <CopyCell value={record.platformDetail || record.email || "—"} />
+                </DetailField>
+              </>
+            ) : null}
+            {tab === "bonus" ? (
+              <>
+                <DetailField label="Amount">
+                  <CopyCell value={record.amount} />
+                </DetailField>
+                <DetailField label="Payment Method">
+                  <CopyCell value={record.method} />
+                </DetailField>
+                <DetailField label="Received Amount">
+                  <CopyCell value={record.received} />
+                </DetailField>
+                <DetailField label="Platform ID">
+                  <CopyCell value={record.platformId} />
+                </DetailField>
+                <DetailField label="Email">
+                  <CopyCell value={record.email} />
+                </DetailField>
+                <DetailField label="Admin">{record.admin || "—"}</DetailField>
+              </>
+            ) : null}
+            {tab === "vouchers" ? (
+              <>
+                <DetailField label="Platform ID">
+                  <CopyCell value={record.platformId || "—"} />
+                </DetailField>
+                <DetailField label="Amount">
+                  <CopyCell value={record.amount} />
+                </DetailField>
+                <DetailField label="Platform">
+                  <CopyCell value={record.platform} />
+                </DetailField>
+                <DetailField label="Method">
+                  <CopyCell value={record.method || "—"} />
+                </DetailField>
+                <DetailField label="Voucher Token">
+                  <CopyCell value={record.token || "—"} />
+                </DetailField>
+                <DetailField label="Admin">{record.admin || record.claimedBy || "—"}</DetailField>
+                {record.claimedDate ? (
+                  <DetailField label="Claimed Date">
+                    <CopyCell value={record.claimedDate} />
+                  </DetailField>
+                ) : null}
+                {record.rejectedDate ? (
+                  <DetailField label="Rejected Date">
+                    <CopyCell value={record.rejectedDate} />
+                  </DetailField>
+                ) : null}
+              </>
+            ) : null}
+          </dl>
+          {record.rejectReason ? (
+            <div className="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
+              Rejection reason: <span className="font-semibold">{record.rejectReason}</span>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-2">
+              <StatusPill status={record.status} />
+              <p className="text-xs text-slate-500">
+                {record.status === "Pending"
+                  ? "Review this claim, then approve or reject."
+                  : record.status === "Rejected"
+                    ? "Rejected — approve again if needed."
+                    : "Already processed — you can still reject with a reason."}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-row flex-nowrap items-center gap-2">
+              {canReject ? (
+                <button
+                  type="button"
+                  onClick={() => setRejectOpen((v) => !v)}
+                  className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${
+                    rejectOpen
+                      ? "border-rose-400/60 bg-rose-500/25 text-rose-200"
+                      : "border-rose-400/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
+                  }`}
+                >
+                  <X className="h-4 w-4" />
+                  Reject
+                </button>
+              ) : null}
+              {canApprove ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onApprove?.(record.id);
+                    onClose?.();
+                  }}
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110"
+                >
+                  <Check className="h-4 w-4" />
+                  Approve
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {rejectOpen ? (
+            <RejectReasonPanel
+              className="mt-3"
+              onCancel={() => setRejectOpen(false)}
+              onConfirm={(reason) => {
+                setRejectOpen(false);
+                onReject?.(record.id, reason);
+                onClose?.();
+              }}
+            />
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LoyaltyContent() {
   const params = useSearchParams();
   const [tab, setTab] = useState(params.get("tab") || "orders");
@@ -38,6 +232,7 @@ function LoyaltyContent() {
   const [bonuses, setBonuses] = useState(BONUS_CLAIMS);
   const [vouchers, setVouchers] = useState(VOUCHERS);
   const [rejectId, setRejectId] = useState(null);
+  const [detail, setDetail] = useState(null);
   const [pointRows, setPointRows] = useState(LOYALTY_POINT_COLLECTION);
   const [bonusRows, setBonusRows] = useState(LOYALTY_BONUS_CONFIG);
   const [activatePoints, setActivatePoints] = useState(true);
@@ -123,6 +318,37 @@ function LoyaltyContent() {
     } else {
       setOrders((prev) => prev.map((r) => (r.id === id ? { ...r, status: "Completed" } : r)));
     }
+  }
+
+  function rejectRecord(id, reason) {
+    const now = new Date().toISOString().slice(0, 16).replace("T", " ");
+    if (tab === "bonus") {
+      setBonuses((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, status: "Rejected", rejectReason: reason, admin: "Admin" } : r))
+      );
+    } else if (tab === "vouchers") {
+      setVouchers((prev) =>
+        prev.map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                status: "Rejected",
+                rejectReason: reason,
+                rejectedDate: now,
+                admin: "System Admin",
+              }
+            : r
+        )
+      );
+    } else {
+      setOrders((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, status: "Rejected", rejectReason: reason } : r))
+      );
+    }
+  }
+
+  function openDetail(r) {
+    setDetail(r);
   }
 
   function reopen(id) {
@@ -1052,7 +1278,11 @@ function LoyaltyContent() {
                         )}
                       </td>
                       <td className="px-3 py-3">
-                        <StatusPill status={r.status} />
+                        <StatusPill
+                          status={r.status}
+                          onClick={() => openDetail(r)}
+                          title="View details and approve / reject"
+                        />
                       </td>
                     </tr>
                   ))}
@@ -1149,7 +1379,11 @@ function LoyaltyContent() {
                         )}
                       </td>
                       <td className="px-3 py-3">
-                        <StatusPill status={r.status} />
+                        <StatusPill
+                          status={r.status}
+                          onClick={() => openDetail(r)}
+                          title="View details and approve / reject"
+                        />
                         {r.rejectReason ? (
                           <p className="mt-1 max-w-[140px] truncate text-[10px] text-rose-300" title={r.rejectReason}>
                             {r.rejectReason}
@@ -1188,7 +1422,14 @@ function LoyaltyContent() {
                   {filtered.map((r) => (
                     <tr key={r.id} className="border-t border-white/10 text-slate-300 hover:bg-admin-teal/[0.05]">
                       <td className="px-3 py-3">
-                        <CopyCell value={r.id} />
+                        <button
+                          type="button"
+                          onClick={() => openDetail(r)}
+                          className="text-left"
+                          title="View details"
+                        >
+                          <CopyCell value={r.id} />
+                        </button>
                       </td>
                       <td className="px-3 py-3">
                         <CopyCell value={r.date} />
@@ -1264,7 +1505,14 @@ function LoyaltyContent() {
                   {filtered.map((r) => (
                     <tr key={r.id} className="border-t border-white/10 text-slate-300 hover:bg-admin-teal/[0.05]">
                       <td className="px-3 py-3">
-                        <CopyCell value={r.id} />
+                        <button
+                          type="button"
+                          onClick={() => openDetail(r)}
+                          className="text-left"
+                          title="View details"
+                        >
+                          <CopyCell value={r.id} />
+                        </button>
                       </td>
                       <td className="px-3 py-3">
                         <CopyCell value={r.date} />
@@ -1383,7 +1631,11 @@ function LoyaltyContent() {
                         )}
                       </td>
                       <td className="px-3 py-3">
-                        <StatusPill status={r.status} />
+                        <StatusPill
+                          status={r.status}
+                          onClick={() => openDetail(r)}
+                          title="View details and approve / reject"
+                        />
                         {r.rejectReason ? (
                           <p className="mt-1 max-w-[120px] truncate text-[10px] text-rose-300">{r.rejectReason}</p>
                         ) : null}
@@ -1412,34 +1664,19 @@ function LoyaltyContent() {
         }
         onClose={() => setRejectId(null)}
         onConfirm={(reason) => {
-          const now = new Date().toISOString().slice(0, 16).replace("T", " ");
-          if (tab === "bonus") {
-            setBonuses((prev) =>
-              prev.map((r) =>
-                r.id === rejectId ? { ...r, status: "Rejected", rejectReason: reason, admin: "Admin" } : r
-              )
-            );
-          } else if (tab === "vouchers") {
-            setVouchers((prev) =>
-              prev.map((r) =>
-                r.id === rejectId
-                  ? {
-                      ...r,
-                      status: "Rejected",
-                      rejectReason: reason,
-                      rejectedDate: now,
-                      admin: "System Admin",
-                    }
-                  : r
-              )
-            );
-          } else {
-            setOrders((prev) =>
-              prev.map((r) => (r.id === rejectId ? { ...r, status: "Rejected", rejectReason: reason } : r))
-            );
-          }
+          rejectRecord(rejectId, reason);
           setRejectId(null);
         }}
+      />
+
+      <LoyaltyDetailModal
+        open={!!detail}
+        record={detail ? list.find((r) => r.id === detail.id) || detail : null}
+        tab={tab === "management" ? "orders" : tab}
+        onClose={() => setDetail(null)}
+        onApprove={approve}
+        onReject={rejectRecord}
+        onReopen={reopen}
       />
     </div>
   );

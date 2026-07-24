@@ -135,8 +135,9 @@ function KycDocsModal({ open, user, field, onClose, onApprove, onReject }) {
   const active = docs.find((d) => d.id === activeId) || docs[0];
   const label = field === "nic" ? "NIC" : "Address";
   const status = user?.[field];
-  const canApprove = !user?.banned && (status === "Pending" || status === "Rejected");
-  const canReject = !user?.banned && (status === "Pending" || status === "Verified");
+  // Pending: both · Rejected: approve only · Verified: reject only
+  const canApprove = status === "Pending" || status === "Rejected";
+  const canReject = status === "Pending" || status === "Verified";
   const canAct = canApprove || canReject;
 
   useEffect(() => {
@@ -235,23 +236,25 @@ function KycDocsModal({ open, user, field, onClose, onApprove, onReject }) {
           )}
         </div>
 
-        {canAct ? (
-          <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4">
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2">
-                <KycBadge value={status} />
-                <p className="text-xs text-slate-500">
-                  {status === "Verified"
-                    ? "Already verified — you can still reject with a reason."
+        <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-2">
+              <KycBadge value={status} />
+              <p className="text-xs text-slate-500">
+                {status === "Verified"
+                  ? "Already verified — you can still reject with a reason."
+                  : status === "Rejected"
+                    ? "Rejected — approve again if documents are valid."
                     : `Review uploaded ${label.toLowerCase()} documents, then approve or reject.`}
-                </p>
-              </div>
-              <div className="flex gap-2">
+              </p>
+            </div>
+            {canAct ? (
+              <div className="flex shrink-0 flex-row flex-nowrap items-center gap-2">
                 {canReject ? (
                   <button
                     type="button"
                     onClick={() => setRejectOpen((v) => !v)}
-                    className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-semibold transition sm:flex-none ${
+                    className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${
                       rejectOpen
                         ? "border-rose-400/60 bg-rose-500/25 text-rose-200"
                         : "border-rose-400/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
@@ -265,33 +268,30 @@ function KycDocsModal({ open, user, field, onClose, onApprove, onReject }) {
                   <button
                     type="button"
                     onClick={onApprove}
-                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 sm:flex-none"
+                    className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110"
                   >
                     <Check className="h-4 w-4" />
                     Approve
                   </button>
                 ) : null}
               </div>
-            </div>
-            {rejectOpen ? (
-              <RejectReasonPanel
-                className="mt-3"
-                onCancel={() => setRejectOpen(false)}
-                onConfirm={(reason) => {
-                  setRejectOpen(false);
-                  onReject?.(reason);
-                }}
-              />
-            ) : null}
+            ) : (
+              <button type="button" onClick={onClose} className="admin-btn-secondary shrink-0">
+                Close
+              </button>
+            )}
           </div>
-        ) : (
-          <div className="flex items-center justify-between border-t border-white/10 px-5 py-3">
-            <KycBadge value={status} />
-            <button type="button" onClick={onClose} className="admin-btn-secondary">
-              Close
-            </button>
-          </div>
-        )}
+          {rejectOpen && canReject ? (
+            <RejectReasonPanel
+              className="mt-3"
+              onCancel={() => setRejectOpen(false)}
+              onConfirm={(reason) => {
+                setRejectOpen(false);
+                onReject?.(reason);
+              }}
+            />
+          ) : null}
+        </div>
       </div>
     </div>
   );
