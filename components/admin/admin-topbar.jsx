@@ -15,6 +15,7 @@ import {
   ArrowUpFromLine,
   User,
 } from "lucide-react";
+import { logoutAdmin } from "@/lib/auth";
 
 const QUICK = [
   {
@@ -61,8 +62,8 @@ export default function AdminTopbar({ onMenuClick, clock }) {
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
-  function logout() {
-    localStorage.removeItem("itrustld_admin_auth");
+  async function logout() {
+    await logoutAdmin();
     router.replace("/login");
   }
 

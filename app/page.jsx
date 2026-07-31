@@ -2,13 +2,13 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { hasAdminSession } from "@/lib/auth";
 
 export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    const authed = window.localStorage.getItem("itrustld_admin_auth") === "1";
-    router.replace(authed ? "/dashboard" : "/login");
+    router.replace(hasAdminSession() ? "/dashboard" : "/login");
   }, [router]);
 
   return (

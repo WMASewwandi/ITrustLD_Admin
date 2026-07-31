@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { NAV } from "@/lib/mock-data";
+import { logoutAdmin } from "@/lib/auth";
 
 function isActiveCategory(pathname, category) {
   if (category.href && pathname.startsWith(category.href.split("?")[0])) return true;
@@ -49,8 +50,8 @@ export default function AdminNav() {
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
-  function logout() {
-    localStorage.removeItem("itrustld_admin_auth");
+  async function logout() {
+    await logoutAdmin();
     router.replace("/login");
   }
 

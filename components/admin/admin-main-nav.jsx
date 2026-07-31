@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { DEFAULT_BOOKMARKS, TOP_NAV } from "@/lib/mock-data";
+import { logoutAdmin } from "@/lib/auth";
 
 const NOTIFS = [
   ["Deposits", "4 pending approvals", "/transactions?tab=deposits&status=Pending"],
@@ -77,8 +78,8 @@ function NavInner() {
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
-  function logout() {
-    localStorage.removeItem("itrustld_admin_auth");
+  async function logout() {
+    await logoutAdmin();
     router.replace("/login");
   }
 

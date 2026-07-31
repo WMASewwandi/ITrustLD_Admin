@@ -9,7 +9,10 @@ import {
   Activity,
   Layers,
   Lock,
+  Eye,
+  EyeOff,
 } from "lucide-react";
+import { loginAdmin, setAdminSession } from "@/lib/auth";
 
 const HIGHLIGHTS = [
   { icon: ShieldCheck, title: "Role-based access", body: "Super Admin, Executives, Authorizer" },
@@ -20,12 +23,27 @@ const HIGHLIGHTS = [
 export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
+    setError("");
     setLoading(true);
-    window.localStorage.setItem("itrustld_admin_auth", "1");
-    router.push("/dashboard");
+
+    const form = e.currentTarget;
+    const email = form.email.value.trim();
+    const password = form.password.value;
+
+    try {
+      const result = await loginAdmin(email, password);
+      setAdminSession({ token: result.token, user: result.user });
+      router.push(result.redirect_to || "/dashboard");
+    } catch (err) {
+      setError(err.message || "Sign in failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -95,15 +113,21 @@ export default function LoginPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+              {error ? (
+                <p className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200" role="alert">
+                  {error}
+                </p>
+              ) : null}
               <div>
                 <label htmlFor="email" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-white/60">
                   Email
                 </label>
                 <input
                   id="email"
+                  name="email"
                   type="email"
+                  required
                   autoComplete="username"
-                  defaultValue="admin@itrustld.com"
                   placeholder="admin@itrustld.com"
                   className="w-full rounded-xl border border-white/12 bg-admin-chrome-deep px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-admin-teal/60 focus:ring-2 focus:ring-admin-teal/20"
                 />
@@ -113,14 +137,26 @@ export default function LoginPage() {
                 <label htmlFor="password" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-white/60">
                   Password
                 </label>
-                <input
-                  id="password"
-                  type="password"
-                  autoComplete="current-password"
-                  defaultValue="admin123"
-                  placeholder="Enter password"
-                  className="w-full rounded-xl border border-white/12 bg-admin-chrome-deep px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-admin-teal/60 focus:ring-2 focus:ring-admin-teal/20"
-                />
+                <div className="relative">
+                  <input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    required
+                    autoComplete="current-password"
+                    placeholder="Enter password"
+                    className="w-full rounded-xl border border-white/12 bg-admin-chrome-deep py-3.5 pl-4 pr-12 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-admin-teal/60 focus:ring-2 focus:ring-admin-teal/20"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/10 hover:text-white/80"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
 
               <button

@@ -1,27 +1,177 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import CopyCell, { inputCls } from "@/components/admin/queue-ui";
-import { SYSTEM_USER_GROUPS, SYSTEM_USERS } from "@/lib/mock-data";
-import { Pencil, Plus, Search, X } from "lucide-react";
+import { createSystemUser, fetchSystemUsers, updateSystemUser } from "@/lib/system-users";
+import {
+  Clock3,
+  Loader2,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  UserRound,
+  Users,
+  X,
+} from "lucide-react";
+
+function formatDate(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function StatusBadge({ active }) {
+  return (
+    <span
+      className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+        active ? "bg-theme-green-action/20 text-theme-green-action" : "bg-rose-500/20 text-rose-300"
+      }`}
+    >
+      {active ? "Active" : "Inactive"}
+    </span>
+  );
+}
+
+const SHIFT_OPTIONS = ["-", "Shift A", "Shift B"];
+
+const EMPTY_CREATE_FORM = {
+  name: "",
+  email: "",
+  password: "",
+  role: "",
+  shift: "-",
+  is_active: true,
+};
 
 export default function SystemUsersPage() {
-  const [users, setUsers] = useState(SYSTEM_USERS);
+  const [users, setUsers] = useState([]);
+  const [assignableRoles, setAssignableRoles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
   const [q, setQ] = useState("");
   const [editUser, setEditUser] = useState(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState(EMPTY_CREATE_FORM);
+  const [saving, setSaving] = useState(false);
+
+  const loadData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    else setRefreshing(true);
+    setError(null);
+    try {
+      const res = await fetchSystemUsers();
+      setUsers(res.users ?? []);
+      setAssignableRoles(res.assignable_roles ?? []);
+    } catch (err) {
+      setError(err.message || "Failed to load system users.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const filtered = useMemo(() => {
     if (!q.trim()) return users;
     const s = q.toLowerCase();
-    return users.filter((u) => [u.name, u.email, u.role, u.shift].join(" ").toLowerCase().includes(s));
+    return users.filter((user) =>
+      [
+        user.name,
+        user.email,
+        user.role_display_name,
+        user.role,
+        user.shift,
+        user.is_active ? "active" : "inactive",
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(s)
+    );
   }, [users, q]);
 
-  function saveEdit() {
+  function openCreate() {
+    setCreateForm({
+      ...EMPTY_CREATE_FORM,
+      role: assignableRoles[0]?.name || "",
+    });
+    setShowCreate(true);
+  }
+
+  function openEdit(user) {
+    setEditUser({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role || "",
+      shift: user.shift || "-",
+      is_active: user.is_active,
+      password: "",
+    });
+  }
+
+  async function handleCreate() {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await createSystemUser({
+        name: createForm.name,
+        email: createForm.email,
+        password: createForm.password,
+        role: createForm.role,
+        shift: createForm.shift,
+        is_active: createForm.is_active,
+      });
+      setUsers((prev) => [...prev, res.user].sort((a, b) => a.name.localeCompare(b.name)));
+      setShowCreate(false);
+      setCreateForm(EMPTY_CREATE_FORM);
+    } catch (err) {
+      setError(err.message || "Failed to create user.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSave() {
     if (!editUser) return;
-    setUsers((prev) => prev.map((u) => (u.id === editUser.id ? { ...editUser } : u)));
-    setEditUser(null);
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await updateSystemUser(editUser.id, {
+        name: editUser.name,
+        email: editUser.email,
+        role: editUser.role,
+        shift: editUser.shift,
+        is_active: editUser.is_active,
+        password: editUser.password || undefined,
+      });
+      setUsers((prev) => prev.map((u) => (u.id === editUser.id ? res.user : u)));
+      setEditUser(null);
+    } catch (err) {
+      setError(err.message || "Failed to update user.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center text-slate-400">
+        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+        Loading system users…
+      </div>
+    );
   }
 
   return (
@@ -33,110 +183,164 @@ export default function SystemUsersPage() {
         ]}
       />
 
-      <div className="admin-fade-up mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="admin-title">Manage System Users</h1>
-          <p className="admin-subtitle mt-1">Staff accounts grouped by role · shift assignment</p>
+      {error ? (
+        <div className="admin-fade-up mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {error}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[200px] flex-1 sm:flex-none">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search name, email…"
-              className={`${inputCls} pl-9 sm:w-64`}
-            />
-          </div>
-          <Link href="/system/users/new" className="admin-btn-primary">
-            <Plus className="h-4 w-4" />
-            Create System User
-          </Link>
-        </div>
-      </div>
+      ) : null}
 
-      <div className="space-y-5">
-        {SYSTEM_USER_GROUPS.map((group, gi) => {
-          const rows = filtered.filter((u) => u.role === group.key);
-          return (
-            <section
-              key={group.key}
-              className={`admin-card admin-fade-up admin-fade-up-delay-${Math.min(gi + 1, 4)} overflow-visible p-0`}
+      <section className="admin-card admin-fade-up overflow-visible p-0">
+        <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="mr-2 text-xl font-bold text-white sm:text-2xl">Manage System Users</h1>
+            <button
+              type="button"
+              onClick={() => loadData(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
             >
-              <div className="admin-section-bar">
-                <h2 className="title uppercase">{group.title}</h2>
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-slate-400">
+              <Users className="h-3 w-3 text-admin-teal" />
+              {users.length} users
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={openCreate}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-admin-teal px-3.5 py-2 text-xs font-semibold text-white transition hover:brightness-110"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Create System User
+            </button>
+          </div>
+        </div>
+
+        <div className="border-b border-white/10 bg-white/5 px-5 py-4">
+          <div className="grid gap-4 lg:grid-cols-2 lg:items-end">
+            <div>
+              <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                Search
+              </span>
+              <div className="flex overflow-hidden rounded-xl border border-white/10 bg-admin-surface">
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Search name, email, role, status…"
+                  className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-sm text-white outline-none placeholder:text-slate-500"
+                />
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center bg-admin-teal px-4 text-white transition hover:brightness-110"
+                  title="Search"
+                >
+                  <Search className="h-4 w-4" />
+                </button>
               </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-[13px]">
-                  <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
-                    <tr>
-                      <th className="px-4 py-3 font-semibold">Name</th>
-                      <th className="px-4 py-3 font-semibold">Email</th>
-                      <th className="px-4 py-3 font-semibold">Shift</th>
-                      <th className="px-4 py-3 font-semibold">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="px-4 py-8 text-center text-slate-400">
-                          No users
-                        </td>
-                      </tr>
-                    ) : (
-                      rows.map((u, i) => (
-                        <tr
-                          key={u.id}
-                          className={`border-t border-white/10 text-slate-300 transition hover:bg-admin-teal/[0.04] ${
-                            i % 2 === 1 ? "bg-[#F7F8FB]" : "bg-admin-surface"
-                          }`}
-                        >
-                          <td className="px-4 py-3.5 font-medium text-white">
-                            <div className="flex items-center gap-2">
-                              {u.name}
-                              {u.online ? (
-                                <span className="h-1.5 w-1.5 rounded-full bg-theme-green-action" title="Online" />
-                              ) : null}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <CopyCell value={u.email} />
-                          </td>
-                          <td className="px-4 py-3.5 text-slate-500">{u.shift || "—"}</td>
-                          <td className="px-4 py-3.5">
-                            <button
-                              type="button"
-                              onClick={() => setEditUser({ ...u })}
-                              className="rounded-lg border border-white/10 bg-admin-surface p-1.5 text-slate-500 shadow-sm transition hover:border-admin-teal/40 hover:text-admin-teal"
-                              title="Edit"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          );
-        })}
-      </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-[960px] w-full text-left text-[13px]">
+            <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
+              <tr>
+                <th className="px-3 py-3">User</th>
+                <th className="px-3 py-3">Email</th>
+                <th className="px-3 py-3">Role</th>
+                <th className="px-3 py-3">Shift</th>
+                <th className="px-3 py-3">Status</th>
+                <th className="px-3 py-3">Created On</th>
+                <th className="px-3 py-3 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((user) => (
+                <tr
+                  key={user.id}
+                  className="border-t border-white/10 text-slate-300 transition hover:bg-admin-teal/[0.05]"
+                >
+                  <td className="px-3 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-admin-teal/10 text-admin-teal">
+                        <UserRound className="h-3.5 w-3.5" />
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-white">{user.name}</span>
+                        {user.is_online ? (
+                          <span
+                            className="h-1.5 w-1.5 rounded-full bg-theme-green-action"
+                            title="Online"
+                          />
+                        ) : null}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-3 py-3">
+                    <CopyCell value={user.email} />
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className="inline-flex rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs font-medium text-slate-200">
+                      {user.role_display_name}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3 text-slate-400">{user.shift || "—"}</td>
+                  <td className="px-3 py-3">
+                    <StatusBadge active={user.is_active} />
+                  </td>
+                  <td className="px-3 py-3 text-slate-400">
+                    <div className="flex items-center gap-1.5">
+                      <Clock3 className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                      {formatDate(user.created_at)}
+                    </div>
+                  </td>
+                  <td className="px-3 py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => openEdit(user)}
+                      className="inline-flex rounded-lg bg-admin-teal p-1.5 text-white shadow-sm transition hover:brightness-110"
+                      title="Edit user"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-14 text-center text-slate-400">
+                    No results found
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       {editUser ? (
-        <div className="admin-modal-overlay" onClick={() => setEditUser(null)}>
-          <div className="admin-card w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-start justify-between">
+        <div className="admin-modal-overlay" onClick={() => !saving && setEditUser(null)}>
+          <div
+            className="admin-card flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden p-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between border-b border-white/10 px-5 py-4">
               <div>
                 <h3 className="text-lg font-semibold text-white">Edit System User</h3>
-                <p className="mt-1 text-sm text-slate-500">{editUser.role}</p>
+                <p className="mt-1 text-sm text-slate-400">{editUser.email}</p>
               </div>
-              <button type="button" onClick={() => setEditUser(null)} className="text-slate-400 hover:text-slate-200">
+              <button
+                type="button"
+                onClick={() => !saving && setEditUser(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white"
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="space-y-3">
+
+            <div className="min-h-0 flex-1 space-y-4 overflow-auto px-5 py-4">
               <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Name
                 <input
@@ -145,14 +349,43 @@ export default function SystemUsersPage() {
                   className={`mt-1 ${inputCls}`}
                 />
               </label>
+
               <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Email
                 <input
+                  type="email"
                   value={editUser.email}
                   onChange={(e) => setEditUser((u) => ({ ...u, email: e.target.value }))}
                   className={`mt-1 ${inputCls}`}
                 />
               </label>
+
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Password
+                <input
+                  type="password"
+                  value={editUser.password}
+                  onChange={(e) => setEditUser((u) => ({ ...u, password: e.target.value }))}
+                  placeholder="Leave blank to keep current password"
+                  className={`mt-1 ${inputCls}`}
+                />
+              </label>
+
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Role
+                <select
+                  value={editUser.role}
+                  onChange={(e) => setEditUser((u) => ({ ...u, role: e.target.value }))}
+                  className={`mt-1 ${inputCls}`}
+                >
+                  {assignableRoles.map((role) => (
+                    <option key={role.name} value={role.name} className="bg-admin-surface">
+                      {role.display_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Shift
                 <select
@@ -160,21 +393,182 @@ export default function SystemUsersPage() {
                   onChange={(e) => setEditUser((u) => ({ ...u, shift: e.target.value }))}
                   className={`mt-1 ${inputCls}`}
                 >
-                  {["-", "Shift A", "Shift B"].map((s) => (
-                    <option key={s} value={s}>
-                      {s}
+                  {SHIFT_OPTIONS.map((shift) => (
+                    <option key={shift} value={shift} className="bg-admin-surface">
+                      {shift}
                     </option>
                   ))}
                 </select>
               </label>
+
+              <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+                <div>
+                  <span className="block text-sm font-medium text-slate-200">Account status</span>
+                  <span className="block text-xs text-slate-500">
+                    Inactive users cannot log in to the admin portal.
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={editUser.is_active}
+                  onChange={(e) =>
+                    setEditUser((u) => ({ ...u, is_active: e.target.checked }))
+                  }
+                  className="h-4 w-4 rounded border-white/20"
+                />
+              </label>
             </div>
-            <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setEditUser(null)} className="admin-btn-secondary">
-                Cancel
+
+            <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4">
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditUser(null)}
+                  disabled={saving}
+                  className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-slate-400"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showCreate ? (
+        <div className="admin-modal-overlay" onClick={() => !saving && setShowCreate(false)}>
+          <div
+            className="admin-card flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden p-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between border-b border-white/10 px-5 py-4">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Create System User</h3>
+                <p className="mt-1 text-sm text-slate-400">Add a new staff account to the admin portal.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => !saving && setShowCreate(false)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white"
+              >
+                <X className="h-4 w-4" />
               </button>
-              <button type="button" onClick={saveEdit} className="admin-btn-primary">
-                Save
-              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 space-y-4 overflow-auto px-5 py-4">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Name
+                <input
+                  value={createForm.name}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
+                  className={`mt-1 ${inputCls}`}
+                />
+              </label>
+
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Email
+                <input
+                  type="email"
+                  value={createForm.email}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
+                  className={`mt-1 ${inputCls}`}
+                />
+              </label>
+
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Password
+                <input
+                  type="password"
+                  value={createForm.password}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
+                  placeholder="Minimum 6 characters"
+                  className={`mt-1 ${inputCls}`}
+                />
+              </label>
+
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Role
+                <select
+                  value={createForm.role}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value }))}
+                  className={`mt-1 ${inputCls}`}
+                >
+                  {assignableRoles.map((role) => (
+                    <option key={role.name} value={role.name} className="bg-admin-surface">
+                      {role.display_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Shift
+                <select
+                  value={createForm.shift}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, shift: e.target.value }))}
+                  className={`mt-1 ${inputCls}`}
+                >
+                  {SHIFT_OPTIONS.map((shift) => (
+                    <option key={shift} value={shift} className="bg-admin-surface">
+                      {shift}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+                <div>
+                  <span className="block text-sm font-medium text-slate-200">Account status</span>
+                  <span className="block text-xs text-slate-500">
+                    Inactive users cannot log in to the admin portal.
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={createForm.is_active}
+                  onChange={(e) =>
+                    setCreateForm((f) => ({ ...f, is_active: e.target.checked }))
+                  }
+                  className="h-4 w-4 rounded border-white/20"
+                />
+              </label>
+            </div>
+
+            <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4">
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreate(false)}
+                  disabled={saving}
+                  className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-slate-400"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreate}
+                  disabled={
+                    saving ||
+                    !createForm.name.trim() ||
+                    !createForm.email.trim() ||
+                    !createForm.password.trim() ||
+                    !createForm.role
+                  }
+                  className="inline-flex items-center gap-2 rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Create User
+                </button>
+              </div>
             </div>
           </div>
         </div>
