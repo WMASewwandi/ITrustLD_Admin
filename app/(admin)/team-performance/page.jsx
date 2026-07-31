@@ -1,15 +1,16 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Breadcrumb from "@/components/admin/breadcrumb";
-import { SYSTEM_USERS } from "@/lib/mock-data";
+import { fetchSystemUsers } from "@/lib/system-users";
 import {
   ArrowUpRight,
   ChevronDown,
   ChevronRight,
   Circle,
   Crown,
+  Loader2,
   Percent,
   Target,
   TrendingUp,
@@ -26,7 +27,7 @@ const TEAM_AGGREGATE = {
 };
 
 const MEMBER_STATS = {
-  "SU-1": {
+  1: {
     handled: { Daily: 8, Weekly: 52, Monthly: 218 },
     success: { Daily: 98, Weekly: 97, Monthly: 96 },
     commission: { Daily: 240, Weekly: 1560, Monthly: 6520 },
@@ -34,7 +35,7 @@ const MEMBER_STATS = {
     shift: "—",
     lastActive: "Online now",
   },
-  "SU-2": {
+  2: {
     handled: { Daily: 6, Weekly: 38, Monthly: 164 },
     success: { Daily: 95, Weekly: 94, Monthly: 93 },
     commission: { Daily: 180, Weekly: 1140, Monthly: 4920 },
@@ -42,7 +43,7 @@ const MEMBER_STATS = {
     shift: "—",
     lastActive: "2h ago",
   },
-  "SU-3": {
+  16405: {
     handled: { Daily: 32, Weekly: 198, Monthly: 812 },
     success: { Daily: 94, Weekly: 93, Monthly: 92 },
     commission: { Daily: 960, Weekly: 5940, Monthly: 24360 },
@@ -50,7 +51,7 @@ const MEMBER_STATS = {
     shift: "Shift B",
     lastActive: "Online now",
   },
-  "SU-4": {
+  16407: {
     handled: { Daily: 28, Weekly: 176, Monthly: 724 },
     success: { Daily: 91, Weekly: 90, Monthly: 89 },
     commission: { Daily: 840, Weekly: 5280, Monthly: 21720 },
@@ -58,7 +59,7 @@ const MEMBER_STATS = {
     shift: "Shift B",
     lastActive: "45m ago",
   },
-  "SU-5": {
+  16409: {
     handled: { Daily: 44, Weekly: 278, Monthly: 1146 },
     success: { Daily: 96, Weekly: 95, Monthly: 94 },
     commission: { Daily: 1320, Weekly: 8340, Monthly: 34380 },
@@ -66,6 +67,15 @@ const MEMBER_STATS = {
     shift: "Shift B",
     lastActive: "Online now",
   },
+};
+
+const DEFAULT_MEMBER_STATS = {
+  handled: { Daily: 12, Weekly: 84, Monthly: 336 },
+  success: { Daily: 92, Weekly: 91, Monthly: 90 },
+  commission: { Daily: 360, Weekly: 2520, Monthly: 10080 },
+  breakdown: { deposits: 65, withdrawals: 28, loyalty: 7 },
+  shift: "—",
+  lastActive: "—",
 };
 
 function formatCommission(amount, period) {
@@ -165,28 +175,59 @@ function CommissionBar({ members, period }) {
 export default function TeamPerformancePage() {
   const [period, setPeriod] = useState("Weekly");
   const [expanded, setExpanded] = useState(null);
+  const [systemUsers, setSystemUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+
+  const loadUsers = useCallback(async () => {
+    setLoadingUsers(true);
+    try {
+      const res = await fetchSystemUsers();
+      setSystemUsers(res.users ?? []);
+    } catch {
+      setSystemUsers([]);
+    } finally {
+      setLoadingUsers(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
 
   const aggregate = TEAM_AGGREGATE[period];
 
   const members = useMemo(() => {
-    return SYSTEM_USERS.map((u) => {
-      const stats = MEMBER_STATS[u.id] || MEMBER_STATS["SU-3"];
+    return systemUsers.map((u) => {
+      const stats = MEMBER_STATS[u.id] || DEFAULT_MEMBER_STATS;
       return {
-        ...u,
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role_display_name || u.role,
+        online: u.is_online,
         handled: stats.handled[period],
         success: stats.success[period],
         commission: stats.commission[period],
         breakdown: stats.breakdown,
-        shift: stats.shift || u.shift,
-        lastActive: stats.lastActive,
+        shift: stats.shift || u.shift || "—",
+        lastActive: u.is_online ? "Online now" : stats.lastActive,
       };
     }).sort((a, b) => b.commission - a.commission);
-  }, [period]);
+  }, [period, systemUsers]);
 
   const topPerformer = members[0];
 
   function toggleRow(id) {
     setExpanded((prev) => (prev === id ? null : id));
+  }
+
+  if (loadingUsers) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center text-slate-400">
+        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+        Loading team members…
+      </div>
+    );
   }
 
   return (

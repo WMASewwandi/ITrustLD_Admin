@@ -1,12 +1,12 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectModal from "@/components/admin/reject-modal";
 import RejectReasonPanel from "@/components/admin/reject-reason-panel";
 import CopyCell, { FilterField, inputCls } from "@/components/admin/queue-ui";
-import { fetchCustomers, updateCustomerEmail, fetchCustomerKycDocuments, fetchKycDocumentBlob, approveCustomerKyc, rejectCustomerKyc } from "@/lib/customers";
+import { fetchCustomers, updateCustomerEmail, fetchCustomerKycDocuments, fetchKycDocumentBlob, approveCustomerKyc, rejectCustomerKyc, banCustomer, unbanCustomer, banMultipleCustomers, updateCustomerPartner, sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
 import { useCan } from "@/contexts/admin-permissions";
 import {
   Ban,
@@ -17,6 +17,8 @@ import {
   FileImage,
   FileText,
   Loader2,
+  Mail,
+  MessageSquare,
   Pencil,
   Search,
   X,
@@ -33,6 +35,13 @@ const FILTERS = [
   { value: "only-nic", label: "Only NIC Verified" },
   { value: "banned", label: "Banned Customers" },
 ];
+
+const FILTER_VALUES = new Set(FILTERS.map((f) => f.value));
+
+function resolveFilter(searchParams) {
+  const value = searchParams.get("filter") || "pending";
+  return FILTER_VALUES.has(value) ? value : "pending";
+}
 
 function isPartnerValue(value) {
   return String(value).toLowerCase() === "yes" || value === "Affiliate";
@@ -188,6 +197,108 @@ function EmailEditModal({ open, user, value, saving, error, onChange, onClose, o
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             Save email
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmailSendModal({ open, receivers, subject, body, attachment, saving, error, onChange, onClose, onSend }) {
+  if (!open) return null;
+  return (
+    <div className="admin-modal-overlay z-[80]" onClick={onClose}>
+      <div className="admin-card w-full max-w-lg p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-white">Send Email</h3>
+            <p className="mt-1 text-sm text-slate-400">Compose a message to selected customer(s).</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-500 hover:bg-white/10 hover:text-slate-200">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <label className="mb-3 block">
+          <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">To</span>
+          <input value={receivers} onChange={(e) => onChange({ receivers: e.target.value })} className={inputCls} />
+        </label>
+        <label className="mb-3 block">
+          <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Subject</span>
+          <input value={subject} onChange={(e) => onChange({ subject: e.target.value })} className={inputCls} />
+        </label>
+        <label className="mb-3 block">
+          <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Attachment</span>
+          <input
+            type="file"
+            onChange={(e) => onChange({ attachment: e.target.files?.[0] || null })}
+            className="block w-full text-sm text-slate-400 file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:text-white"
+          />
+        </label>
+        <label className="mb-3 block">
+          <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Message</span>
+          <textarea
+            value={body}
+            onChange={(e) => onChange({ body: e.target.value })}
+            rows={5}
+            className={`${inputCls} resize-y`}
+          />
+        </label>
+        {error ? <p className="mb-3 text-xs text-rose-300">{error}</p> : null}
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="admin-btn-secondary" disabled={saving}>Cancel</button>
+          <button
+            type="button"
+            onClick={onSend}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-xl bg-admin-teal px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+            Send
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SmsSendModal({ open, receivers, message, saving, error, onChange, onClose, onSend }) {
+  if (!open) return null;
+  return (
+    <div className="admin-modal-overlay z-[80]" onClick={onClose}>
+      <div className="admin-card w-full max-w-lg p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-white">Send SMS</h3>
+            <p className="mt-1 text-sm text-slate-400">Comma-separated mobile numbers.</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-500 hover:bg-white/10 hover:text-slate-200">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <label className="mb-3 block">
+          <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">To</span>
+          <input value={receivers} onChange={(e) => onChange({ receivers: e.target.value })} className={inputCls} />
+        </label>
+        <label className="mb-3 block">
+          <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Message</span>
+          <textarea
+            value={message}
+            onChange={(e) => onChange({ message: e.target.value })}
+            rows={4}
+            className={`${inputCls} resize-y`}
+          />
+        </label>
+        {error ? <p className="mb-3 text-xs text-rose-300">{error}</p> : null}
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="admin-btn-secondary" disabled={saving}>Cancel</button>
+          <button
+            type="button"
+            onClick={onSend}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-xl bg-admin-teal px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
+            Send
           </button>
         </div>
       </div>
@@ -453,10 +564,13 @@ function KycDocsModal({ open, user, field, canActOnKyc, onClose, onApprove, onRe
 }
 
 function UsersContent() {
+  const router = useRouter();
   const params = useSearchParams();
+  const filter = useMemo(() => resolveFilter(params), [params]);
   const canEditEmail = useCan("change_customer_account_status");
   const canActOnKyc = useCan("change_customer_account_status");
-  const [filter, setFilter] = useState(params.get("filter") || "pending");
+  const canCommunicate = useCan("comunicatte_to_customer");
+  const canBan = useCan("change_customer_account_status");
   const [q, setQ] = useState("");
   const [email, setEmail] = useState("");
   const [accountId, setAccountId] = useState("");
@@ -473,9 +587,21 @@ function UsersContent() {
   const [partnerConfirm, setPartnerConfirm] = useState(null);
   const [kycDocs, setKycDocs] = useState(null);
   const [emailEdit, setEmailEdit] = useState(null);
-  const [emailDraft, setEmailDraft] = useState("");
+  const [emailEditDraft, setEmailEditDraft] = useState("");
   const [emailEditError, setEmailEditError] = useState("");
   const [emailSaving, setEmailSaving] = useState(false);
+  const [unbanTarget, setUnbanTarget] = useState(null);
+  const [bulkBanOpen, setBulkBanOpen] = useState(false);
+  const [bulkBanning, setBulkBanning] = useState(false);
+  const [emailModal, setEmailModal] = useState(null);
+  const [emailCompose, setEmailCompose] = useState({ receivers: "", subject: "", body: "", attachment: null });
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailSendError, setEmailSendError] = useState("");
+  const [smsModal, setSmsModal] = useState(false);
+  const [smsDraft, setSmsDraft] = useState({ receivers: "", message: "" });
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsSendError, setSmsSendError] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
 
   const showEmailEdit = filter === "all" && canEditEmail;
 
@@ -501,9 +627,8 @@ function UsersContent() {
   }, [filter, applied]);
 
   useEffect(() => {
-    setFilter(params.get("filter") || "pending");
     setPage(1);
-  }, [params]);
+  }, [filter]);
 
   useEffect(() => {
     loadCustomers();
@@ -526,6 +651,14 @@ function UsersContent() {
   const start = (page - 1) * perPage;
   const shown = filtered.slice(start, start + perPage);
 
+  function changeFilter(nextFilter) {
+    const next = new URLSearchParams(params.toString());
+    next.set("filter", nextFilter);
+    router.push(`/users?${next.toString()}`);
+    setPage(1);
+    setSelected([]);
+  }
+
   function runSearch() {
     setApplied({ email, accountId, firstName, lastName });
     setPage(1);
@@ -533,19 +666,19 @@ function UsersContent() {
 
   function openEmailEdit(user) {
     setEmailEdit(user);
-    setEmailDraft(user.email || "");
+    setEmailEditDraft(user.email || "");
     setEmailEditError("");
   }
 
   function closeEmailEdit() {
     setEmailEdit(null);
-    setEmailDraft("");
+    setEmailEditDraft("");
     setEmailEditError("");
     setEmailSaving(false);
   }
 
   async function saveEmailEdit() {
-    const nextEmail = emailDraft.trim();
+    const nextEmail = emailEditDraft.trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
       setEmailEditError("Enter a valid email address.");
       return;
@@ -592,6 +725,114 @@ function UsersContent() {
     setKycDocs(null);
   }
 
+  async function handleBanCustomer(userId, reason) {
+    const user = rows.find((row) => row.id === userId);
+    if (!user) return;
+    const res = await banCustomer(user.accountHolderId, reason);
+    updateCustomerRow(res.customer);
+    setBanOpen(null);
+    setActionMessage(res.message || "Customer banned.");
+  }
+
+  async function handleUnbanCustomer(user) {
+    const res = await unbanCustomer(user.accountHolderId);
+    updateCustomerRow(res.customer);
+    setUnbanTarget(null);
+    setActionMessage(res.message || "Customer unbanned.");
+  }
+
+  async function handleBulkBan() {
+    const accountHolderIds = rows
+      .filter((row) => selected.includes(row.id))
+      .map((row) => row.accountHolderId);
+    if (!accountHolderIds.length) return;
+
+    setBulkBanning(true);
+    try {
+      const res = await banMultipleCustomers(accountHolderIds);
+      const updatedById = new Map((res.customers || []).map((customer) => [customer.id, customer]));
+      setRows((prev) => prev.map((row) => updatedById.get(row.id) || row));
+      setSelected([]);
+      setBulkBanOpen(false);
+      setActionMessage(res.message || "Customers banned.");
+    } catch (err) {
+      setError(err.message || "Failed to ban selected customers.");
+      setBulkBanOpen(false);
+    } finally {
+      setBulkBanning(false);
+    }
+  }
+
+  function openEmailModalForUsers(users) {
+    const list = Array.isArray(users) ? users : [users];
+    setEmailCompose({
+      receivers: list.map((user) => user.email).filter(Boolean).join(","),
+      subject: "",
+      body: "",
+      attachment: null,
+    });
+    setEmailSendError("");
+    setEmailModal(list);
+  }
+
+  function openSmsModalForUsers(users) {
+    const list = Array.isArray(users) ? users : [users];
+    setSmsDraft({
+      receivers: list.map((user) => user.mobile).filter(Boolean).join(","),
+      message: "",
+    });
+    setSmsSendError("");
+    setSmsModal(true);
+  }
+
+  async function handleSendEmail() {
+    setEmailSending(true);
+    setEmailSendError("");
+    try {
+      const res = await sendCustomerEmail({
+        receivers: emailCompose.receivers,
+        subject: emailCompose.subject,
+        body: emailCompose.body,
+        attachment: emailCompose.attachment,
+      });
+      setEmailModal(null);
+      setActionMessage(res.message || "Email sent.");
+    } catch (err) {
+      setEmailSendError(err.message || "Failed to send email.");
+    } finally {
+      setEmailSending(false);
+    }
+  }
+
+  async function handleSendSms() {
+    setSmsSending(true);
+    setSmsSendError("");
+    try {
+      const res = await sendCustomerSms({
+        mobileNumbers: smsDraft.receivers,
+        message: smsDraft.message,
+      });
+      setSmsModal(false);
+      setActionMessage(res.message || "SMS sent.");
+    } catch (err) {
+      setSmsSendError(err.message || "Failed to send SMS.");
+    } finally {
+      setSmsSending(false);
+    }
+  }
+
+  async function handlePartnerChange() {
+    if (!partnerConfirm) return;
+    const user = rows.find((row) => row.id === partnerConfirm.id);
+    if (!user) return;
+    const res = await updateCustomerPartner(
+      user.accountHolderId,
+      partnerConfirm.next === "Yes"
+    );
+    updateCustomerRow(res.customer);
+    setPartnerConfirm(null);
+  }
+
   if (loading && rows.length === 0) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center text-slate-400">
@@ -604,6 +845,12 @@ function UsersContent() {
   return (
     <div>
       <Breadcrumb items={[{ label: "User Management", href: "/users?filter=pending" }, { label: title }]} />
+
+      {actionMessage ? (
+        <div className="admin-card mb-4 border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+          {actionMessage}
+        </div>
+      ) : null}
 
       {error ? (
         <div className="admin-card mb-4 border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
@@ -626,10 +873,7 @@ function UsersContent() {
               </span>
               <select
                 value={filter}
-                onChange={(e) => {
-                  setFilter(e.target.value);
-                  setPage(1);
-                }}
+                onChange={(e) => changeFilter(e.target.value)}
                 className={inputCls}
               >
                 {FILTERS.map((f) => (
@@ -690,24 +934,56 @@ function UsersContent() {
         </div>
 
         <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <label className="inline-flex items-center gap-2 text-xs text-slate-500">
-            Show
-            <select
-              value={perPage}
-              onChange={(e) => {
-                setPerPage(Number(e.target.value));
-                setPage(1);
-              }}
-              className="rounded-lg border border-white/10 bg-admin-surface px-2 py-1.5 text-xs text-white"
-            >
-              {[10, 25, 50, 100].map((n) => (
-                <option key={n} value={n} className="bg-admin-surface">
-                  {n}
-                </option>
-              ))}
-            </select>
-            entries
-          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-2 text-xs text-slate-500">
+              Show
+              <select
+                value={perPage}
+                onChange={(e) => {
+                  setPerPage(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="rounded-lg border border-white/10 bg-admin-surface px-2 py-1.5 text-xs text-white"
+              >
+                {[10, 25, 50, 100].map((n) => (
+                  <option key={n} value={n} className="bg-admin-surface">
+                    {n}
+                  </option>
+                ))}
+              </select>
+              entries
+            </label>
+            {selected.length > 0 && canBan ? (
+              <button
+                type="button"
+                onClick={() => setBulkBanOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20"
+              >
+                <Ban className="h-3.5 w-3.5" />
+                Ban ({selected.length})
+              </button>
+            ) : null}
+            {selected.length > 0 && canCommunicate ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => openEmailModalForUsers(rows.filter((row) => selected.includes(row.id)))}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-[#134B52] px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110"
+                >
+                  <Mail className="h-3.5 w-3.5" />
+                  Email ({selected.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openSmsModalForUsers(rows.filter((row) => selected.includes(row.id)))}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-[#134B52] px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110"
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  SMS ({selected.length})
+                </button>
+              </>
+            ) : null}
+          </div>
           <div className="relative w-full sm:max-w-xs">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <input
@@ -762,7 +1038,7 @@ function UsersContent() {
                     />
                   </td>
                   <td className="px-3 py-3">
-                    <CopyCell value={u.accountId} sub={u.id} />
+                    <CopyCell value={u.accountId} />
                   </td>
                   <td className="px-3 py-3 font-medium text-white">{u.name}</td>
                   <td className="px-3 py-3">
@@ -816,6 +1092,7 @@ function UsersContent() {
                     <div className="flex gap-1.5">
                       <button
                         type="button"
+                        onClick={() => setKycDocs({ user: u, field: "nic" })}
                         className="rounded-lg border border-white/10 p-1.5 text-slate-500 transition hover:border-admin-teal/40 hover:text-white"
                         title="View profile"
                       >
@@ -834,14 +1111,23 @@ function UsersContent() {
                       ) : (
                         <button
                           type="button"
-                          disabled
-                          className="inline-flex cursor-default items-center gap-1 rounded-lg border border-rose-400/30 px-2 py-1 text-xs text-rose-300"
-                          title={u.banReason || "Banned"}
+                          onClick={() => setUnbanTarget(u)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-emerald-400/30 px-2 py-1 text-xs text-emerald-300 transition hover:bg-emerald-500/10"
+                          title={u.banReason || "Unban user"}
                         >
-                          <Ban className="h-3.5 w-3.5" />
-                          Ban
+                          Unban
                         </button>
                       )}
+                      {canCommunicate ? (
+                        <button
+                          type="button"
+                          onClick={() => openEmailModalForUsers(u)}
+                          className="rounded-lg border border-white/10 p-1.5 text-slate-500 transition hover:border-admin-teal/40 hover:text-white"
+                          title="Send email"
+                        >
+                          <Mail className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -901,6 +1187,53 @@ function UsersContent() {
       </section>
 
       <ConfirmModal
+        open={!!unbanTarget}
+        title="Unban customer"
+        message={unbanTarget ? `Restore access for ${unbanTarget.name}?` : ""}
+        confirmLabel="Unban"
+        onClose={() => setUnbanTarget(null)}
+        onConfirm={() => {
+          handleUnbanCustomer(unbanTarget).catch((err) => {
+            setError(err.message || "Failed to unban customer.");
+            setUnbanTarget(null);
+          });
+        }}
+      />
+
+      <ConfirmModal
+        open={bulkBanOpen}
+        title="Ban selected customers"
+        message={`Ban ${selected.length} selected customer(s)? This does not require a reason for bulk actions.`}
+        confirmLabel={bulkBanning ? "Banning…" : "Ban selected"}
+        onClose={() => setBulkBanOpen(false)}
+        onConfirm={handleBulkBan}
+      />
+
+      <EmailSendModal
+        open={!!emailModal}
+        receivers={emailCompose.receivers}
+        subject={emailCompose.subject}
+        body={emailCompose.body}
+        attachment={emailCompose.attachment}
+        saving={emailSending}
+        error={emailSendError}
+        onChange={(patch) => setEmailCompose((prev) => ({ ...prev, ...patch }))}
+        onClose={() => setEmailModal(null)}
+        onSend={handleSendEmail}
+      />
+
+      <SmsSendModal
+        open={smsModal}
+        receivers={smsDraft.receivers}
+        message={smsDraft.message}
+        saving={smsSending}
+        error={smsSendError}
+        onChange={(patch) => setSmsDraft((prev) => ({ ...prev, ...patch }))}
+        onClose={() => setSmsModal(false)}
+        onSend={handleSendSms}
+      />
+
+      <ConfirmModal
         open={!!partnerConfirm}
         title="Confirm partner status"
         message={
@@ -910,14 +1243,7 @@ function UsersContent() {
         }
         confirmLabel={`Set to ${partnerConfirm?.next || "Yes"}`}
         onClose={() => setPartnerConfirm(null)}
-        onConfirm={() => {
-          setRows((prev) =>
-            prev.map((u) =>
-              u.id === partnerConfirm.id ? { ...u, partner: partnerConfirm.next } : u
-            )
-          );
-          setPartnerConfirm(null);
-        }}
+        onConfirm={handlePartnerChange}
       />
 
       <RejectModal
@@ -925,22 +1251,20 @@ function UsersContent() {
         title="Ban customer"
         onClose={() => setBanOpen(null)}
         onConfirm={(reason) => {
-          setRows((prev) =>
-            prev.map((u) =>
-              u.id === banOpen ? { ...u, banned: true, status: "Banned", banReason: reason } : u
-            )
-          );
-          setBanOpen(null);
+          handleBanCustomer(banOpen, reason).catch((err) => {
+            setError(err.message || "Failed to ban customer.");
+            setBanOpen(null);
+          });
         }}
       />
 
       <EmailEditModal
         open={!!emailEdit}
         user={emailEdit}
-        value={emailDraft}
+        value={emailEditDraft}
         saving={emailSaving}
         error={emailEditError}
-        onChange={setEmailDraft}
+        onChange={setEmailEditDraft}
         onClose={closeEmailEdit}
         onSave={saveEmailEdit}
       />
