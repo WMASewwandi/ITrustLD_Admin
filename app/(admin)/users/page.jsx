@@ -1,12 +1,13 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectModal from "@/components/admin/reject-modal";
 import RejectReasonPanel from "@/components/admin/reject-reason-panel";
 import CopyCell, { FilterField, inputCls } from "@/components/admin/queue-ui";
-import { getKycDocuments, USERS } from "@/lib/mock-data";
+import { fetchCustomers, updateCustomerEmail, fetchCustomerKycDocuments, fetchKycDocumentBlob, approveCustomerKyc, rejectCustomerKyc } from "@/lib/customers";
+import { useCan } from "@/contexts/admin-permissions";
 import {
   Ban,
   Check,
@@ -15,6 +16,8 @@ import {
   Eye,
   FileImage,
   FileText,
+  Loader2,
+  Pencil,
   Search,
   X,
 } from "lucide-react";
@@ -23,6 +26,7 @@ const FILTERS = [
   { value: "all", label: "All Users" },
   { value: "pending", label: "All Pending Users" },
   { value: "address-pending", label: "Address Pending" },
+  { value: "nic-pending", label: "NIC Verification Pending" },
   { value: "self-verified", label: "Self-verification Done" },
   { value: "not-confirmed", label: "Not Confirmed" },
   { value: "only-address", label: "Only Address Verified" },
@@ -128,28 +132,145 @@ function ConfirmModal({ open, title, message, confirmLabel = "Confirm", onClose,
   );
 }
 
-function KycDocsModal({ open, user, field, onClose, onApprove, onReject }) {
-  const docs = open && user ? getKycDocuments(user, field) : [];
+function EmailEditModal({ open, user, value, saving, error, onChange, onClose, onSave }) {
+  if (!open || !user) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="admin-card w-full max-w-md rounded-t-2xl rounded-b-none p-5 shadow-2xl sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex justify-center sm:hidden">
+          <span className="h-1 w-10 rounded-full bg-white/20" />
+        </div>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-white">Edit email</h3>
+            <p className="mt-1 text-sm text-slate-400">
+              {user.name} · {user.accountId}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1 text-slate-500 hover:bg-white/10 hover:text-slate-200"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <label className="block">
+          <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            Email address
+          </span>
+          <input
+            type="email"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="customer@email.com"
+            className={inputCls}
+            autoFocus
+          />
+        </label>
+        {error ? <p className="mt-2 text-xs text-rose-300">{error}</p> : null}
+        <div className="mt-5 flex justify-end gap-2 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+          <button type="button" onClick={onClose} className="admin-btn-secondary" disabled={saving}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-xl bg-admin-teal px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Save email
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function KycDocsModal({ open, user, field, canActOnKyc, onClose, onApprove, onReject }) {
+  const [docs, setDocs] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [acting, setActing] = useState(false);
+  const [error, setError] = useState("");
+  const [previewUrl, setPreviewUrl] = useState("");
   const active = docs.find((d) => d.id === activeId) || docs[0];
   const label = field === "nic" ? "NIC" : "Address";
   const status = user?.[field];
-  // Pending: both · Rejected: approve only · Verified: reject only
-  const canApprove = status === "Pending" || status === "Rejected";
-  const canReject = status === "Pending" || status === "Verified";
+  const canApprove = canActOnKyc && (status === "Pending" || status === "Rejected");
+  const canReject = canActOnKyc && (status === "Pending" || status === "Verified");
   const canAct = canApprove || canReject;
 
   useEffect(() => {
-    if (!open || !user) {
+    if (!open || !user?.accountHolderId || !field) {
+      setDocs([]);
       setActiveId(null);
       setRejectOpen(false);
+      setError("");
       return;
     }
-    const first = getKycDocuments(user, field)[0];
-    setActiveId(first?.id ?? null);
-    setRejectOpen(false);
-  }, [open, user, field]);
+
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+
+    fetchCustomerKycDocuments(user.accountHolderId, field)
+      .then((res) => {
+        if (cancelled) return;
+        const nextDocs = res.documents ?? [];
+        setDocs(nextDocs);
+        setActiveId(nextDocs[0]?.id ?? null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setDocs([]);
+        setActiveId(null);
+        setError(err.message || "Failed to load documents.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, user?.accountHolderId, field]);
+
+  useEffect(() => {
+    if (!open || !active?.filename) {
+      setPreviewUrl("");
+      return;
+    }
+
+    let cancelled = false;
+    let objectUrl = "";
+
+    fetchKycDocumentBlob(active.filename)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPreviewUrl(objectUrl);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setPreviewUrl("");
+        setError(err.message || "Failed to load document preview.");
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [open, active?.filename]);
 
   if (!open || !user) return null;
 
@@ -176,7 +297,12 @@ function KycDocsModal({ open, user, field, onClose, onApprove, onReject }) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
-          {docs.length === 0 ? (
+          {loading ? (
+            <div className="flex h-40 items-center justify-center text-sm text-slate-400">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Loading documents…
+            </div>
+          ) : docs.length === 0 ? (
             <div className="flex h-40 flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 text-sm text-slate-400">
               <FileText className="mb-2 h-8 w-8 opacity-50" />
               No documents uploaded
@@ -190,15 +316,23 @@ function KycDocsModal({ open, user, field, onClose, onApprove, onReject }) {
                     {active?.kind} · Uploaded {active?.uploadedAt}
                   </p>
                 </div>
-                <div className="flex min-h-[200px] items-center justify-center bg-gradient-to-b from-white/[0.04] to-transparent p-6">
-                  <div className="flex w-full max-w-xs flex-col items-center rounded-lg border border-slate-300/30 bg-[#f8fafc] p-6 text-center text-slate-800 shadow-lg">
-                    <FileImage className="mb-2 h-10 w-10 text-slate-400" />
-                    <p className="text-sm font-bold text-slate-900">{active?.kind}</p>
-                    <p className="mt-1 text-xs text-slate-500">{active?.name}</p>
-                    <p className="mt-3 rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700">
-                      Customer upload — read only
-                    </p>
-                  </div>
+                <div className="flex min-h-[240px] items-center justify-center bg-gradient-to-b from-white/[0.04] to-transparent p-4">
+                  {previewUrl ? (
+                    <img
+                      src={previewUrl}
+                      alt={active?.kind || "Document preview"}
+                      className="max-h-[360px] w-full rounded-lg object-contain"
+                    />
+                  ) : (
+                    <div className="flex w-full max-w-xs flex-col items-center rounded-lg border border-slate-300/30 bg-[#f8fafc] p-6 text-center text-slate-800 shadow-lg">
+                      <FileImage className="mb-2 h-10 w-10 text-slate-400" />
+                      <p className="text-sm font-bold text-slate-900">{active?.kind}</p>
+                      <p className="mt-1 text-xs text-slate-500">{active?.name}</p>
+                      <p className="mt-3 rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700">
+                        Loading preview…
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-2">
@@ -234,6 +368,7 @@ function KycDocsModal({ open, user, field, onClose, onApprove, onReject }) {
               </div>
             </div>
           )}
+          {error ? <p className="mt-3 text-sm text-rose-300">{error}</p> : null}
         </div>
 
         <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4">
@@ -254,7 +389,8 @@ function KycDocsModal({ open, user, field, onClose, onApprove, onReject }) {
                   <button
                     type="button"
                     onClick={() => setRejectOpen((v) => !v)}
-                    className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${
+                    disabled={acting}
+                    className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 ${
                       rejectOpen
                         ? "border-rose-400/60 bg-rose-500/25 text-rose-200"
                         : "border-rose-400/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
@@ -267,10 +403,21 @@ function KycDocsModal({ open, user, field, onClose, onApprove, onReject }) {
                 {canApprove ? (
                   <button
                     type="button"
-                    onClick={onApprove}
-                    className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110"
+                    disabled={acting}
+                    onClick={async () => {
+                      setActing(true);
+                      setError("");
+                      try {
+                        await onApprove?.();
+                      } catch (err) {
+                        setError(err.message || "Failed to approve.");
+                      } finally {
+                        setActing(false);
+                      }
+                    }}
+                    className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
                   >
-                    <Check className="h-4 w-4" />
+                    {acting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                     Approve
                   </button>
                 ) : null}
@@ -285,9 +432,17 @@ function KycDocsModal({ open, user, field, onClose, onApprove, onReject }) {
             <RejectReasonPanel
               className="mt-3"
               onCancel={() => setRejectOpen(false)}
-              onConfirm={(reason) => {
+              onConfirm={async (reason) => {
                 setRejectOpen(false);
-                onReject?.(reason);
+                setActing(true);
+                setError("");
+                try {
+                  await onReject?.(reason);
+                } catch (err) {
+                  setError(err.message || "Failed to reject.");
+                } finally {
+                  setActing(false);
+                }
               }}
             />
           ) : null}
@@ -299,6 +454,8 @@ function KycDocsModal({ open, user, field, onClose, onApprove, onReject }) {
 
 function UsersContent() {
   const params = useSearchParams();
+  const canEditEmail = useCan("change_customer_account_status");
+  const canActOnKyc = useCan("change_customer_account_status");
   const [filter, setFilter] = useState(params.get("filter") || "pending");
   const [q, setQ] = useState("");
   const [email, setEmail] = useState("");
@@ -309,49 +466,61 @@ function UsersContent() {
   const [perPage, setPerPage] = useState(10);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState([]);
-  const [rows, setRows] = useState(USERS);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [banOpen, setBanOpen] = useState(null);
   const [partnerConfirm, setPartnerConfirm] = useState(null);
   const [kycDocs, setKycDocs] = useState(null);
+  const [emailEdit, setEmailEdit] = useState(null);
+  const [emailDraft, setEmailDraft] = useState("");
+  const [emailEditError, setEmailEditError] = useState("");
+  const [emailSaving, setEmailSaving] = useState(false);
+
+  const showEmailEdit = filter === "all" && canEditEmail;
+
+  const loadCustomers = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetchCustomers({
+        filter,
+        email: applied.email || undefined,
+        accountId: applied.accountId || undefined,
+        firstName: applied.firstName || undefined,
+        lastName: applied.lastName || undefined,
+      });
+      setRows(res.customers ?? []);
+      setSelected([]);
+    } catch (err) {
+      setError(err.message || "Failed to load customers.");
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filter, applied]);
 
   useEffect(() => {
     setFilter(params.get("filter") || "pending");
     setPage(1);
   }, [params]);
 
+  useEffect(() => {
+    loadCustomers();
+  }, [loadCustomers]);
+
   const title = FILTERS.find((f) => f.value === filter)?.label || "Users";
 
   const filtered = useMemo(() => {
-    return rows
-      .filter((u) => {
-        if (filter === "pending") {
-          return (
-            !u.banned &&
-            (u.status === "Pending" ||
-              u.status === "Address Pending" ||
-              u.status === "Not Confirmed" ||
-              u.nic === "Pending" ||
-              u.address === "Pending")
-          );
-        }
-        if (filter === "address-pending") return u.status === "Address Pending" || (u.address === "Pending" && u.nic === "Verified");
-        if (filter === "self-verified") return u.status === "Self Verified";
-        if (filter === "not-confirmed") return u.status === "Not Confirmed";
-        if (filter === "only-address") return u.status === "Only Address Verified";
-        if (filter === "only-nic") return u.status === "Only NIC Verified";
-        if (filter === "banned") return u.banned;
-        return true;
-      })
-      .filter((u) => {
-        if (applied.email && !u.email.toLowerCase().includes(applied.email.toLowerCase())) return false;
-        if (applied.accountId && !String(u.accountId).includes(applied.accountId)) return false;
-        if (applied.firstName && !(u.firstName || u.name).toLowerCase().includes(applied.firstName.toLowerCase())) return false;
-        if (applied.lastName && !(u.lastName || "").toLowerCase().includes(applied.lastName.toLowerCase())) return false;
-        if (!q.trim()) return true;
-        const s = q.toLowerCase();
-        return [u.id, u.accountId, u.name, u.firstName, u.lastName, u.email, u.mobile].join(" ").toLowerCase().includes(s);
-      });
-  }, [rows, filter, q, applied]);
+    if (!q.trim()) return rows;
+    const s = q.toLowerCase();
+    return rows.filter((u) =>
+      [u.id, u.accountId, u.name, u.firstName, u.lastName, u.email, u.mobile]
+        .join(" ")
+        .toLowerCase()
+        .includes(s)
+    );
+  }, [rows, q]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const start = (page - 1) * perPage;
@@ -362,6 +531,42 @@ function UsersContent() {
     setPage(1);
   }
 
+  function openEmailEdit(user) {
+    setEmailEdit(user);
+    setEmailDraft(user.email || "");
+    setEmailEditError("");
+  }
+
+  function closeEmailEdit() {
+    setEmailEdit(null);
+    setEmailDraft("");
+    setEmailEditError("");
+    setEmailSaving(false);
+  }
+
+  async function saveEmailEdit() {
+    const nextEmail = emailDraft.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+      setEmailEditError("Enter a valid email address.");
+      return;
+    }
+
+    setEmailSaving(true);
+    setEmailEditError("");
+    try {
+      const res = await updateCustomerEmail(emailEdit.accountHolderId, nextEmail);
+      const updated = res.customer;
+      if (updated) {
+        setRows((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
+      }
+      closeEmailEdit();
+    } catch (err) {
+      setEmailEditError(err.message || "Failed to update email.");
+    } finally {
+      setEmailSaving(false);
+    }
+  }
+
   function toggleAll(checked) {
     setSelected(checked ? shown.map((u) => u.id) : []);
   }
@@ -370,47 +575,41 @@ function UsersContent() {
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
-  function approveKyc(id, field) {
-    setRows((prev) =>
-      prev.map((u) => {
-        if (u.id !== id) return u;
-        const next = { ...u, [field]: "Verified" };
-        if (next.nic === "Verified" && next.address === "Verified") {
-          next.status = "Self Verified";
-        } else if (field === "nic" && next.address !== "Verified") {
-          next.status = "Only NIC Verified";
-        } else if (field === "address" && next.nic !== "Verified") {
-          next.status = "Only Address Verified";
-        }
-        return next;
-      })
-    );
+  function updateCustomerRow(updated) {
+    if (!updated) return;
+    setRows((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
   }
 
-  function rejectKyc(id, field, reason) {
-    setRows((prev) =>
-      prev.map((u) => {
-        if (u.id !== id) return u;
-        const next = {
-          ...u,
-          [field]: "Rejected",
-          [`${field}RejectReason`]: reason,
-        };
-        if (next.nic === "Verified" && next.address !== "Verified") {
-          next.status = "Only NIC Verified";
-        } else if (next.address === "Verified" && next.nic !== "Verified") {
-          next.status = "Only Address Verified";
-        } else if (next.nic !== "Verified" && next.address !== "Verified") {
-          next.status = "Pending";
-        }
-        return next;
-      })
+  async function handleApproveKyc(user, field) {
+    const res = await approveCustomerKyc(user.accountHolderId, field);
+    updateCustomerRow(res.customer);
+    setKycDocs(null);
+  }
+
+  async function handleRejectKyc(user, field, reason) {
+    const res = await rejectCustomerKyc(user.accountHolderId, field, reason);
+    updateCustomerRow(res.customer);
+    setKycDocs(null);
+  }
+
+  if (loading && rows.length === 0) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center text-slate-400">
+        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+        Loading customers…
+      </div>
     );
   }
 
   return (
     <div>
       <Breadcrumb items={[{ label: "User Management", href: "/users?filter=pending" }, { label: title }]} />
+
+      {error ? (
+        <div className="admin-card mb-4 border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+          {error}
+        </div>
+      ) : null}
 
       <section className="admin-card admin-fade-up overflow-visible p-0">
         <div className="border-b border-white/10 px-5 py-4">
@@ -524,6 +723,12 @@ function UsersContent() {
         </div>
 
         <div className="overflow-x-auto overflow-y-visible">
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 px-4 py-14 text-slate-400">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Refreshing…
+            </div>
+          ) : (
           <table className="min-w-[1100px] w-full text-left text-[13px]">
             <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
               <tr>
@@ -561,7 +766,21 @@ function UsersContent() {
                   </td>
                   <td className="px-3 py-3 font-medium text-white">{u.name}</td>
                   <td className="px-3 py-3">
-                    <CopyCell value={u.email} />
+                    <div className="flex items-start gap-1.5">
+                      <div className="min-w-0 flex-1">
+                        <CopyCell value={u.email} />
+                      </div>
+                      {showEmailEdit ? (
+                        <button
+                          type="button"
+                          onClick={() => openEmailEdit(u)}
+                          className="mt-0.5 shrink-0 rounded-lg border border-white/10 p-1.5 text-slate-500 transition hover:border-admin-teal/40 hover:text-white"
+                          title="Edit email"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
                   </td>
                   <td className="px-3 py-3">{u.mobile}</td>
                   <td className="px-3 py-3">
@@ -613,9 +832,15 @@ function UsersContent() {
                           Ban
                         </button>
                       ) : (
-                        <span className="text-[11px] text-rose-300" title={u.banReason}>
-                          Banned
-                        </span>
+                        <button
+                          type="button"
+                          disabled
+                          className="inline-flex cursor-default items-center gap-1 rounded-lg border border-rose-400/30 px-2 py-1 text-xs text-rose-300"
+                          title={u.banReason || "Banned"}
+                        >
+                          <Ban className="h-3.5 w-3.5" />
+                          Ban
+                        </button>
                       )}
                     </div>
                   </td>
@@ -630,6 +855,7 @@ function UsersContent() {
               ) : null}
             </tbody>
           </table>
+          )}
         </div>
 
         <div className="flex flex-col gap-3 border-t border-white/10 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -708,19 +934,25 @@ function UsersContent() {
         }}
       />
 
+      <EmailEditModal
+        open={!!emailEdit}
+        user={emailEdit}
+        value={emailDraft}
+        saving={emailSaving}
+        error={emailEditError}
+        onChange={setEmailDraft}
+        onClose={closeEmailEdit}
+        onSave={saveEmailEdit}
+      />
+
       <KycDocsModal
         open={!!kycDocs}
         user={kycDocs?.user ? rows.find((u) => u.id === kycDocs.user.id) || kycDocs.user : null}
         field={kycDocs?.field}
+        canActOnKyc={canActOnKyc}
         onClose={() => setKycDocs(null)}
-        onApprove={() => {
-          approveKyc(kycDocs.user.id, kycDocs.field);
-          setKycDocs(null);
-        }}
-        onReject={(reason) => {
-          rejectKyc(kycDocs.user.id, kycDocs.field, reason);
-          setKycDocs(null);
-        }}
+        onApprove={() => handleApproveKyc(kycDocs.user, kycDocs.field)}
+        onReject={(reason) => handleRejectKyc(kycDocs.user, kycDocs.field, reason)}
       />
     </div>
   );

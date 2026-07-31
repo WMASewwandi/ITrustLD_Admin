@@ -14,15 +14,14 @@ import {
 } from "lucide-react";
 import { DEFAULT_BOOKMARKS, TOP_NAV } from "@/lib/mock-data";
 import { logoutAdmin } from "@/lib/auth";
+import { fetchNavCounts } from "@/lib/notifications";
+import {
+  applyBookmarkBadges,
+  applyNavBadges,
+  buildNotificationItems,
+} from "@/lib/nav-badges";
 import { useAdminPermissions } from "@/contexts/admin-permissions";
 import { filterBookmarksByPermissions, filterNavByPermissions } from "@/lib/permissions";
-
-const NOTIFS = [
-  ["Deposits", "4 pending approvals", "/transactions?tab=deposits&status=Pending"],
-  ["Withdrawals", "7 awaiting processing", "/transactions?tab=withdrawals&status=Pending"],
-  ["Users", "4 KYC pending", "/users?filter=pending"],
-  ["Loyalty", "11 pending claims/orders", "/loyalty?tab=vouchers&status=Pending"],
-];
 
 function pathMatches(pathname, search, href) {
   if (!href) return false;
@@ -55,13 +54,23 @@ function NavInner({ user, roleLabel }) {
   const search = useSearchParams();
   const router = useRouter();
   const permissions = useAdminPermissions();
+  const [navCounts, setNavCounts] = useState(null);
   const navItems = useMemo(
-    () => filterNavByPermissions(TOP_NAV, permissions),
-    [permissions]
+    () => applyNavBadges(filterNavByPermissions(TOP_NAV, permissions), navCounts),
+    [permissions, navCounts]
   );
   const defaultBookmarks = useMemo(
-    () => filterBookmarksByPermissions(DEFAULT_BOOKMARKS, permissions),
-    [permissions]
+    () => applyBookmarkBadges(filterBookmarksByPermissions(DEFAULT_BOOKMARKS, permissions), navCounts),
+    [permissions, navCounts]
+  );
+  const notifItems = useMemo(() => {
+    return buildNotificationItems(navCounts).filter(
+      (item) => !item.permission || permissions.includes(item.permission)
+    );
+  }, [navCounts, permissions]);
+  const notifTotal = useMemo(
+    () => notifItems.reduce((sum, item) => sum + item.count, 0),
+    [notifItems]
   );
   const [open, setOpen] = useState(null);
   const [mobile, setMobile] = useState(false);
@@ -90,8 +99,33 @@ function NavInner({ user, roleLabel }) {
   }, []);
 
   useEffect(() => {
-    setBookmarks(defaultBookmarks);
+    setBookmarks((prev) => {
+      if (prev.length === 0) return defaultBookmarks;
+      const badgeByHref = Object.fromEntries(defaultBookmarks.map((b) => [b.href, b.badge]));
+      return prev.map((b) => ({
+        ...b,
+        badge: badgeByHref[b.href] ?? b.badge,
+      }));
+    });
   }, [defaultBookmarks]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCounts() {
+      try {
+        const res = await fetchNavCounts();
+        if (!cancelled) setNavCounts(res.counts ?? null);
+      } catch {
+        if (!cancelled) setNavCounts(null);
+      }
+    }
+
+    loadCounts();
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, search]);
 
   async function logout() {
     await logoutAdmin();
@@ -301,7 +335,11 @@ function NavInner({ user, roleLabel }) {
               aria-label="Notifications"
             >
               <Bell className="h-4 w-4" />
-              <span className="admin-badge-glow absolute -right-1 -top-1 h-4 min-w-4 px-1 text-[10px]">26</span>
+              {notifTotal > 0 ? (
+                <span className="admin-badge-glow absolute -right-1 -top-1 h-4 min-w-4 px-1 text-[10px]">
+                  {notifTotal}
+                </span>
+              ) : null}
             </button>
             {notifOpen ? (
               <>
@@ -326,17 +364,24 @@ function NavInner({ user, roleLabel }) {
                     </button>
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto py-1 sm:max-h-64 sm:flex-none">
-                    {NOTIFS.map(([title, body, href]) => (
-                      <Link
-                        key={href}
-                        href={href}
-                        onClick={() => setNotifOpen(false)}
-                        className="block border-b border-white/5 px-4 py-4 transition hover:bg-white/[0.06] sm:py-3"
-                      >
-                        <p className="text-sm font-medium text-white">{title}</p>
-                        <p className="text-xs text-white/55">{body}</p>
-                      </Link>
-                    ))}
+                    {notifItems.length === 0 ? (
+                      <p className="px-4 py-6 text-center text-xs text-white/50">No pending items.</p>
+                    ) : (
+                      notifItems.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setNotifOpen(false)}
+                          className="block border-b border-white/5 px-4 py-4 transition hover:bg-white/[0.06] sm:py-3"
+                        >
+                          <p className="text-sm font-medium text-white">
+                            {item.label}
+                            <span className="ml-2 text-theme-green-action">({item.count})</span>
+                          </p>
+                          <p className="text-xs text-white/55">{item.detail}</p>
+                        </Link>
+                      ))
+                    )}
                   </div>
                 </div>
               </>
@@ -442,7 +487,11 @@ function NavInner({ user, roleLabel }) {
                 aria-label="Notifications"
               >
                 <Bell className="h-4 w-4" />
-                <span className="admin-badge-glow absolute -right-1 -top-1 h-4 min-w-4 px-1 text-[10px]">26</span>
+                {notifTotal > 0 ? (
+                  <span className="admin-badge-glow absolute -right-1 -top-1 h-4 min-w-4 px-1 text-[10px]">
+                    {notifTotal}
+                  </span>
+                ) : null}
               </button>
               <button
                 type="button"
