@@ -3,21 +3,17 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import AdminMainNav from "@/components/admin/admin-main-nav";
-import { fetchAdminMe, getAdminUser, hasAdminSession } from "@/lib/auth";
-
-function formatRoleLabel(roles = []) {
-  if (roles.includes("super-admin")) return "Super Admin";
-  if (roles.includes("sub-admin")) return "Sub Admin";
-  if (roles.includes("deposit-executive")) return "Deposit Executive";
-  if (roles.includes("withdrawal-executive")) return "Withdrawal Executive";
-  return roles[0] || "Admin";
-}
+import AdminIdleTimeout from "@/components/admin/admin-idle-timeout";
+import { AdminPermissionsProvider } from "@/contexts/admin-permissions";
+import { fetchAdminMe, formatRoleLabel, getAdminUser, hasAdminSession, updateAdminUser } from "@/lib/auth";
 
 export default function AdminShell({ children }) {
   const router = useRouter();
   const pathname = usePathname();
   const [ready, setReady] = useState(false);
+  const [user, setUser] = useState(null);
   const [roleLabel, setRoleLabel] = useState("Admin");
+  const [permissions, setPermissions] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -31,7 +27,10 @@ export default function AdminShell({ children }) {
       try {
         const { user } = await fetchAdminMe();
         if (cancelled) return;
+        setUser(user);
         setRoleLabel(formatRoleLabel(user?.roles));
+        setPermissions(user?.permissions ?? []);
+        updateAdminUser(user);
         setReady(true);
       } catch {
         if (cancelled) return;
@@ -47,8 +46,14 @@ export default function AdminShell({ children }) {
 
   useEffect(() => {
     const cached = getAdminUser();
+    if (cached) {
+      setUser(cached);
+    }
     if (cached?.roles?.length) {
       setRoleLabel(formatRoleLabel(cached.roles));
+    }
+    if (cached?.permissions?.length) {
+      setPermissions(cached.permissions);
     }
   }, []);
 
@@ -61,12 +66,13 @@ export default function AdminShell({ children }) {
   }
 
   return (
-    <div className="admin-canvas relative h-dvh overflow-hidden text-slate-200">
+    <AdminPermissionsProvider permissions={permissions}>
+      <div className="admin-canvas relative h-dvh overflow-hidden text-slate-200">
       <div className="admin-grid-overlay pointer-events-none fixed inset-0 -z-10 opacity-50" aria-hidden />
 
       <div className="flex h-full min-h-0 flex-col">
         <div className="shrink-0">
-          <AdminMainNav />
+          <AdminMainNav user={user} roleLabel={roleLabel} />
         </div>
 
         <div className="shrink-0 border-b border-white/10 bg-admin-surface/80 backdrop-blur-sm">
@@ -84,6 +90,8 @@ export default function AdminShell({ children }) {
           {children}
         </main>
       </div>
-    </div>
+      </div>
+      <AdminIdleTimeout />
+    </AdminPermissionsProvider>
   );
 }

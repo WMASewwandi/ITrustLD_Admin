@@ -1,6 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Breadcrumb from "@/components/admin/breadcrumb";
+import { useAdminPermissions, useCan } from "@/contexts/admin-permissions";
+import { getAdminUser } from "@/lib/auth";
+import { TOP_NAV } from "@/lib/mock-data";
+import { getFirstAllowedNavHref, resolveAdminLandingPath } from "@/lib/permissions";
 import {
   Banknote,
   Briefcase,
@@ -191,6 +197,28 @@ function GrowthGauge({ percent = -99.92 }) {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const permissions = useAdminPermissions();
+  const canViewDashboard = useCan("view_admin_dashboard");
+
+  useEffect(() => {
+    if (!canViewDashboard) {
+      const user = getAdminUser();
+      const fallback =
+        getFirstAllowedNavHref(TOP_NAV, permissions) ||
+        resolveAdminLandingPath(user?.roles ?? [], permissions);
+      router.replace(fallback || "/login");
+    }
+  }, [canViewDashboard, permissions, router]);
+
+  if (!canViewDashboard) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center text-sm text-slate-400">
+        Redirecting…
+      </div>
+    );
+  }
+
   return (
     <div className="pb-10">
       <Breadcrumb items={[{ label: "Dashboard" }]} />

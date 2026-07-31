@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -21,7 +21,17 @@ const HIGHLIGHTS = [
 ];
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="admin-canvas-dark flex min-h-dvh items-center justify-center text-white/50">Loading…</div>}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const inactiveNotice = searchParams.get("reason") === "inactive";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -113,6 +123,11 @@ export default function LoginPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+              {inactiveNotice ? (
+                <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100" role="status">
+                  Your session expired after 30 minutes of inactivity. Please sign in again.
+                </p>
+              ) : null}
               {error ? (
                 <p className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200" role="alert">
                   {error}

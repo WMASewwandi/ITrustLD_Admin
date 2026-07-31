@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
   Bookmark,
@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { DEFAULT_BOOKMARKS, TOP_NAV } from "@/lib/mock-data";
 import { logoutAdmin } from "@/lib/auth";
+import { useAdminPermissions } from "@/contexts/admin-permissions";
+import { filterBookmarksByPermissions, filterNavByPermissions } from "@/lib/permissions";
 
 const NOTIFS = [
   ["Deposits", "4 pending approvals", "/transactions?tab=deposits&status=Pending"],
@@ -48,15 +50,24 @@ function itemActive(pathname, search, href) {
   return pathMatches(pathname, search, href);
 }
 
-function NavInner() {
+function NavInner({ user, roleLabel }) {
   const pathname = usePathname();
   const search = useSearchParams();
   const router = useRouter();
+  const permissions = useAdminPermissions();
+  const navItems = useMemo(
+    () => filterNavByPermissions(TOP_NAV, permissions),
+    [permissions]
+  );
+  const defaultBookmarks = useMemo(
+    () => filterBookmarksByPermissions(DEFAULT_BOOKMARKS, permissions),
+    [permissions]
+  );
   const [open, setOpen] = useState(null);
   const [mobile, setMobile] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
-  const [bookmarks, setBookmarks] = useState(DEFAULT_BOOKMARKS);
+  const [bookmarks, setBookmarks] = useState(defaultBookmarks);
   const wrapRef = useRef(null);
 
   useEffect(() => {
@@ -78,6 +89,10 @@ function NavInner() {
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
+  useEffect(() => {
+    setBookmarks(defaultBookmarks);
+  }, [defaultBookmarks]);
+
   async function logout() {
     await logoutAdmin();
     router.replace("/login");
@@ -91,7 +106,7 @@ function NavInner() {
       return;
     }
     const label =
-      TOP_NAV.find((c) => categoryActive(pathname, search, c))?.label || "Page";
+      navItems.find((c) => categoryActive(pathname, search, c))?.label || "Page";
     setBookmarks((prev) => [...prev, { label, href, badge: null }]);
   }
 
@@ -184,12 +199,12 @@ function NavInner() {
         {/* Horizontal top nav — centered between logo and controls */}
         <nav className="hidden min-w-0 flex-1 justify-center xl:flex">
           <div className="flex items-center gap-0.5">
-            {TOP_NAV.map((cat, catIndex) => {
+            {navItems.map((cat, catIndex) => {
               const active = categoryActive(pathname, search, cat);
               const isOpen = open === cat.id;
               const groupCount = cat.groups?.length || 0;
               const multiColumn = groupCount > 1;
-              const alignRight = catIndex >= TOP_NAV.length - 3;
+              const alignRight = catIndex >= navItems.length - 3;
               if (cat.href) {
                 return (
                   <Link
@@ -352,9 +367,9 @@ function NavInner() {
                 />
                 <div className="fixed inset-0 z-[61] flex h-dvh w-full flex-col bg-[#1a1b2a] sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 sm:h-auto sm:w-52 sm:rounded-2xl sm:border sm:border-white/12 sm:bg-[#1a1b2a]/95 sm:py-1 sm:shadow-[0_20px_50px_rgba(0,0,0,0.45)]">
                   <div className="flex shrink-0 items-start justify-between border-b border-white/10 px-4 py-4 sm:py-3">
-                    <div>
-                      <p className="text-sm font-semibold text-white">Super Admin</p>
-                      <p className="text-[11px] text-white/50">System Admin</p>
+                    <div className="min-w-0 pr-3">
+                      <p className="truncate text-sm font-semibold text-white">{user?.email || "—"}</p>
+                      <p className="truncate text-[11px] text-white/50">{roleLabel || "Admin"}</p>
                     </div>
                     <button
                       type="button"
@@ -445,7 +460,7 @@ function NavInner() {
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
-            {TOP_NAV.map((cat) => {
+            {navItems.map((cat) => {
               const active = categoryActive(pathname, search, cat);
               if (cat.href) {
                 return (
@@ -509,10 +524,10 @@ function NavInner() {
   );
 }
 
-export default function AdminMainNav() {
+export default function AdminMainNav({ user, roleLabel }) {
   return (
     <Suspense fallback={<div className="admin-topbar h-[104px]" />}>
-      <NavInner />
+      <NavInner user={user} roleLabel={roleLabel} />
     </Suspense>
   );
 }

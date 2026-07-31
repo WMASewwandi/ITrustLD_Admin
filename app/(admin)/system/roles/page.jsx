@@ -9,6 +9,7 @@ import {
   fetchRoles,
   updateRolePermissions,
 } from "@/lib/roles";
+import { useCan } from "@/contexts/admin-permissions";
 import { Loader2, Pencil, Plus, RefreshCw, Search, Shield, X, Clock3 } from "lucide-react";
 
 function formatDate(value) {
@@ -35,6 +36,7 @@ export default function RolesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newRoleName, setNewRoleName] = useState("");
   const [creating, setCreating] = useState(false);
+  const canManageRoles = useCan("role_manage_activity");
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -160,14 +162,16 @@ export default function RolesPage() {
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowCreate(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-admin-teal px-3.5 py-2 text-xs font-semibold text-white transition hover:brightness-110"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Create Role
-            </button>
+            {canManageRoles ? (
+              <button
+                type="button"
+                onClick={() => setShowCreate(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-admin-teal px-3.5 py-2 text-xs font-semibold text-white transition hover:brightness-110"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Create Role
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -226,14 +230,16 @@ export default function RolesPage() {
                     </div>
                   </td>
                   <td className="px-3 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => openEdit(role.name)}
-                      className="inline-flex rounded-lg bg-admin-teal p-1.5 text-white shadow-sm transition hover:brightness-110"
-                      title="Edit permissions"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
+                    {canManageRoles ? (
+                      <button
+                        type="button"
+                        onClick={() => openEdit(role.name)}
+                        className="inline-flex rounded-lg bg-admin-teal p-1.5 text-white shadow-sm transition hover:brightness-110"
+                        title="Edit permissions"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
                   </td>
                 </tr>
               ))}
@@ -273,7 +279,14 @@ export default function RolesPage() {
 
             <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
               <div className="space-y-4">
-                {categories.map((category) => (
+                {[...categories]
+                  .filter((category) => category.activities?.length)
+                  .sort((a, b) => {
+                    if (a.identifier === "dashboard_activities") return -1;
+                    if (b.identifier === "dashboard_activities") return 1;
+                    return a.id - b.id;
+                  })
+                  .map((category) => (
                   <div key={category.id}>
                     <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                       {category.name}
