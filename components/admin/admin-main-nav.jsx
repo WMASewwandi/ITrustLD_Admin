@@ -406,11 +406,11 @@ function NavInner({ user, roleLabel }) {
             {profileOpen ? (
               <>
                 <div
-                  className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm sm:hidden"
+                  className="fixed inset-0 z-[60] bg-black/45 backdrop-blur-[2px] sm:hidden"
                   onClick={() => setProfileOpen(false)}
                   aria-hidden
                 />
-                <div className="fixed inset-0 z-[61] flex h-dvh w-full flex-col bg-[#1a1b2a] sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 sm:h-auto sm:w-52 sm:rounded-2xl sm:border sm:border-white/12 sm:bg-[#1a1b2a]/95 sm:py-1 sm:shadow-[0_20px_50px_rgba(0,0,0,0.45)]">
+                <div className="fixed inset-y-0 right-0 z-[61] flex w-full max-w-xs flex-col border-l border-white/12 bg-[#1a1b2a] shadow-2xl sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 sm:h-auto sm:w-52 sm:rounded-2xl sm:border sm:border-white/12 sm:bg-[#1a1b2a]/95 sm:py-1 sm:shadow-[0_20px_50px_rgba(0,0,0,0.45)]">
                   <div className="flex shrink-0 items-start justify-between border-b border-white/10 px-4 py-4 sm:py-3">
                     <div className="min-w-0 pr-3">
                       <p className="truncate text-sm font-semibold text-white">{user?.email || "—"}</p>

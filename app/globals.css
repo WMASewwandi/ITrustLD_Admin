@@ -353,6 +353,28 @@ aside nav {
   }
 }
 
+/* Side drawer — keeps main content visible behind a dimmed backdrop */
+.admin-modal-overlay.admin-modal-drawer {
+  align-items: stretch;
+  justify-content: flex-end;
+  padding: 0;
+}
+
+.admin-modal-overlay.admin-modal-drawer > * {
+  width: min(100%, 42rem) !important;
+  max-width: 42rem !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  border-radius: 0 !important;
+  margin-left: auto;
+}
+
+@media (min-width: 640px) {
+  .admin-modal-overlay.admin-modal-drawer > * {
+    border-radius: 1rem 0 0 1rem !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .admin-fade-up,
   .admin-live-dot {

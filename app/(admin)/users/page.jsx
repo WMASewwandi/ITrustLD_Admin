@@ -386,7 +386,7 @@ function KycDocsModal({ open, user, field, canActOnKyc, onClose, onApprove, onRe
   if (!open || !user) return null;
 
   return (
-    <div className="admin-modal-overlay z-[70]" onClick={onClose}>
+    <div className="admin-modal-overlay admin-modal-drawer z-[70]" onClick={onClose}>
       <div
         className="admin-card flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden p-0 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
