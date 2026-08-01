@@ -31,6 +31,7 @@ import {
   Eye,
   FileImage,
   FileText,
+  Info,
   Mail,
   MessageSquare,
   RefreshCw,
@@ -112,6 +113,25 @@ function formatDepositRejectedReason(record) {
   const message = record?.rejectReasonMessage?.trim() || "Custom reason Not Added";
   const category = record?.rejectReasonCategory?.trim() || "Reason Not Added";
   return `${message} | ${category}`;
+}
+
+function depositRowClassName(record) {
+  return record?.isScammer
+    ? "border-t border-rose-500/25 bg-rose-500/10 text-slate-200 transition hover:bg-rose-500/15"
+    : "border-t border-white/10 text-slate-300 transition hover:bg-admin-teal/[0.05]";
+}
+
+function PlatformIdCell({ value, isScammer }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <CopyCell value={value} />
+      {isScammer ? (
+        <span title="User is flagged as Potential Scammer" className="inline-flex shrink-0 text-rose-300">
+          <Info className="h-4 w-4" />
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 /** Build the proofs the customer already submitted for a transaction. */
@@ -1668,7 +1688,7 @@ function TransactionsContent() {
               </thead>
               <tbody>
                 {shown.map((r) => (
-                  <tr key={r.id} className="border-t border-white/10 text-slate-300 transition hover:bg-admin-teal/[0.05]">
+                  <tr key={r.id} className={depositRowClassName(r)}>
                     <td className="px-3 py-3">
                       <input
                         type="checkbox"
@@ -1685,6 +1705,12 @@ function TransactionsContent() {
                     </td>
                     <td className="px-3 py-3">
                       <IdNameCell id={r.account || r.userId} name={r.customer} />
+                      {r.isScammer ? (
+                        <p className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-rose-300">
+                          <Info className="h-3 w-3" />
+                          Potential Scammer
+                        </p>
+                      ) : null}
                     </td>
                     <td className="px-3 py-3">
                       <span className="inline-flex whitespace-nowrap rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs">{r.method}</span>
@@ -1697,7 +1723,7 @@ function TransactionsContent() {
                       <CopyCell value={r.deposited || r.amount} />
                     </td>
                     <td className="px-3 py-3">
-                      <CopyCell value={r.platformId} />
+                      <PlatformIdCell value={r.platformId} isScammer={r.isScammer} />
                     </td>
                     <td className="px-3 py-3">
                       <button
