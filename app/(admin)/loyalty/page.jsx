@@ -1,18 +1,19 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectModal from "@/components/admin/reject-modal";
+import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
 import RejectReasonPanel from "@/components/admin/reject-reason-panel";
-import CopyCell, { FilterField, StatusPill, inputCls } from "@/components/admin/queue-ui";
+import CopyCell, { FilterField, IdNameCell, PlatformIdCell, StatusPill, inputCls } from "@/components/admin/queue-ui";
+import { fetchLoyaltyOrders, updateLoyaltyOrderStatus } from "@/lib/loyalty-orders";
 import {
   AFFILIATE_BONUS_CONFIG,
   AFFILIATE_LOYALTY_LEVELS,
   AFFILIATE_POINT_COLLECTION,
   BONUS_CLAIMS,
   LOYALTY_BONUS_CONFIG,
-  LOYALTY_ORDERS,
   LOYALTY_POINT_COLLECTION,
   LOYALTY_RANKING_USERS,
   VOUCHERS,
@@ -35,8 +36,20 @@ function DetailField({ label, children }) {
   );
 }
 
-function LoyaltyDetailModal({ open, record, tab, onClose, onApprove, onReject, onReopen }) {
+function LoyaltyDetailModal({
+  open,
+  record,
+  tab,
+  onClose,
+  onApprove,
+  onReject,
+  onReopen,
+  onRequestReject,
+  onRequestApprove,
+  onRequestReopen,
+}) {
   const [rejectOpen, setRejectOpen] = useState(false);
+  const usesOrderConfirmFlow = tab === "orders";
 
   useEffect(() => {
     if (!open) setRejectOpen(false);
@@ -46,9 +59,10 @@ function LoyaltyDetailModal({ open, record, tab, onClose, onApprove, onReject, o
 
   const title =
     tab === "bonus" ? "Bonus claim details" : tab === "vouchers" ? "Voucher claim details" : "Loyalty order details";
-  // Pending: both · Rejected: approve only · Completed/Claimed: reject only
+  // Pending: approve + reject · Rejected: approve + reopen · Completed: reject + reopen
   const canApprove = record.status === "Pending" || record.status === "Rejected";
   const canReject = record.status === "Pending" || record.status === "Completed" || record.status === "Claimed";
+  const canReopen = record.status === "Rejected" || record.status === "Completed";
 
   return (
     <div className="admin-modal-overlay z-[80]" onClick={onClose}>
@@ -78,7 +92,7 @@ function LoyaltyDetailModal({ open, record, tab, onClose, onApprove, onReject, o
               <CopyCell value={record.date} />
             </DetailField>
             <DetailField label="User">
-              <CopyCell value={`${record.userId} ${record.customer}`} />
+              <IdNameCell id={record.userId} name={record.customer} />
             </DetailField>
             {tab === "orders" ? (
               <>
@@ -94,11 +108,14 @@ function LoyaltyDetailModal({ open, record, tab, onClose, onApprove, onReject, o
                 <DetailField label="Received Amount">
                   <CopyCell value={record.received} />
                 </DetailField>
-                <DetailField label="Platform">
-                  <CopyCell value={record.platform} />
-                </DetailField>
-                <DetailField label="Account / Detail">
-                  <CopyCell value={record.platformDetail || record.email || "—"} />
+                <DetailField label="Plat. ID / Email">
+                  <PlatformIdCell
+                    method={record.method}
+                    platformId={record.platformId}
+                    platformName={record.platformName}
+                    platform={record.platform}
+                    platformDetail={record.platformDetail}
+                  />
                 </DetailField>
               </>
             ) : null}
@@ -153,7 +170,7 @@ function LoyaltyDetailModal({ open, record, tab, onClose, onApprove, onReject, o
               </>
             ) : null}
           </dl>
-          {record.rejectReason ? (
+          {record.rejectReason && tab !== "orders" ? (
             <div className="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
               Rejection reason: <span className="font-semibold">{record.rejectReason}</span>
             </div>
@@ -168,15 +185,24 @@ function LoyaltyDetailModal({ open, record, tab, onClose, onApprove, onReject, o
                 {record.status === "Pending"
                   ? "Review this claim, then approve or reject."
                   : record.status === "Rejected"
-                    ? "Rejected — approve again if needed."
-                    : "Already processed — you can still reject with a reason."}
+                    ? "Rejected — approve again or reopen as pending."
+                    : record.status === "Completed"
+                      ? "Completed — reject or reopen as pending if needed."
+                      : "Already processed."}
               </p>
             </div>
             <div className="flex shrink-0 flex-row flex-nowrap items-center gap-2">
               {canReject ? (
                 <button
                   type="button"
-                  onClick={() => setRejectOpen((v) => !v)}
+                  onClick={() => {
+                    if (usesOrderConfirmFlow) {
+                      onRequestReject?.(record.id);
+                      onClose?.();
+                      return;
+                    }
+                    setRejectOpen((v) => !v);
+                  }}
                   className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${
                     rejectOpen
                       ? "border-rose-400/60 bg-rose-500/25 text-rose-200"
@@ -191,6 +217,11 @@ function LoyaltyDetailModal({ open, record, tab, onClose, onApprove, onReject, o
                 <button
                   type="button"
                   onClick={() => {
+                    if (usesOrderConfirmFlow) {
+                      onRequestApprove?.(record.id);
+                      onClose?.();
+                      return;
+                    }
                     onApprove?.(record.id);
                     onClose?.();
                   }}
@@ -200,9 +231,27 @@ function LoyaltyDetailModal({ open, record, tab, onClose, onApprove, onReject, o
                   Approve
                 </button>
               ) : null}
+              {canReopen ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (usesOrderConfirmFlow) {
+                      onRequestReopen?.(record.id);
+                      onClose?.();
+                      return;
+                    }
+                    onReopen?.(record.id);
+                    onClose?.();
+                  }}
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200 transition hover:bg-amber-500/20"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Reopen
+                </button>
+              ) : null}
             </div>
           </div>
-          {rejectOpen ? (
+          {rejectOpen && !usesOrderConfirmFlow ? (
             <RejectReasonPanel
               className="mt-3"
               onCancel={() => setRejectOpen(false)}
@@ -225,13 +274,34 @@ function LoyaltyContent() {
   const [status, setStatus] = useState(params.get("status") || "Pending");
   const [audience, setAudience] = useState("Normal Users");
   const [q, setQ] = useState("");
-  const [duration, setDuration] = useState("Today");
+  const [duration, setDuration] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [orders, setOrders] = useState(LOYALTY_ORDERS);
+  const [orders, setOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState("");
+  const [ordersPage, setOrdersPage] = useState(1);
+  const [ordersPerPage, setOrdersPerPage] = useState("20");
+  const [ordersPagination, setOrdersPagination] = useState({
+    page: 1,
+    total_pages: 1,
+    total: 0,
+    per_page: 20,
+  });
+  const [orderStatusBusy, setOrderStatusBusy] = useState(false);
+  const [orderActionError, setOrderActionError] = useState("");
+  const [appliedOrderFilters, setAppliedOrderFilters] = useState({
+    status: params.get("status") || "Pending",
+    keyword: "",
+    duration: "",
+    from: "",
+    to: "",
+  });
   const [bonuses, setBonuses] = useState(BONUS_CLAIMS);
   const [vouchers, setVouchers] = useState(VOUCHERS);
   const [rejectId, setRejectId] = useState(null);
+  const [approveConfirmId, setApproveConfirmId] = useState(null);
+  const [reopenConfirmId, setReopenConfirmId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [pointRows, setPointRows] = useState(LOYALTY_POINT_COLLECTION);
   const [bonusRows, setBonusRows] = useState(LOYALTY_BONUS_CONFIG);
@@ -265,10 +335,73 @@ function LoyaltyContent() {
     }
   }, [params]);
 
+  const loadOrders = useCallback(async () => {
+    setOrdersLoading(true);
+    setOrdersError("");
+    try {
+      const data = await fetchLoyaltyOrders({
+        status: appliedOrderFilters.status,
+        page: ordersPage,
+        perPage: Number(ordersPerPage) || 20,
+        keyword: appliedOrderFilters.keyword,
+        duration: appliedOrderFilters.duration,
+        from: appliedOrderFilters.from,
+        to: appliedOrderFilters.to,
+      });
+      setOrders(data.orders || []);
+      setOrdersPagination(
+        data.pagination || {
+          page: 1,
+          total_pages: 1,
+          total: 0,
+          per_page: 20,
+        },
+      );
+    } catch (err) {
+      setOrdersError(err.message || "Failed to load loyalty orders.");
+      setOrders([]);
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, [appliedOrderFilters, ordersPage, ordersPerPage]);
+
+  const ordersRangeStart =
+    ordersPagination.total === 0 ? 0 : (ordersPagination.page - 1) * ordersPagination.per_page + 1;
+  const ordersRangeEnd = Math.min(ordersPagination.page * ordersPagination.per_page, ordersPagination.total);
+  const rejectOrderRecord = useMemo(() => {
+    if (!rejectId || tab !== "orders") return null;
+    return orders.find((r) => r.id === rejectId) ?? null;
+  }, [rejectId, tab, orders]);
+  const approveOrderRecord = useMemo(() => {
+    if (!approveConfirmId || tab !== "orders") return null;
+    return orders.find((r) => r.id === approveConfirmId) ?? null;
+  }, [approveConfirmId, tab, orders]);
+  const reopenOrderRecord = useMemo(() => {
+    if (!reopenConfirmId || tab !== "orders") return null;
+    return orders.find((r) => r.id === reopenConfirmId) ?? null;
+  }, [reopenConfirmId, tab, orders]);
+
+  useEffect(() => {
+    if (tab !== "orders") return undefined;
+    loadOrders();
+    return undefined;
+  }, [tab, loadOrders]);
+
+  useEffect(() => {
+    if (tab !== "orders") return undefined;
+    setOrdersPage(1);
+    setAppliedOrderFilters((prev) => {
+      if (prev.status === status) return prev;
+      return { ...prev, status };
+    });
+    return undefined;
+  }, [status, tab]);
+
   const list = tab === "bonus" ? bonuses : tab === "vouchers" ? vouchers : orders;
 
   const filtered = useMemo(() => {
     if (tab === "management") return [];
+    if (tab === "orders") return orders;
     return list.filter((r) => {
       if (status !== "All" && r.status !== status && !(status === "Pending" && String(r.status).includes("Pending"))) {
         return false;
@@ -276,7 +409,9 @@ function LoyaltyContent() {
       if (!q.trim()) return true;
       return JSON.stringify(r).toLowerCase().includes(q.toLowerCase());
     });
-  }, [list, status, q, tab]);
+  }, [list, status, q, tab, orders]);
+
+  const ordersRecordCount = tab === "orders" ? ordersPagination.total : filtered.length;
 
   const pageTitle =
     tab === "orders"
@@ -303,8 +438,28 @@ function LoyaltyContent() {
                 : "Voucher Claims"
           : "Loyalty Management";
 
+  async function handleOrderStatusUpdate(id, nextStatus) {
+    setOrderStatusBusy(true);
+    setOrderActionError("");
+    try {
+      await updateLoyaltyOrderStatus({ transactionId: id, status: nextStatus });
+      await loadOrders();
+      if (detail?.id === id) {
+        setDetail(null);
+      }
+    } catch (err) {
+      setOrderActionError(err.message || "Failed to update loyalty order status.");
+    } finally {
+      setOrderStatusBusy(false);
+    }
+  }
+
   function approve(id) {
     const now = new Date().toISOString().slice(0, 16).replace("T", " ");
+    if (tab === "orders") {
+      handleOrderStatusUpdate(id, "Completed");
+      return;
+    }
     if (tab === "bonus") {
       setBonuses((prev) => prev.map((r) => (r.id === id ? { ...r, status: "Claimed", admin: "Admin" } : r)));
     } else if (tab === "vouchers") {
@@ -315,13 +470,15 @@ function LoyaltyContent() {
             : r
         )
       );
-    } else {
-      setOrders((prev) => prev.map((r) => (r.id === id ? { ...r, status: "Completed" } : r)));
     }
   }
 
   function rejectRecord(id, reason) {
     const now = new Date().toISOString().slice(0, 16).replace("T", " ");
+    if (tab === "orders") {
+      handleOrderStatusUpdate(id, "Rejected");
+      return;
+    }
     if (tab === "bonus") {
       setBonuses((prev) =>
         prev.map((r) => (r.id === id ? { ...r, status: "Rejected", rejectReason: reason, admin: "Admin" } : r))
@@ -340,10 +497,6 @@ function LoyaltyContent() {
             : r
         )
       );
-    } else {
-      setOrders((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, status: "Rejected", rejectReason: reason } : r))
-      );
     }
   }
 
@@ -352,6 +505,10 @@ function LoyaltyContent() {
   }
 
   function reopen(id) {
+    if (tab === "orders") {
+      handleOrderStatusUpdate(id, "Pending");
+      return;
+    }
     if (tab === "bonus") {
       setBonuses((prev) =>
         prev.map((r) => (r.id === id ? { ...r, status: "Pending", admin: "—", rejectReason: undefined } : r))
@@ -372,11 +529,42 @@ function LoyaltyContent() {
             : r
         )
       );
-    } else {
-      setOrders((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, status: "Pending", rejectReason: undefined } : r))
-      );
     }
+  }
+
+  function applyOrderFilters() {
+    setOrdersPage(1);
+    setAppliedOrderFilters({
+      status,
+      keyword: q,
+      duration,
+      from,
+      to,
+    });
+  }
+
+  function handleOrderFilterKeyDown(event) {
+    if (event.key !== "Enter") return;
+    if (event.target instanceof HTMLButtonElement) return;
+    if (tab !== "orders") return;
+    event.preventDefault();
+    applyOrderFilters();
+  }
+
+  function resetOrderFilters() {
+    setQ("");
+    setFrom("");
+    setTo("");
+    setDuration("");
+    setStatus("Pending");
+    setOrdersPage(1);
+    setAppliedOrderFilters({
+      status: "Pending",
+      keyword: "",
+      duration: "",
+      from: "",
+      to: "",
+    });
   }
 
   return (
@@ -1085,12 +1273,12 @@ function LoyaltyContent() {
               <div>
                 <h1 className="text-xl font-bold text-white sm:text-2xl">{pageTitle}</h1>
                 <p className="mt-0.5 text-xs text-slate-400">
-                  {filtered.length} records
+                  {ordersRecordCount} records
                   {tab === "bonus" && status === "Rejected"
                     ? " · reopen or re-approve rejected claims"
                     : tab === "vouchers"
                       ? " · approve gift vouchers · reject with reason"
-                      : " · approve / reject with reason"}
+                      : " · approve / reject"}
                 </p>
               </div>
               {tab === "vouchers" ? (
@@ -1118,7 +1306,7 @@ function LoyaltyContent() {
             </div>
           </div>
 
-          <div className="border-b border-white/10 bg-white/5 px-5 py-4">
+          <div className="border-b border-white/10 bg-white/5 px-5 py-4" onKeyDown={handleOrderFilterKeyDown}>
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
               {/* Separate search bar — left */}
               <div className="min-w-0 flex-1">
@@ -1185,13 +1373,23 @@ function LoyaltyContent() {
                   <div className="flex shrink-0 gap-2 pb-0.5">
                     <button
                       type="button"
-                      className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110"
+                      onClick={() => {
+                        if (tab === "orders") {
+                          applyOrderFilters();
+                        }
+                      }}
+                      disabled={tab === "orders" && ordersLoading}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
                     >
                       Apply
                     </button>
                     <button
                       type="button"
                       onClick={() => {
+                        if (tab === "orders") {
+                          resetOrderFilters();
+                          return;
+                        }
                         setQ("");
                         setFrom("");
                         setTo("");
@@ -1209,11 +1407,25 @@ function LoyaltyContent() {
                 </div>
               </div>
             </div>
-            <p className="mt-3 text-xs text-slate-500">Showing {filtered.length} results</p>
+            <p className="mt-3 text-xs text-slate-500">
+              {tab === "orders"
+                ? ordersPagination.total === 0
+                  ? "Showing 0 results"
+                  : `Showing ${ordersRangeStart}–${ordersRangeEnd} of ${ordersPagination.total} results`
+                : `Showing ${filtered.length} results`}
+            </p>
+            {tab === "orders" && ordersError ? (
+              <p className="mt-2 text-xs text-rose-400">{ordersError}</p>
+            ) : null}
+            {tab === "orders" && orderActionError ? (
+              <p className="mt-2 text-xs text-rose-400">{orderActionError}</p>
+            ) : null}
           </div>
 
           <div className="overflow-x-auto">
-            {tab === "orders" ? (
+            {tab === "orders" && ordersLoading ? (
+              <div className="px-4 py-14 text-center text-slate-400">Loading loyalty orders…</div>
+            ) : tab === "orders" ? (
               <table className="min-w-[1100px] w-full text-left text-[13px]">
                 <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                   <tr>
@@ -1239,7 +1451,7 @@ function LoyaltyContent() {
                         <CopyCell value={r.date} />
                       </td>
                       <td className="px-3 py-3">
-                        <CopyCell value={`${r.userId} ${r.customer}`} />
+                        <IdNameCell id={r.userId} name={r.customer} />
                       </td>
                       <td className="px-3 py-3 font-semibold text-[#FBBF24]">{r.points}</td>
                       <td className="px-3 py-3">
@@ -1252,24 +1464,75 @@ function LoyaltyContent() {
                         <CopyCell value={r.received} />
                       </td>
                       <td className="px-3 py-3">
-                        <CopyCell value={r.platform} sub={r.platformDetail || r.email} />
+                        <PlatformIdCell
+                          method={r.method}
+                          platformId={r.platformId}
+                          platformName={r.platformName}
+                          platform={r.platform}
+                          platformDetail={r.platformDetail}
+                        />
                       </td>
                       <td className="px-3 py-3">
                         {r.status === "Pending" ? (
                           <div className="flex gap-1">
-                            <button type="button" onClick={() => setRejectId(r.id)} className="rounded-lg bg-[#E11D48] p-1.5 text-white" title="Reject">
+                            <button
+                              type="button"
+                              disabled={orderStatusBusy}
+                              onClick={() => setRejectId(r.id)}
+                              className="rounded-lg bg-[#E11D48] p-1.5 text-white disabled:opacity-50"
+                              title="Reject"
+                            >
                               <X className="h-3.5 w-3.5" />
                             </button>
-                            <button type="button" onClick={() => approve(r.id)} className="rounded-lg bg-theme-green-action p-1.5 text-white" title="Approve">
+                            <button
+                              type="button"
+                              disabled={orderStatusBusy}
+                              onClick={() => setApproveConfirmId(r.id)}
+                              className="rounded-lg bg-theme-green-action p-1.5 text-white disabled:opacity-50"
+                              title="Approve"
+                            >
                               <Check className="h-3.5 w-3.5" />
                             </button>
                           </div>
                         ) : r.status === "Rejected" ? (
                           <div className="flex gap-1">
-                            <button type="button" onClick={() => approve(r.id)} className="rounded-lg bg-theme-green-action p-1.5 text-white" title="Approve">
+                            <button
+                              type="button"
+                              disabled={orderStatusBusy}
+                              onClick={() => setApproveConfirmId(r.id)}
+                              className="rounded-lg bg-theme-green-action p-1.5 text-white disabled:opacity-50"
+                              title="Approve"
+                            >
                               <Check className="h-3.5 w-3.5" />
                             </button>
-                            <button type="button" onClick={() => reopen(r.id)} className="rounded-lg bg-amber-500/150 p-1.5 text-white" title="Reopen">
+                            <button
+                              type="button"
+                              disabled={orderStatusBusy}
+                              onClick={() => setReopenConfirmId(r.id)}
+                              className="rounded-lg bg-[#D1900F] p-1.5 text-white disabled:opacity-50"
+                              title="Reopen"
+                            >
+                              <RefreshCw className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : r.status === "Completed" ? (
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              disabled={orderStatusBusy}
+                              onClick={() => setRejectId(r.id)}
+                              className="rounded-lg bg-[#E11D48] p-1.5 text-white disabled:opacity-50"
+                              title="Reject"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={orderStatusBusy}
+                              onClick={() => setReopenConfirmId(r.id)}
+                              className="rounded-lg bg-[#D1900F] p-1.5 text-white disabled:opacity-50"
+                              title="Reopen"
+                            >
                               <RefreshCw className="h-3.5 w-3.5" />
                             </button>
                           </div>
@@ -1321,7 +1584,7 @@ function LoyaltyContent() {
                         <CopyCell value={r.date} />
                       </td>
                       <td className="px-3 py-3">
-                        <CopyCell value={`${r.userId} ${r.customer}`} />
+                        <IdNameCell id={r.userId} name={r.customer} />
                       </td>
                       <td className="px-3 py-3">
                         <CopyCell value={r.amount} />
@@ -1368,7 +1631,7 @@ function LoyaltyContent() {
                             <button
                               type="button"
                               onClick={() => reopen(r.id)}
-                              className="rounded-lg bg-amber-500/150 p-1.5 text-white"
+                              className="rounded-lg bg-[#D1900F] p-1.5 text-white"
                               title="Reopen as pending"
                             >
                               <RefreshCw className="h-3.5 w-3.5" />
@@ -1435,7 +1698,7 @@ function LoyaltyContent() {
                         <CopyCell value={r.date} />
                       </td>
                       <td className="px-3 py-3">
-                        <CopyCell value={`${r.userId} ${r.customer}`} />
+                        <IdNameCell id={r.userId} name={r.customer} />
                       </td>
                       <td className="px-3 py-3">
                         <CopyCell value={r.platformId || "—"} />
@@ -1468,7 +1731,7 @@ function LoyaltyContent() {
                           <button
                             type="button"
                             onClick={() => reopen(r.id)}
-                            className="rounded-lg bg-amber-500/150 p-1.5 text-white"
+                            className="rounded-lg bg-[#D1900F] p-1.5 text-white"
                             title="Reopen as pending"
                           >
                             <RefreshCw className="h-3.5 w-3.5" />
@@ -1518,7 +1781,7 @@ function LoyaltyContent() {
                         <CopyCell value={r.date} />
                       </td>
                       <td className="px-3 py-3">
-                        <CopyCell value={`${r.userId} ${r.customer}`} />
+                        <IdNameCell id={r.userId} name={r.customer} />
                       </td>
                       <td className="px-3 py-3">
                         <CopyCell value={r.platformId || "—"} />
@@ -1573,7 +1836,7 @@ function LoyaltyContent() {
                         <CopyCell value={r.date} />
                       </td>
                       <td className="px-3 py-3">
-                        <CopyCell value={`${r.userId} ${r.customer}`} />
+                        <IdNameCell id={r.userId} name={r.customer} />
                       </td>
                       <td className="px-3 py-3">
                         <CopyCell value={r.platformId || "—"} />
@@ -1620,7 +1883,7 @@ function LoyaltyContent() {
                             <button
                               type="button"
                               onClick={() => reopen(r.id)}
-                              className="rounded-lg bg-amber-500/150 p-1.5 text-white"
+                              className="rounded-lg bg-[#D1900F] p-1.5 text-white"
                               title="Reopen"
                             >
                               <RefreshCw className="h-3.5 w-3.5" />
@@ -1654,11 +1917,118 @@ function LoyaltyContent() {
               </table>
             ) : null}
           </div>
+
+          {tab === "orders" ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4">
+              <p className="text-xs text-slate-500">
+                {ordersPagination.total === 0
+                  ? "No records"
+                  : `Showing ${ordersRangeStart}–${ordersRangeEnd} of ${ordersPagination.total}`}
+                {ordersPagination.total_pages > 1
+                  ? ` · Page ${ordersPagination.page} of ${ordersPagination.total_pages}`
+                  : null}
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="inline-flex items-center gap-2 text-xs text-slate-500">
+                  Per page
+                  <select
+                    value={ordersPerPage}
+                    onChange={(e) => {
+                      setOrdersPerPage(e.target.value);
+                      setOrdersPage(1);
+                    }}
+                    disabled={ordersLoading}
+                    className="rounded-lg border border-white/10 bg-admin-surface px-2 py-1.5 text-xs text-white disabled:opacity-50"
+                  >
+                    {["10", "20", "25", "50"].map((n) => (
+                      <option key={n} value={n} className="bg-admin-surface">
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {ordersPagination.total_pages > 1 ? (
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={ordersPagination.page <= 1 || ordersLoading}
+                      onClick={() => setOrdersPage((p) => Math.max(1, p - 1))}
+                      className="admin-btn-secondary disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      disabled={ordersPagination.page >= ordersPagination.total_pages || ordersLoading}
+                      onClick={() => setOrdersPage((p) => p + 1)}
+                      className="admin-btn-secondary disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </section>
       )}
 
+      <DepositStatusConfirmModal
+        open={Boolean(approveConfirmId) && tab === "orders"}
+        title="Set as Approved?"
+        message={
+          approveOrderRecord
+            ? `${approveOrderRecord.id} · ${approveOrderRecord.customer}`
+            : undefined
+        }
+        confirmLabel="Yes"
+        confirmClassName="bg-theme-green-action"
+        busy={orderStatusBusy}
+        onCancel={() => setApproveConfirmId(null)}
+        onConfirm={() => {
+          approve(approveConfirmId);
+          setApproveConfirmId(null);
+        }}
+      />
+
+      <DepositStatusConfirmModal
+        open={Boolean(reopenConfirmId) && tab === "orders"}
+        title="Set as Pending?"
+        message={
+          reopenOrderRecord
+            ? `${reopenOrderRecord.id} · ${reopenOrderRecord.customer}`
+            : undefined
+        }
+        confirmLabel="Yes"
+        confirmClassName="bg-[#D1900F]"
+        busy={orderStatusBusy}
+        onCancel={() => setReopenConfirmId(null)}
+        onConfirm={() => {
+          reopen(reopenConfirmId);
+          setReopenConfirmId(null);
+        }}
+      />
+
+      <DepositStatusConfirmModal
+        open={Boolean(rejectId) && tab === "orders"}
+        title="Set as Rejected?"
+        message={
+          rejectOrderRecord
+            ? `${rejectOrderRecord.id} · ${rejectOrderRecord.customer}`
+            : undefined
+        }
+        confirmLabel="Yes"
+        confirmClassName="bg-[#E11D48]"
+        busy={orderStatusBusy}
+        onCancel={() => setRejectId(null)}
+        onConfirm={() => {
+          rejectRecord(rejectId);
+          setRejectId(null);
+        }}
+      />
+
       <RejectModal
-        open={!!rejectId}
+        open={Boolean(rejectId) && tab !== "orders"}
         title={
           tab === "bonus" ? "Reject bonus claim" : tab === "vouchers" ? "Reject voucher claim" : "Reject loyalty claim"
         }
@@ -1677,6 +2047,9 @@ function LoyaltyContent() {
         onApprove={approve}
         onReject={rejectRecord}
         onReopen={reopen}
+        onRequestReject={setRejectId}
+        onRequestApprove={setApproveConfirmId}
+        onRequestReopen={setReopenConfirmId}
       />
     </div>
   );
