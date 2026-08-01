@@ -7,8 +7,8 @@ import RejectReasonPanel from "@/components/admin/reject-reason-panel";
 import DepositProofStatusPanel from "@/components/admin/deposit-proof-status-panel";
 import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
 import CopyCell, { FilterField, StatusPill, inputCls } from "@/components/admin/queue-ui";
-import { WITHDRAWALS } from "@/lib/mock-data";
 import AssignDepositsModal from "@/components/admin/assign-deposits-modal";
+import AssignWithdrawalsModal from "@/components/admin/assign-withdrawals-modal";
 import { EmailSendModal, SmsSendModal } from "@/components/admin/customer-message-modals";
 import { sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
 import {
@@ -19,9 +19,21 @@ import {
   getDefaultAdvancedSearchIn,
   hasAdvancedDepositFilters,
   mapDurationToFilter,
+  resolveStatusFromUrl,
+  resolveTransactionListStatus,
   updateDepositStatus,
   validateDepositCustomDate,
 } from "@/lib/deposits";
+import {
+  buildWithdrawalQueryParams,
+  downloadWithdrawalsExport,
+  fetchWithdrawalProofBlob,
+  fetchWithdrawals,
+  fetchSimilarWithdrawals,
+  hasAdvancedWithdrawalFilters,
+  updateWithdrawalStatus,
+  validateWithdrawalCustomDate,
+} from "@/lib/withdrawals";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -78,6 +90,44 @@ function normalizeQueryString(qs) {
     .join("&");
 }
 
+function createDefaultTabFilters() {
+  return {
+    status: "Pending",
+    q: "",
+    duration: "Today",
+    from: "",
+    to: "",
+    txId: "",
+    platformId: "",
+    userAccount: "",
+    advancedSearchIn: "Completed",
+  };
+}
+
+function parseTabFiltersFromSearchParams(urlParams) {
+  const urlStatus = urlParams.get("status") || "Pending";
+  const urlSearchIn = urlParams.get("search_in");
+  const duration = mapFilterToDuration(urlParams.get("filter") || "today");
+  const from = urlParams.get("from_date") || "";
+  const to = urlParams.get("to_date") || "";
+  const txId = urlParams.get("t_id") || "";
+  const platformId = urlParams.get("p_acc") || "";
+  const userAccount = urlParams.get("u_acc") || "";
+  const filterValues = {
+    duration,
+    from,
+    to,
+    transactionId: txId,
+    platformId,
+    userAccount,
+  };
+  const advancedSearchIn = getDefaultAdvancedSearchIn(urlStatus, urlSearchIn);
+  const status = resolveStatusFromUrl(urlStatus, urlSearchIn, filterValues);
+  const promotedFromUrl = status !== urlStatus;
+  const q = promotedFromUrl && urlStatus === "Pending" ? "" : urlParams.get("keyword") || "";
+  return { status, q, duration, from, to, txId, platformId, userAccount, advancedSearchIn };
+}
+
 function formatDateParts(value) {
   if (!value) return { date: "—", time: "" };
   const raw = String(value).trim();
@@ -115,7 +165,7 @@ function formatDepositRejectedReason(record) {
   return `${message} | ${category}`;
 }
 
-function depositRowClassName(record) {
+function transactionRowClassName(record) {
   return record?.isScammer
     ? "border-t border-rose-500/25 bg-rose-500/10 text-slate-200 transition hover:bg-rose-500/15"
     : "border-t border-white/10 text-slate-300 transition hover:bg-admin-teal/[0.05]";
@@ -123,18 +173,18 @@ function depositRowClassName(record) {
 
 function PlatformIdCell({ value, isScammer }) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="min-w-0">
       <CopyCell value={value} />
       {isScammer ? (
-        <span title="User is flagged as Potential Scammer" className="inline-flex shrink-0 text-rose-300">
-          <Info className="h-4 w-4" />
-        </span>
+        <p className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-rose-300">
+          <Info className="h-3 w-3" />
+          Scammer
+        </p>
       ) : null}
     </div>
   );
 }
 
-/** Build the proofs the customer already submitted for a transaction. */
 function getSubmittedProofs(record) {
   if (!record?.proof && !record?.proofUrl) return [];
   const amount = record.clientPay || record.cashoutAmt || record.amount;
@@ -218,7 +268,7 @@ function ProofSummaryFields({ proof }) {
   );
 }
 
-function ProofImageCard({ proof, file }) {
+function ProofImageCard({ proof, file, fetchProofBlob }) {
   const amount = file?.amount || proof.clientPay || proof.cashoutAmt || proof.amount;
   const method = file?.method || proof.method;
   const account = file?.account || proof.account;
@@ -245,7 +295,7 @@ function ProofImageCard({ proof, file }) {
     setLoadError(false);
     setPreviewUrl("");
 
-    fetchDepositProofBlob(proofKey)
+    (fetchProofBlob || fetchDepositProofBlob)(proofKey)
       .then((blob) => {
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
@@ -264,7 +314,7 @@ function ProofImageCard({ proof, file }) {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [proofKey, directUrl]);
+  }, [proofKey, directUrl, fetchProofBlob]);
 
   if (loading) {
     return (
@@ -327,7 +377,7 @@ function ProofImageCard({ proof, file }) {
 }
 
 /** Full-screen image popup — click anywhere to close */
-function ProofImageLightbox({ open, proof, file, onClose }) {
+function ProofImageLightbox({ open, proof, file, onClose, fetchProofBlob }) {
   if (!open || !proof) return null;
   return (
     <div
@@ -339,7 +389,7 @@ function ProofImageLightbox({ open, proof, file, onClose }) {
         Tap anywhere to close
       </p>
       <div className="pointer-events-none max-h-[85vh] w-full max-w-md overflow-auto">
-        <ProofImageCard proof={proof} file={file} />
+        <ProofImageCard proof={proof} file={file} fetchProofBlob={fetchProofBlob} />
       </div>
     </div>
   );
@@ -388,7 +438,7 @@ function SubmittedFilesList({ proofs, activeId, onSelect, onViewImage }) {
   );
 }
 
-function SubmittedProofViewer({ proof, proofs, activeId, onOpenImage }) {
+function SubmittedProofViewer({ proof, proofs, activeId, onOpenImage, fetchProofBlob }) {
   const active = proofs.find((p) => p.id === activeId) || proofs[0];
   if (!active) {
     return (
@@ -422,7 +472,7 @@ function SubmittedProofViewer({ proof, proofs, activeId, onOpenImage }) {
           className="flex min-h-[220px] w-full items-center justify-center bg-gradient-to-b from-white/[0.04] to-transparent p-4 transition hover:from-white/[0.07] sm:min-h-[280px] sm:p-6"
           title="View full image"
         >
-          <ProofImageCard proof={proof} file={active} />
+          <ProofImageCard proof={proof} file={active} fetchProofBlob={fetchProofBlob} />
         </button>
       </div>
 
@@ -436,28 +486,30 @@ function TransactionsContent() {
   const router = useRouter();
   const pathname = usePathname();
   const [tab, setTab] = useState(params.get("tab") === "withdrawals" ? "withdrawals" : "deposits");
-  const [status, setStatus] = useState(params.get("status") || "Pending");
-  const [q, setQ] = useState(params.get("keyword") || "");
-  const [duration, setDuration] = useState(mapFilterToDuration(params.get("filter") || "today"));
-  const [from, setFrom] = useState(params.get("from_date") || "");
-  const [to, setTo] = useState(params.get("to_date") || "");
-  const [txId, setTxId] = useState(params.get("t_id") || "");
-  const [platformId, setPlatformId] = useState(params.get("p_acc") || "");
-  const [userAccount, setUserAccount] = useState(params.get("u_acc") || "");
-  const [advancedSearchIn, setAdvancedSearchIn] = useState(() =>
-    getDefaultAdvancedSearchIn(
-      params.get("status") || "Pending",
-      params.get("search_in"),
-    ),
+  const [depositFilters, setDepositFilters] = useState(() =>
+    params.get("tab") === "withdrawals"
+      ? createDefaultTabFilters()
+      : parseTabFiltersFromSearchParams(params),
+  );
+  const [withdrawalFilters, setWithdrawalFilters] = useState(() =>
+    params.get("tab") === "withdrawals"
+      ? parseTabFiltersFromSearchParams(params)
+      : createDefaultTabFilters(),
   );
   const [filterError, setFilterError] = useState("");
   const [perPage, setPerPage] = useState(params.get("per_page") || "10");
   const [selected, setSelected] = useState([]);
   const [deposits, setDeposits] = useState([]);
-  const [withdrawals, setWithdrawals] = useState(WITHDRAWALS);
+  const [withdrawals, setWithdrawals] = useState([]);
   const [depositsLoading, setDepositsLoading] = useState(false);
+  const [withdrawalsLoading, setWithdrawalsLoading] = useState(false);
   const [depositsError, setDepositsError] = useState("");
+  const [withdrawalsError, setWithdrawalsError] = useState("");
   const [depositTotals, setDepositTotals] = useState({ totalDepositAmount: 0, totalPaymentAmount: 0 });
+  const [withdrawalTotals, setWithdrawalTotals] = useState({
+    totalCashoutAmount: 0,
+    totalReceivingAmount: 0,
+  });
   const [depositPagination, setDepositPagination] = useState({
     current_page: 1,
     total_pages: 1,
@@ -466,20 +518,31 @@ function TransactionsContent() {
     has_prev: false,
     has_next: false,
   });
+  const [withdrawalPagination, setWithdrawalPagination] = useState({
+    current_page: 1,
+    total_pages: 1,
+    total_count: 0,
+    per_page: 10,
+    has_prev: false,
+    has_next: false,
+  });
   const [depositPage, setDepositPage] = useState(Math.max(1, Number(params.get("page")) || 1));
-  const [depositPendingCount, setDepositPendingCount] = useState(0);
+  const [withdrawalPage, setWithdrawalPage] = useState(Math.max(1, Number(params.get("page")) || 1));
   const [rejectId, setRejectId] = useState(null);
   const [pendingConfirmId, setPendingConfirmId] = useState(null);
   const [approveConfirmId, setApproveConfirmId] = useState(null);
   const [statusActionBusy, setStatusActionBusy] = useState(false);
   const [proofSaving, setProofSaving] = useState(false);
   const [proof, setProof] = useState(null);
+  const [similarWithdrawals, setSimilarWithdrawals] = useState([]);
+  const [similarWithdrawalsLoading, setSimilarWithdrawalsLoading] = useState(false);
   const [activeProofId, setActiveProofId] = useState(null);
   const [imageLightbox, setImageLightbox] = useState(null);
   const proofBodyRef = useRef(null);
   const [refreshing, setRefreshing] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [depositIsAdmin, setDepositIsAdmin] = useState(false);
+  const [withdrawalIsAdmin, setWithdrawalIsAdmin] = useState(false);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [smsModalOpen, setSmsModalOpen] = useState(false);
   const [emailCompose, setEmailCompose] = useState({ receivers: "", subject: "", body: "", attachment: null });
@@ -493,38 +556,85 @@ function TransactionsContent() {
   const [viewAll, setViewAll] = useState(false);
   const [livePulse, setLivePulse] = useState(0);
   const skipUrlHydrationRef = useRef(false);
+  const skipAutoLoadRef = useRef(false);
+  const skipInitialAutoLoadRef = useRef(true);
+  const loadDepositsRef = useRef(null);
+  const loadWithdrawalsRef = useRef(null);
+  const buildDepositUrlQueryRef = useRef(null);
+  const buildWithdrawalUrlQueryRef = useRef(null);
+  const routerRef = useRef(null);
+  const pathnameRef = useRef(null);
+  const tabRef = useRef(tab);
   const searchParamsString = params.toString();
+  tabRef.current = tab;
 
-  useEffect(() => {
-    if (skipUrlHydrationRef.current) {
-      skipUrlHydrationRef.current = false;
-      return;
-    }
-    setTab(params.get("tab") === "withdrawals" ? "withdrawals" : "deposits");
-    const nextStatus = params.get("status") || "Pending";
-    setStatus(nextStatus);
-    setQ(params.get("keyword") || "");
-    setDuration(mapFilterToDuration(params.get("filter") || "today"));
-    setFrom(params.get("from_date") || "");
-    setTo(params.get("to_date") || "");
-    setTxId(params.get("t_id") || "");
-    setPlatformId(params.get("p_acc") || "");
-    setUserAccount(params.get("u_acc") || "");
-    setAdvancedSearchIn(getDefaultAdvancedSearchIn(nextStatus, params.get("search_in")));
-    setPerPage(params.get("per_page") || "10");
-    setDepositPage(Math.max(1, Number(params.get("page")) || 1));
-    setSelected([]);
-    setViewAll(false);
-  }, [searchParamsString]);
-
-  const advancedFiltersActive = hasAdvancedDepositFilters({
+  const filters = tab === "deposits" ? depositFilters : withdrawalFilters;
+  const {
+    status,
+    q,
     duration,
     from,
     to,
-    transactionId: txId,
+    txId,
     platformId,
     userAccount,
-  });
+    advancedSearchIn,
+  } = filters;
+
+  const patchActiveFilters = useCallback(
+    (patch) => {
+      if (tab === "deposits") {
+        setDepositFilters((prev) => ({ ...prev, ...patch }));
+      } else {
+        setWithdrawalFilters((prev) => ({ ...prev, ...patch }));
+      }
+    },
+    [tab],
+  );
+
+  const setStatus = (value) => {
+    if (tab === "deposits") {
+      setDepositFilters((prev) => ({
+        ...prev,
+        status: typeof value === "function" ? value(prev.status) : value,
+      }));
+    } else {
+      setWithdrawalFilters((prev) => ({
+        ...prev,
+        status: typeof value === "function" ? value(prev.status) : value,
+      }));
+    }
+  };
+  const setQ = (value) => patchActiveFilters({ q: value });
+  const setDuration = (value) => patchActiveFilters({ duration: value });
+  const setFrom = (value) => patchActiveFilters({ from: value });
+  const setTo = (value) => patchActiveFilters({ to: value });
+  const setTxId = (value) => patchActiveFilters({ txId: value });
+  const setPlatformId = (value) => patchActiveFilters({ platformId: value });
+  const setUserAccount = (value) => patchActiveFilters({ userAccount: value });
+  const setAdvancedSearchIn = (value) => patchActiveFilters({ advancedSearchIn: value });
+
+  const advancedFiltersActive =
+    tab === "withdrawals"
+      ? hasAdvancedWithdrawalFilters({
+          duration,
+          from,
+          to,
+          transactionId: txId,
+          platformId,
+          userAccount,
+        })
+      : hasAdvancedDepositFilters({
+          duration,
+          from,
+          to,
+          transactionId: txId,
+          platformId,
+          userAccount,
+        });
+
+  const activeListPage = tab === "deposits" ? depositPage : withdrawalPage;
+  const setActiveListPage = tab === "deposits" ? setDepositPage : setWithdrawalPage;
 
   const resolvedDepositStatus = useMemo(() => {
     return status === "All" ? "All" : status;
@@ -532,17 +642,17 @@ function TransactionsContent() {
 
   const buildDepositUrlQuery = useCallback(
     (overrides = {}) => {
-      const pageStatus = overrides.status ?? status;
-      const nextKeyword = overrides.keyword ?? q;
+      const pageStatus = overrides.status ?? depositFilters.status;
+      const nextKeyword = overrides.keyword ?? depositFilters.q;
       const nextPage = String(overrides.page ?? depositPage);
       const nextPerPage = String(overrides.perPage ?? perPage);
-      const nextDuration = overrides.duration ?? duration;
-      const nextFrom = overrides.from ?? from;
-      const nextTo = overrides.to ?? to;
-      const nextTxId = overrides.txId ?? txId;
-      const nextPlatformId = overrides.platformId ?? platformId;
-      const nextUserAccount = overrides.userAccount ?? userAccount;
-      const nextAdvancedSearchIn = overrides.advancedSearchIn ?? advancedSearchIn;
+      const nextDuration = overrides.duration ?? depositFilters.duration;
+      const nextFrom = overrides.from ?? depositFilters.from;
+      const nextTo = overrides.to ?? depositFilters.to;
+      const nextTxId = overrides.txId ?? depositFilters.txId;
+      const nextPlatformId = overrides.platformId ?? depositFilters.platformId;
+      const nextUserAccount = overrides.userAccount ?? depositFilters.userAccount;
+      const nextAdvancedSearchIn = overrides.advancedSearchIn ?? depositFilters.advancedSearchIn;
 
       const advancedActive = hasAdvancedDepositFilters({
         duration: nextDuration,
@@ -553,12 +663,20 @@ function TransactionsContent() {
         userAccount: nextUserAccount,
       });
 
-      const effectiveStatus =
-        advancedActive && pageStatus === "Pending" ? nextAdvancedSearchIn : pageStatus;
+      const resolvedStatus = resolveTransactionListStatus({
+        status: pageStatus,
+        advancedSearchIn: nextAdvancedSearchIn,
+        duration: nextDuration,
+        from: nextFrom,
+        to: nextTo,
+        transactionId: nextTxId,
+        platformId: nextPlatformId,
+        userAccount: nextUserAccount,
+      });
 
       const next = new URLSearchParams();
       next.set("tab", "deposits");
-      next.set("status", effectiveStatus);
+      next.set("status", resolvedStatus);
       next.set("page", nextPage);
       next.set("per_page", nextPerPage);
 
@@ -567,19 +685,16 @@ function TransactionsContent() {
       const keywordOnlyWithinStatus =
         nextKeyword.trim() &&
         !advancedActive &&
-        (effectiveStatus === "Pending" ||
-          effectiveStatus === "Completed" ||
-          effectiveStatus === "Rejected");
+        (resolvedStatus === "Pending" ||
+          resolvedStatus === "Completed" ||
+          resolvedStatus === "Rejected");
 
       const defaultScopedList =
         !nextKeyword.trim() &&
         !advancedActive &&
-        (effectiveStatus === "Completed" || effectiveStatus === "Rejected");
+        (resolvedStatus === "Completed" || resolvedStatus === "Rejected");
 
       if (advancedActive) {
-        if (pageStatus === "Pending") {
-          next.set("search_in", nextAdvancedSearchIn);
-        }
         const filterValue =
           mapDurationToFilter(nextDuration) || (nextDuration === "Today" ? "today" : "");
         if (filterValue) next.set("filter", filterValue);
@@ -594,25 +709,13 @@ function TransactionsContent() {
         if (filterValue) next.set("filter", filterValue);
         if (nextDuration === "Custom" && nextFrom) next.set("from_date", nextFrom);
         if (nextDuration === "Custom" && nextTo) next.set("to_date", nextTo);
-      } else if (!keywordOnlyWithinStatus && pageStatus === "Pending" && !advancedActive) {
+      } else if (!keywordOnlyWithinStatus && resolvedStatus === "Pending" && !advancedActive) {
         // Pending default list — no extra query params.
       }
 
       return next.toString();
     },
-    [
-      status,
-      q,
-      depositPage,
-      perPage,
-      duration,
-      from,
-      to,
-      txId,
-      platformId,
-      userAccount,
-      advancedSearchIn,
-    ],
+    [depositFilters, depositPage, perPage],
   );
 
   const syncDepositUrl = useCallback(
@@ -626,9 +729,101 @@ function TransactionsContent() {
     [tab, buildDepositUrlQuery, searchParamsString, router, pathname],
   );
 
-  const loadDeposits = useCallback(async () => {
-    if (tab !== "deposits") return;
-    const customDateError = validateDepositCustomDate(duration, from, to);
+  const buildWithdrawalUrlQuery = useCallback(
+    (overrides = {}) => {
+      const pageStatus = overrides.status ?? withdrawalFilters.status;
+      const nextKeyword = overrides.keyword ?? withdrawalFilters.q;
+      const nextPage = String(overrides.page ?? withdrawalPage);
+      const nextPerPage = String(overrides.perPage ?? perPage);
+      const nextDuration = overrides.duration ?? withdrawalFilters.duration;
+      const nextFrom = overrides.from ?? withdrawalFilters.from;
+      const nextTo = overrides.to ?? withdrawalFilters.to;
+      const nextTxId = overrides.txId ?? withdrawalFilters.txId;
+      const nextPlatformId = overrides.platformId ?? withdrawalFilters.platformId;
+      const nextUserAccount = overrides.userAccount ?? withdrawalFilters.userAccount;
+      const nextAdvancedSearchIn = overrides.advancedSearchIn ?? withdrawalFilters.advancedSearchIn;
+
+      const advancedActive = hasAdvancedWithdrawalFilters({
+        duration: nextDuration,
+        from: nextFrom,
+        to: nextTo,
+        transactionId: nextTxId,
+        platformId: nextPlatformId,
+        userAccount: nextUserAccount,
+      });
+
+      const resolvedStatus = resolveTransactionListStatus({
+        status: pageStatus,
+        advancedSearchIn: nextAdvancedSearchIn,
+        duration: nextDuration,
+        from: nextFrom,
+        to: nextTo,
+        transactionId: nextTxId,
+        platformId: nextPlatformId,
+        userAccount: nextUserAccount,
+      });
+
+      const next = new URLSearchParams();
+      next.set("tab", "withdrawals");
+      next.set("status", resolvedStatus);
+      next.set("page", nextPage);
+      next.set("per_page", nextPerPage);
+
+      if (nextKeyword.trim()) next.set("keyword", nextKeyword.trim());
+
+      const keywordOnlyWithinStatus =
+        nextKeyword.trim() &&
+        !advancedActive &&
+        (resolvedStatus === "Pending" ||
+          resolvedStatus === "Completed" ||
+          resolvedStatus === "Rejected");
+
+      const defaultScopedList =
+        !nextKeyword.trim() &&
+        !advancedActive &&
+        (resolvedStatus === "Completed" || resolvedStatus === "Rejected");
+
+      if (advancedActive) {
+        const filterValue =
+          mapDurationToFilter(nextDuration) || (nextDuration === "Today" ? "today" : "");
+        if (filterValue) next.set("filter", filterValue);
+        if (nextDuration === "Custom" && nextFrom) next.set("from_date", nextFrom);
+        if (nextDuration === "Custom" && nextTo) next.set("to_date", nextTo);
+        if (nextTxId.trim()) next.set("t_id", nextTxId.trim());
+        if (nextPlatformId.trim()) next.set("p_acc", nextPlatformId.trim());
+        if (nextUserAccount.trim()) next.set("u_acc", nextUserAccount.trim());
+      } else if (defaultScopedList) {
+        const filterValue =
+          mapDurationToFilter(nextDuration) || (nextDuration === "Today" ? "today" : "");
+        if (filterValue) next.set("filter", filterValue);
+        if (nextDuration === "Custom" && nextFrom) next.set("from_date", nextFrom);
+        if (nextDuration === "Custom" && nextTo) next.set("to_date", nextTo);
+      }
+
+      return next.toString();
+    },
+    [withdrawalFilters, withdrawalPage, perPage],
+  );
+
+  const syncWithdrawalUrl = useCallback(
+    (overrides = {}) => {
+      if (tab !== "withdrawals") return;
+      const qs = buildWithdrawalUrlQuery(overrides);
+      if (normalizeQueryString(qs) === normalizeQueryString(searchParamsString)) return;
+      skipUrlHydrationRef.current = true;
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [tab, buildWithdrawalUrlQuery, searchParamsString, router, pathname],
+  );
+
+  const loadDeposits = useCallback(async (overrides = {}) => {
+    if (tabRef.current !== "deposits") return;
+    const nextDuration = overrides.duration ?? depositFilters.duration;
+    const nextFrom = overrides.from ?? depositFilters.from;
+    const nextTo = overrides.to ?? depositFilters.to;
+    const nextStatus = overrides.status ?? depositFilters.status;
+    const nextPage = overrides.page ?? depositPage;
+    const customDateError = validateDepositCustomDate(nextDuration, nextFrom, nextTo);
     if (customDateError) {
       setFilterError(customDateError);
       return;
@@ -638,10 +833,247 @@ function TransactionsContent() {
     setDepositsError("");
     try {
       const queryParams = buildDepositQueryParams({
-        status,
-        page: depositPage,
-        perPage,
-        keyword: q,
+        status: nextStatus,
+        page: nextPage,
+        perPage: overrides.perPage ?? perPage,
+        keyword: overrides.keyword ?? depositFilters.q,
+        duration: nextDuration,
+        from: nextFrom,
+        to: nextTo,
+        transactionId: overrides.transactionId ?? depositFilters.txId,
+        platformId: overrides.platformId ?? depositFilters.platformId,
+        userAccount: overrides.userAccount ?? depositFilters.userAccount,
+        advancedSearchIn: overrides.advancedSearchIn ?? depositFilters.advancedSearchIn,
+      });
+      const data = await fetchDeposits(queryParams);
+      setDeposits(data.deposits || []);
+      setDepositTotals(data.totals || { totalDepositAmount: 0, totalPaymentAmount: 0 });
+      setDepositPagination(data.pagination || depositPagination);
+      setDepositIsAdmin(Boolean(data.isAdmin));
+    } catch (err) {
+      setDepositsError(err.message || "Failed to load deposits.");
+      setDeposits([]);
+    } finally {
+      setDepositsLoading(false);
+    }
+  }, [depositFilters, resolvedDepositStatus, depositPage, perPage]);
+
+  const loadWithdrawals = useCallback(async (overrides = {}) => {
+    if (tabRef.current !== "withdrawals") return;
+    const nextDuration = overrides.duration ?? withdrawalFilters.duration;
+    const nextFrom = overrides.from ?? withdrawalFilters.from;
+    const nextTo = overrides.to ?? withdrawalFilters.to;
+    const nextStatus = overrides.status ?? withdrawalFilters.status;
+    const nextPage = overrides.page ?? withdrawalPage;
+    const customDateError = validateWithdrawalCustomDate(nextDuration, nextFrom, nextTo);
+    if (customDateError) {
+      setFilterError(customDateError);
+      return;
+    }
+    setFilterError("");
+    setWithdrawalsLoading(true);
+    setWithdrawalsError("");
+    try {
+      const queryParams = buildWithdrawalQueryParams({
+        status: nextStatus,
+        page: nextPage,
+        perPage: overrides.perPage ?? perPage,
+        keyword: overrides.keyword ?? withdrawalFilters.q,
+        duration: nextDuration,
+        from: nextFrom,
+        to: nextTo,
+        transactionId: overrides.transactionId ?? withdrawalFilters.txId,
+        platformId: overrides.platformId ?? withdrawalFilters.platformId,
+        userAccount: overrides.userAccount ?? withdrawalFilters.userAccount,
+        advancedSearchIn: overrides.advancedSearchIn ?? withdrawalFilters.advancedSearchIn,
+      });
+      const data = await fetchWithdrawals(queryParams);
+      setWithdrawals(data.withdrawals || []);
+      setWithdrawalTotals(
+        data.totals || { totalCashoutAmount: 0, totalReceivingAmount: 0 },
+      );
+      setWithdrawalPagination(data.pagination || withdrawalPagination);
+      setWithdrawalIsAdmin(Boolean(data.isAdmin));
+    } catch (err) {
+      setWithdrawalsError(err.message || "Failed to load withdrawals.");
+      setWithdrawals([]);
+    } finally {
+      setWithdrawalsLoading(false);
+    }
+  }, [withdrawalFilters, resolvedDepositStatus, withdrawalPage, perPage]);
+
+  loadDepositsRef.current = loadDeposits;
+  loadWithdrawalsRef.current = loadWithdrawals;
+  buildDepositUrlQueryRef.current = buildDepositUrlQuery;
+  buildWithdrawalUrlQueryRef.current = buildWithdrawalUrlQuery;
+  routerRef.current = router;
+  pathnameRef.current = pathname;
+
+  useEffect(() => {
+    if (tab !== "deposits" || skipAutoLoadRef.current) return undefined;
+    if (skipInitialAutoLoadRef.current) return undefined;
+    const filterValues = {
+      duration: depositFilters.duration,
+      from: depositFilters.from,
+      to: depositFilters.to,
+      transactionId: depositFilters.txId,
+      platformId: depositFilters.platformId,
+      userAccount: depositFilters.userAccount,
+    };
+    const advancedActive = hasAdvancedDepositFilters(filterValues);
+    const debounceMs = depositFilters.q.trim() || advancedActive ? 450 : 0;
+    const timer = setTimeout(() => {
+      const nextStatus = resolveTransactionListStatus({
+        status: depositFilters.status,
+        advancedSearchIn: depositFilters.advancedSearchIn,
+        ...filterValues,
+      });
+      const promoted = nextStatus !== depositFilters.status;
+      if (promoted) {
+        setDepositFilters((prev) => ({
+          ...prev,
+          status: nextStatus,
+          q: prev.q.trim() ? "" : prev.q,
+        }));
+        setDepositPage(1);
+        skipUrlHydrationRef.current = true;
+        const qs = buildDepositUrlQuery({
+          status: nextStatus,
+          keyword: "",
+          page: 1,
+          duration: depositFilters.duration,
+          from: depositFilters.from,
+          to: depositFilters.to,
+          txId: depositFilters.txId,
+          platformId: depositFilters.platformId,
+          userAccount: depositFilters.userAccount,
+          advancedSearchIn: depositFilters.advancedSearchIn,
+        });
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      }
+      loadDeposits({
+        status: nextStatus,
+        page: promoted ? 1 : depositPage,
+        keyword: promoted ? "" : undefined,
+      });
+    }, debounceMs);
+    return () => clearTimeout(timer);
+  }, [
+    tab,
+    loadDeposits,
+    depositFilters,
+    depositPage,
+    perPage,
+    buildDepositUrlQuery,
+    router,
+    pathname,
+  ]);
+
+  useEffect(() => {
+    if (tab !== "withdrawals" || skipAutoLoadRef.current) return undefined;
+    if (skipInitialAutoLoadRef.current) return undefined;
+    const filterValues = {
+      duration: withdrawalFilters.duration,
+      from: withdrawalFilters.from,
+      to: withdrawalFilters.to,
+      transactionId: withdrawalFilters.txId,
+      platformId: withdrawalFilters.platformId,
+      userAccount: withdrawalFilters.userAccount,
+    };
+    const advancedActive = hasAdvancedWithdrawalFilters(filterValues);
+    const debounceMs = withdrawalFilters.q.trim() || advancedActive ? 450 : 0;
+    const timer = setTimeout(() => {
+      const nextStatus = resolveTransactionListStatus({
+        status: withdrawalFilters.status,
+        advancedSearchIn: withdrawalFilters.advancedSearchIn,
+        ...filterValues,
+      });
+      const promoted = nextStatus !== withdrawalFilters.status;
+      if (promoted) {
+        setWithdrawalFilters((prev) => ({
+          ...prev,
+          status: nextStatus,
+          q: prev.q.trim() ? "" : prev.q,
+        }));
+        setWithdrawalPage(1);
+        skipUrlHydrationRef.current = true;
+        const qs = buildWithdrawalUrlQuery({
+          status: nextStatus,
+          keyword: "",
+          page: 1,
+          duration: withdrawalFilters.duration,
+          from: withdrawalFilters.from,
+          to: withdrawalFilters.to,
+          txId: withdrawalFilters.txId,
+          platformId: withdrawalFilters.platformId,
+          userAccount: withdrawalFilters.userAccount,
+          advancedSearchIn: withdrawalFilters.advancedSearchIn,
+        });
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      }
+      loadWithdrawals({
+        status: nextStatus,
+        page: promoted ? 1 : withdrawalPage,
+        keyword: promoted ? "" : undefined,
+      });
+    }, debounceMs);
+    return () => clearTimeout(timer);
+  }, [
+    tab,
+    loadWithdrawals,
+    withdrawalFilters,
+    withdrawalPage,
+    perPage,
+    buildWithdrawalUrlQuery,
+    router,
+    pathname,
+  ]);
+
+  useEffect(() => {
+    if (tab !== "deposits") return undefined;
+    const timer = setTimeout(() => {
+      syncDepositUrl();
+    }, depositFilters.q.trim() ? 450 : 0);
+    return () => clearTimeout(timer);
+  }, [tab, syncDepositUrl, depositFilters, depositPage, perPage, resolvedDepositStatus]);
+
+  useEffect(() => {
+    if (tab !== "withdrawals") return undefined;
+    const timer = setTimeout(() => {
+      syncWithdrawalUrl();
+    }, withdrawalFilters.q.trim() ? 450 : 0);
+    return () => clearTimeout(timer);
+  }, [tab, syncWithdrawalUrl, withdrawalFilters, withdrawalPage, perPage, resolvedDepositStatus]);
+
+  const runTransactionSearch = useCallback(
+    (event) => {
+      event?.preventDefault?.();
+      const filterValues = {
+        duration,
+        from,
+        to,
+        transactionId: txId,
+        platformId,
+        userAccount,
+      };
+      const advancedActive =
+        tab === "withdrawals"
+          ? hasAdvancedWithdrawalFilters(filterValues)
+          : hasAdvancedDepositFilters(filterValues);
+      const fromAdvancedRow =
+        event?.fromAdvancedRow === true ||
+        event?.submitter?.dataset?.searchType === "advanced";
+      const nextStatus =
+        status === "Pending" && (fromAdvancedRow || advancedActive)
+          ? advancedSearchIn
+          : status;
+      const clearKeyword = status === "Pending" && nextStatus !== "Pending";
+      const nextKeyword = clearKeyword ? "" : q;
+
+      const searchOverrides = {
+        page: 1,
+        status: nextStatus,
+        keyword: nextKeyword || undefined,
         duration,
         from,
         to,
@@ -649,95 +1081,167 @@ function TransactionsContent() {
         platformId,
         userAccount,
         advancedSearchIn,
-      });
-      const data = await fetchDeposits(queryParams);
-      setDeposits(data.deposits || []);
-      setDepositTotals(data.totals || { totalDepositAmount: 0, totalPaymentAmount: 0 });
-      setDepositPagination(data.pagination || depositPagination);
-      setDepositIsAdmin(Boolean(data.isAdmin));
-      if (resolvedDepositStatus === "Pending") {
-        setDepositPendingCount(data.pagination?.total_count || 0);
-      }
-    } catch (err) {
-      setDepositsError(err.message || "Failed to load deposits.");
-      setDeposits([]);
-    } finally {
-      setDepositsLoading(false);
-    }
-  }, [
-    tab,
-    status,
-    resolvedDepositStatus,
-    depositPage,
-    perPage,
-    q,
-    txId,
-    platformId,
-    userAccount,
-    duration,
-    from,
-    to,
-    advancedSearchIn,
-  ]);
+      };
+      const syncOverrides = {
+        page: 1,
+        status: nextStatus,
+        keyword: nextKeyword,
+        duration,
+        from,
+        to,
+        txId,
+        platformId,
+        userAccount,
+        advancedSearchIn,
+      };
 
-  useEffect(() => {
-    if (tab !== "deposits") return undefined;
-    const timer = setTimeout(() => {
-      loadDeposits();
-    }, q.trim() ? 450 : 0);
-    return () => clearTimeout(timer);
-  }, [tab, loadDeposits, q, depositPage, perPage, status]);
+      skipAutoLoadRef.current = true;
 
-  useEffect(() => {
-    if (tab !== "deposits") return undefined;
-    const timer = setTimeout(() => {
-      syncDepositUrl();
-    }, q.trim() ? 450 : 0);
-    return () => clearTimeout(timer);
-  }, [tab, syncDepositUrl, q, depositPage, perPage, status, resolvedDepositStatus]);
-
-  const runDepositSearch = useCallback(
-    (event) => {
-      event?.preventDefault?.();
-      if (tab !== "deposits") return;
-
-      const customDateError = validateDepositCustomDate(duration, from, to);
-      if (customDateError) {
-        setFilterError(customDateError);
+      if (tab === "deposits") {
+        const customDateError = validateDepositCustomDate(duration, from, to);
+        if (customDateError) {
+          setFilterError(customDateError);
+          skipAutoLoadRef.current = false;
+          return;
+        }
+        setFilterError("");
+        setDepositPage(1);
+        if (clearKeyword) setQ("");
+        setStatus(nextStatus);
+        loadDeposits(searchOverrides).finally(() => {
+          skipAutoLoadRef.current = false;
+        });
+        skipUrlHydrationRef.current = true;
+        const qs = buildDepositUrlQuery(syncOverrides);
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
         return;
       }
 
-      setFilterError("");
-      setDepositPage(1);
-      if (advancedFiltersActive && status === "Pending") {
-        setStatus(advancedSearchIn);
+      if (tab === "withdrawals") {
+        const customDateError = validateWithdrawalCustomDate(duration, from, to);
+        if (customDateError) {
+          setFilterError(customDateError);
+          skipAutoLoadRef.current = false;
+          return;
+        }
+        setFilterError("");
+        setWithdrawalPage(1);
+        if (clearKeyword) setQ("");
+        setStatus(nextStatus);
+        loadWithdrawals(searchOverrides).finally(() => {
+          skipAutoLoadRef.current = false;
+        });
+        skipUrlHydrationRef.current = true;
+        const qs = buildWithdrawalUrlQuery(syncOverrides);
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
       }
-      loadDeposits();
-      syncDepositUrl(
-        advancedFiltersActive && status === "Pending" ? { status: advancedSearchIn } : {},
-      );
     },
     [
       tab,
       status,
-      advancedFiltersActive,
       advancedSearchIn,
       duration,
       from,
       to,
+      txId,
+      platformId,
+      userAccount,
+      q,
       loadDeposits,
-      syncDepositUrl,
+      loadWithdrawals,
+      buildDepositUrlQuery,
+      buildWithdrawalUrlQuery,
+      router,
+      pathname,
     ],
   );
 
-  useEffect(() => {
-    if (tab !== "deposits") return;
-    fetchDeposits({ status: "Pending", page: 1, perPage: 1 })
-      .then((data) => setDepositPendingCount(data.pagination?.total_count || 0))
-      .catch(() => {});
-  }, [tab]);
+  function handleAdvancedFilterKeyDown(event) {
+    if (event.key !== "Enter") return;
+    if (event.target instanceof HTMLButtonElement) return;
+    event.preventDefault();
+    runTransactionSearch({ preventDefault: () => {}, fromAdvancedRow: true });
+  }
 
-  /** Near real-time refresh pulse (concept 3.5) */
+  useEffect(() => {
+    if (skipUrlHydrationRef.current) {
+      skipUrlHydrationRef.current = false;
+      return;
+    }
+
+    const urlParams = new URLSearchParams(searchParamsString);
+    const nextTab = urlParams.get("tab") === "withdrawals" ? "withdrawals" : "deposits";
+    const parsedFilters = parseTabFiltersFromSearchParams(urlParams);
+    const urlStatus = urlParams.get("status") || "Pending";
+    const urlSearchIn = urlParams.get("search_in");
+    const promotedFromUrl = parsedFilters.status !== urlStatus;
+    const nextPerPage = urlParams.get("per_page") || "10";
+    const nextPage = Math.max(1, Number(urlParams.get("page")) || 1);
+
+    setTab(nextTab);
+    if (nextTab === "deposits") {
+      setDepositFilters(parsedFilters);
+      setDepositPage(nextPage);
+    } else {
+      setWithdrawalFilters(parsedFilters);
+      setWithdrawalPage(nextPage);
+    }
+    setPerPage(nextPerPage);
+    setSelected([]);
+    setViewAll(false);
+
+    const loadOverrides = {
+      status: parsedFilters.status,
+      page: nextPage,
+      perPage: nextPerPage,
+      keyword: parsedFilters.q,
+      duration: parsedFilters.duration,
+      from: parsedFilters.from,
+      to: parsedFilters.to,
+      transactionId: parsedFilters.txId,
+      platformId: parsedFilters.platformId,
+      userAccount: parsedFilters.userAccount,
+      advancedSearchIn: parsedFilters.advancedSearchIn,
+    };
+
+    if (promotedFromUrl || urlSearchIn) {
+      skipUrlHydrationRef.current = true;
+      const urlOverrides = {
+        status: parsedFilters.status,
+        keyword: parsedFilters.q,
+        page: nextPage,
+        perPage: nextPerPage,
+        duration: parsedFilters.duration,
+        from: parsedFilters.from,
+        to: parsedFilters.to,
+        txId: parsedFilters.txId,
+        platformId: parsedFilters.platformId,
+        userAccount: parsedFilters.userAccount,
+        advancedSearchIn: parsedFilters.advancedSearchIn,
+      };
+      const qs =
+        nextTab === "deposits"
+          ? buildDepositUrlQueryRef.current(urlOverrides)
+          : buildWithdrawalUrlQueryRef.current(urlOverrides);
+      if (normalizeQueryString(qs) !== normalizeQueryString(searchParamsString)) {
+        routerRef.current.replace(
+          qs ? `${pathnameRef.current}?${qs}` : pathnameRef.current,
+          { scroll: false },
+        );
+      }
+    }
+
+    skipAutoLoadRef.current = true;
+    const loader =
+      nextTab === "deposits"
+        ? loadDepositsRef.current(loadOverrides)
+        : loadWithdrawalsRef.current(loadOverrides);
+    loader.finally(() => {
+      skipAutoLoadRef.current = false;
+      skipInitialAutoLoadRef.current = false;
+    });
+  }, [searchParamsString]);
+
   useEffect(() => {
     const id = setInterval(() => {
       setLivePulse((n) => n + 1);
@@ -745,49 +1249,37 @@ function TransactionsContent() {
     return () => clearInterval(id);
   }, []);
 
-  const source = tab === "deposits" ? deposits : withdrawals;
-
   const filtered = useMemo(() => {
     if (tab === "deposits") return deposits;
-    return source.filter((r) => {
-      if (status !== "All" && !r.status.toLowerCase().includes(status.toLowerCase())) return false;
-      if (txId && !r.id.toLowerCase().includes(txId.toLowerCase())) return false;
-      if (platformId && !String(r.platformId).toLowerCase().includes(platformId.toLowerCase())) return false;
-      if (!q.trim()) return true;
-      const s = q.toLowerCase();
-      return [r.id, r.customer, r.userId, r.platformId, r.method, r.account, r.assigned]
-        .join(" ")
-        .toLowerCase()
-        .includes(s);
-    });
-  }, [source, status, q, txId, platformId, livePulse, tab, deposits]);
+    return withdrawals;
+  }, [tab, deposits, withdrawals]);
 
   const pageSize = Number(perPage) || 10;
-  const previewCap =
-    tab === "deposits"
-      ? filtered.length
-      : viewAll
-        ? pageSize
-        : Math.min(PREVIEW_LIMIT, pageSize);
-  const shown = tab === "deposits" ? filtered : filtered.slice(0, previewCap);
-  const hasMore = tab !== "deposits" && !viewAll && filtered.length > PREVIEW_LIMIT;
+  const shown = filtered;
+  const activePagination = tab === "deposits" ? depositPagination : withdrawalPagination;
+  const listLoading = tab === "deposits" ? depositsLoading : withdrawalsLoading;
+  const listError = tab === "deposits" ? depositsError : withdrawalsError;
+  const activeProofFetcher = tab === "withdrawals" ? fetchWithdrawalProofBlob : fetchDepositProofBlob;
 
   const rejectRecord = useMemo(() => {
-    if (!rejectId || tab !== "deposits") return null;
-    return deposits.find((r) => r.id === rejectId) ?? null;
-  }, [rejectId, tab, deposits]);
+    if (!rejectId) return null;
+    const rows = tab === "deposits" ? deposits : withdrawals;
+    return rows.find((r) => r.id === rejectId) ?? null;
+  }, [rejectId, tab, deposits, withdrawals]);
 
   const pendingConfirmRecord = useMemo(() => {
-    if (!pendingConfirmId || tab !== "deposits") return null;
-    return deposits.find((r) => r.id === pendingConfirmId) ?? null;
-  }, [pendingConfirmId, tab, deposits]);
+    if (!pendingConfirmId) return null;
+    const rows = tab === "deposits" ? deposits : withdrawals;
+    return rows.find((r) => r.id === pendingConfirmId) ?? null;
+  }, [pendingConfirmId, tab, deposits, withdrawals]);
 
   const approveConfirmRecord = useMemo(() => {
-    if (!approveConfirmId || tab !== "deposits") return null;
-    return deposits.find((r) => r.id === approveConfirmId) ?? null;
-  }, [approveConfirmId, tab, deposits]);
+    if (!approveConfirmId) return null;
+    const rows = tab === "deposits" ? deposits : withdrawals;
+    return rows.find((r) => r.id === approveConfirmId) ?? null;
+  }, [approveConfirmId, tab, deposits, withdrawals]);
 
-  function getDepositActionMode(rowStatus) {
+  function getRowActionMode(rowStatus) {
     if (resolvedDepositStatus === "All") return rowStatus;
     return resolvedDepositStatus;
   }
@@ -810,23 +1302,27 @@ function TransactionsContent() {
   const pendingRows =
     tab === "deposits"
       ? deposits.filter((r) => r.status === "Pending")
-      : source.filter((r) => r.status.includes("Pending"));
+      : withdrawals.filter((r) => r.status === "Pending");
   const clientPayLkr =
     tab === "deposits" && resolvedDepositStatus === "Pending"
       ? depositTotals.totalPaymentAmount
-      : pendingRows.reduce(
-          (sum, r) => sum + (Number(r.clientPayLkr) || Number(r.clientPayUsd || 0) * 300),
-          0,
-        );
+      : tab === "withdrawals" && resolvedDepositStatus === "Pending"
+        ? withdrawalTotals.totalReceivingAmount
+        : pendingRows.reduce(
+            (sum, r) => sum + (Number(r.clientPayLkr) || Number(r.clientPayUsd || 0) * 300),
+            0,
+          );
   const topUpTotal =
     tab === "deposits" && resolvedDepositStatus === "Pending"
       ? depositTotals.totalDepositAmount
-      : tab === "withdrawals"
-        ? pendingRows.reduce((sum, r) => sum + (Number(r.clientPayUsd) || 0), 0)
-        : pendingRows.reduce(
-            (sum, r) => sum + Number(String(r.deposited || r.amount).replace(/[^\d.]/g, "") || 0),
-            0,
-          );
+      : tab === "withdrawals" && resolvedDepositStatus === "Pending"
+        ? withdrawalTotals.totalCashoutAmount
+        : tab === "withdrawals"
+          ? pendingRows.reduce((sum, r) => sum + (Number(r.clientPayUsd) || 0), 0)
+          : pendingRows.reduce(
+              (sum, r) => sum + Number(String(r.deposited || r.amount).replace(/[^\d.]/g, "") || 0),
+              0,
+            );
 
   const title =
     resolvedDepositStatus === "Pending" || resolvedDepositStatus.includes("Pending")
@@ -852,6 +1348,17 @@ function TransactionsContent() {
     requestAnimationFrame(() => {
       proofBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     });
+    if (tabRef.current === "withdrawals") {
+      setSimilarWithdrawalsLoading(true);
+      setSimilarWithdrawals([]);
+      fetchSimilarWithdrawals({ transactionId: r.id, withdrawalId: r.withdrawalId })
+        .then((data) => setSimilarWithdrawals(data.withdrawals || []))
+        .catch(() => setSimilarWithdrawals([]))
+        .finally(() => setSimilarWithdrawalsLoading(false));
+    } else {
+      setSimilarWithdrawals([]);
+      setSimilarWithdrawalsLoading(false);
+    }
   }
 
   function openSubmittedImage(record, file) {
@@ -862,6 +1369,8 @@ function TransactionsContent() {
 
   function closeProof() {
     setProof(null);
+    setSimilarWithdrawals([]);
+    setSimilarWithdrawalsLoading(false);
     setActiveProofId(null);
     setImageLightbox(null);
   }
@@ -874,11 +1383,21 @@ function TransactionsContent() {
     () => selectedDepositRows.map((row) => row.depositId).filter(Boolean),
     [selectedDepositRows],
   );
+  const selectedWithdrawalRows = useMemo(
+    () => withdrawals.filter((row) => selected.includes(row.id)),
+    [withdrawals, selected],
+  );
+  const selectedWithdrawalDbIds = useMemo(
+    () => selectedWithdrawalRows.map((row) => row.withdrawalId).filter(Boolean),
+    [selectedWithdrawalRows],
+  );
 
-  function openDepositEmailModal() {
-    const emails = [...new Set(selectedDepositRows.map((r) => r.customerEmail).filter(Boolean))];
+  function openEmailModal() {
+    const rows = tab === "deposits" ? selectedDepositRows : selectedWithdrawalRows;
+    const label = tab === "deposits" ? "deposits" : "withdrawals";
+    const emails = [...new Set(rows.map((r) => r.customerEmail).filter(Boolean))];
     if (!emails.length) {
-      setActionError("Select deposits with customer email addresses.");
+      setActionError(`Select ${label} with customer email addresses.`);
       return;
     }
     setActionError("");
@@ -887,10 +1406,12 @@ function TransactionsContent() {
     setEmailModalOpen(true);
   }
 
-  function openDepositSmsModal() {
-    const mobiles = [...new Set(selectedDepositRows.map((r) => r.customerMobile).filter(Boolean))];
+  function openSmsModal() {
+    const rows = tab === "deposits" ? selectedDepositRows : selectedWithdrawalRows;
+    const label = tab === "deposits" ? "deposits" : "withdrawals";
+    const mobiles = [...new Set(rows.map((r) => r.customerMobile).filter(Boolean))];
     if (!mobiles.length) {
-      setActionError("Select deposits with customer mobile numbers.");
+      setActionError(`Select ${label} with customer mobile numbers.`);
       return;
     }
     setActionError("");
@@ -899,7 +1420,7 @@ function TransactionsContent() {
     setSmsModalOpen(true);
   }
 
-  async function handleSendDepositEmail() {
+  async function handleSendEmail() {
     setEmailSending(true);
     setEmailSendError("");
     try {
@@ -917,7 +1438,7 @@ function TransactionsContent() {
     }
   }
 
-  async function handleSendDepositSms() {
+  async function handleSendSms() {
     setSmsSending(true);
     setSmsSendError("");
     try {
@@ -933,143 +1454,140 @@ function TransactionsContent() {
     }
   }
 
-  async function handleExportDeposits() {
-    if (tab !== "deposits") return;
+  async function handleExportTransactions() {
     setExporting(true);
     setActionError("");
     try {
       const exportStatus =
         resolvedDepositStatus === "All" ? "Pending" : resolvedDepositStatus;
-      await downloadDepositsExport({
+      const exportArgs = {
         status: exportStatus,
         filter: mapDurationToFilter(duration) || (duration === "Today" ? "today" : undefined),
         fromDate: duration === "Custom" ? from || undefined : undefined,
         toDate: duration === "Custom" ? to || undefined : undefined,
-      });
+      };
+      if (tab === "deposits") {
+        await downloadDepositsExport(exportArgs);
+      } else {
+        await downloadWithdrawalsExport(exportArgs);
+      }
     } catch (err) {
-      setActionError(err.message || "Failed to export deposits.");
+      setActionError(err.message || `Failed to export ${tab}.`);
     } finally {
       setExporting(false);
     }
   }
 
-  async function pendingDeposit(id) {
-    if (tab !== "deposits") return;
-    const row = deposits.find((r) => r.id === id);
+  async function pendingTransaction(id) {
+    const rows = tab === "deposits" ? deposits : withdrawals;
+    const row = rows.find((r) => r.id === id);
     if (!row) return;
     setStatusActionBusy(true);
     setActionError("");
     try {
-      await updateDepositStatus({ depositId: row.depositId, status: "Pending" });
+      if (tab === "deposits") {
+        await updateDepositStatus({ depositId: row.depositId, status: "Pending" });
+      } else {
+        await updateWithdrawalStatus({ withdrawalId: row.withdrawalId, status: "Pending" });
+      }
       setPendingConfirmId(null);
       if (proof?.id === id) closeProof();
-      await loadDeposits();
+      if (tab === "deposits") await loadDeposits();
+      else await loadWithdrawals();
     } catch (err) {
-      setActionError(err.message || "Failed to set deposit as pending.");
+      setActionError(err.message || "Failed to set transaction as pending.");
     } finally {
       setStatusActionBusy(false);
     }
   }
 
   async function saveProofStatus({ status, rejectedReason, rejectedReasonMessage }) {
-    if (!proof || tab !== "deposits") return;
-    const row = deposits.find((r) => r.id === proof.id);
+    if (!proof) return;
+    const rows = tab === "deposits" ? deposits : withdrawals;
+    const row = rows.find((r) => r.id === proof.id);
     if (!row) return;
     setProofSaving(true);
     setActionError("");
     try {
-      await updateDepositStatus({
-        depositId: row.depositId,
-        status,
-        rejectedReason,
-        rejectedReasonMessage,
-      });
+      if (tab === "deposits") {
+        await updateDepositStatus({
+          depositId: row.depositId,
+          status,
+          rejectedReason,
+          rejectedReasonMessage,
+        });
+      } else {
+        await updateWithdrawalStatus({
+          withdrawalId: row.withdrawalId,
+          status,
+          rejectedReason,
+          rejectedReasonMessage,
+        });
+      }
       closeProof();
-      await loadDeposits();
+      if (tab === "deposits") await loadDeposits();
+      else await loadWithdrawals();
     } catch (err) {
-      setActionError(err.message || "Failed to update deposit status.");
+      setActionError(err.message || "Failed to update transaction status.");
     } finally {
       setProofSaving(false);
     }
   }
 
-  async function approveDeposit(id) {
-    if (tab !== "deposits") {
-      approveLocal(id);
-      return;
-    }
-    const row = deposits.find((r) => r.id === id);
+  async function approveTransaction(id) {
+    const rows = tab === "deposits" ? deposits : withdrawals;
+    const row = rows.find((r) => r.id === id);
     if (!row) return;
     setActionError("");
     setStatusActionBusy(true);
     try {
-      await updateDepositStatus({ depositId: row.depositId, status: "Completed" });
+      if (tab === "deposits") {
+        await updateDepositStatus({ depositId: row.depositId, status: "Completed" });
+      } else {
+        await updateWithdrawalStatus({ withdrawalId: row.withdrawalId, status: "Completed" });
+      }
       setApproveConfirmId(null);
       if (proof?.id === id) closeProof();
-      await loadDeposits();
+      if (tab === "deposits") await loadDeposits();
+      else await loadWithdrawals();
     } catch (err) {
-      setActionError(err.message || "Failed to approve deposit.");
+      setActionError(err.message || "Failed to approve transaction.");
     } finally {
       setStatusActionBusy(false);
     }
   }
 
-  async function rejectDeposit(reason, id) {
+  async function rejectTransaction(reason, id) {
     const targetId = id ?? rejectId;
     if (!targetId) return;
-    if (tab !== "deposits") {
-      rejectLocal(reason, targetId);
-      return;
-    }
-    const row = deposits.find((r) => r.id === targetId);
+    const rows = tab === "deposits" ? deposits : withdrawals;
+    const row = rows.find((r) => r.id === targetId);
     if (!row) return;
     setActionError("");
     try {
-      await updateDepositStatus({
-        depositId: row.depositId,
-        status: "Rejected",
-        rejectedReasonMessage: reason,
-      });
+      if (tab === "deposits") {
+        await updateDepositStatus({
+          depositId: row.depositId,
+          status: "Rejected",
+          rejectedReasonMessage: reason,
+        });
+      } else {
+        await updateWithdrawalStatus({
+          withdrawalId: row.withdrawalId,
+          status: "Rejected",
+          rejectedReasonMessage: reason,
+        });
+      }
       if (proof?.id === targetId) closeProof();
       setRejectId(null);
-      await loadDeposits();
+      if (tab === "deposits") await loadDeposits();
+      else await loadWithdrawals();
     } catch (err) {
-      setActionError(err.message || "Failed to reject deposit.");
+      setActionError(err.message || "Failed to reject transaction.");
     }
   }
 
-  function approveLocal(id) {
-    const row = source.find((r) => r.id === id);
-    if (row && isLockedByOther(row)) return;
-    const setter = tab === "deposits" ? setDeposits : setWithdrawals;
-    setter((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? { ...r, status: "Completed", lockedBy: null, assigned: r.assigned || CURRENT_ADMIN }
-          : r
-      )
-    );
-    if (proof?.id === id) closeProof();
-  }
-
-  function rejectLocal(reason, id) {
-    const targetId = id ?? rejectId;
-    if (!targetId) return;
-    const row = source.find((r) => r.id === targetId);
-    if (row && isLockedByOther(row)) return;
-    const setter = tab === "deposits" ? setDeposits : setWithdrawals;
-    setter((prev) =>
-      prev.map((r) =>
-        r.id === targetId
-          ? { ...r, status: "Rejected", rejectReason: reason, lockedBy: null }
-          : r
-      )
-    );
-    if (proof?.id === targetId) closeProof();
-    setRejectId(null);
-  }
-
-  function renderDepositRowActions(r) {
+  function renderRowActions(r) {
     if (isLockedByOther(r)) {
       return (
         <span
@@ -1081,7 +1599,7 @@ function TransactionsContent() {
       );
     }
 
-    const actionMode = getDepositActionMode(r.status);
+    const actionMode = getRowActionMode(r.status);
 
     return (
       <div className="relative flex gap-1">
@@ -1162,30 +1680,41 @@ function TransactionsContent() {
   }
 
   function goToPendingDeposits() {
-    setStatus("Pending");
+    tabRef.current = "deposits";
+    setTab("deposits");
+    setDepositFilters(createDefaultTabFilters());
     setDepositPage(1);
     setSelected([]);
-    setQ("");
-    setDuration("Today");
-    setFrom("");
-    setTo("");
-    setTxId("");
-    setPlatformId("");
-    setUserAccount("");
     skipUrlHydrationRef.current = true;
+    skipAutoLoadRef.current = true;
     router.replace(`${pathname}?tab=deposits&status=Pending&page=1&per_page=${perPage}`, {
       scroll: false,
+    });
+    loadDeposits({ status: "Pending", page: 1, keyword: "" }).finally(() => {
+      skipAutoLoadRef.current = false;
+    });
+  }
+
+  function goToPendingWithdrawals() {
+    tabRef.current = "withdrawals";
+    setTab("withdrawals");
+    setWithdrawalFilters(createDefaultTabFilters());
+    setWithdrawalPage(1);
+    setSelected([]);
+    skipUrlHydrationRef.current = true;
+    skipAutoLoadRef.current = true;
+    router.replace(`${pathname}?tab=withdrawals&status=Pending&page=1&per_page=${perPage}`, {
+      scroll: false,
+    });
+    loadWithdrawals({ status: "Pending", page: 1, keyword: "" }).finally(() => {
+      skipAutoLoadRef.current = false;
     });
   }
 
   function refresh() {
-    if (tab === "deposits") {
-      setRefreshing(true);
-      loadDeposits().finally(() => setRefreshing(false));
-      return;
-    }
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 600);
+    const loader = tab === "deposits" ? loadDeposits() : loadWithdrawals();
+    loader.finally(() => setRefreshing(false));
   }
 
   return (
@@ -1202,16 +1731,35 @@ function TransactionsContent() {
       <div className="admin-fade-up mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="inline-flex rounded-xl border border-white/10 bg-admin-chrome-deep/80 p-1">
           {[
-            { id: "deposits", label: "Deposits", count: depositPendingCount },
-            { id: "withdrawals", label: "Withdrawals", count: withdrawals.filter((w) => w.status.includes("Pending")).length },
+            { id: "deposits", label: "Deposits" },
+            { id: "withdrawals", label: "Withdrawals" },
           ].map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => {
-                setTab(t.id);
+                const nextTab = t.id;
+                tabRef.current = nextTab;
+                setTab(nextTab);
                 setSelected([]);
                 setViewAll(false);
+                skipUrlHydrationRef.current = true;
+                skipAutoLoadRef.current = true;
+                if (nextTab === "deposits") {
+                  setDepositPage(1);
+                  const qs = buildDepositUrlQuery({ page: 1 });
+                  router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+                  loadDeposits({ page: 1 }).finally(() => {
+                    skipAutoLoadRef.current = false;
+                  });
+                } else {
+                  setWithdrawalPage(1);
+                  const qs = buildWithdrawalUrlQuery({ page: 1 });
+                  router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+                  loadWithdrawals({ page: 1 }).finally(() => {
+                    skipAutoLoadRef.current = false;
+                  });
+                }
               }}
               className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${
                 tab === t.id
@@ -1220,9 +1768,6 @@ function TransactionsContent() {
               }`}
             >
               {t.label}
-              <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${tab === t.id ? "bg-white/20" : "bg-white/10"}`}>
-                {t.count}
-              </span>
             </button>
           ))}
         </div>
@@ -1235,6 +1780,7 @@ function TransactionsContent() {
                 setStatus(e.target.value);
                 setViewAll(false);
                 setDepositPage(1);
+                setWithdrawalPage(1);
               }}
               className={`${inputCls} w-40`}
             >
@@ -1304,6 +1850,17 @@ function TransactionsContent() {
                 Pending Deposits
               </button>
             ) : null}
+            {tab === "withdrawals" &&
+            (resolvedDepositStatus === "Completed" || resolvedDepositStatus === "Rejected") ? (
+              <button
+                type="button"
+                onClick={goToPendingWithdrawals}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Pending Withdrawals
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={refresh}
@@ -1312,12 +1869,12 @@ function TransactionsContent() {
               <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
               Refresh
             </button>
-            {tab === "deposits" && resolvedDepositStatus === "Pending" ? (
+            {(tab === "deposits" || tab === "withdrawals") && resolvedDepositStatus === "Pending" ? (
               <>
                 <button
                   type="button"
                   disabled={!selected.length}
-                  onClick={openDepositSmsModal}
+                  onClick={openSmsModal}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white transition enabled:hover:bg-white/20 disabled:opacity-40"
                 >
                   <MessageSquare className="h-3.5 w-3.5" />
@@ -1326,7 +1883,7 @@ function TransactionsContent() {
                 <button
                   type="button"
                   disabled={!selected.length}
-                  onClick={openDepositEmailModal}
+                  onClick={openEmailModal}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white transition enabled:hover:bg-white/20 disabled:opacity-40"
                 >
                   <Mail className="h-3.5 w-3.5" />
@@ -1345,12 +1902,23 @@ function TransactionsContent() {
                 Assign {selectedDepositDbIds.length ? `(${selectedDepositDbIds.length})` : ""}
               </button>
             ) : null}
+            {tab === "withdrawals" && withdrawalIsAdmin ? (
+              <button
+                type="button"
+                disabled={!selectedWithdrawalDbIds.length}
+                onClick={() => setAssignOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-admin-teal px-3.5 py-2 text-xs font-semibold text-white transition enabled:hover:brightness-110 disabled:opacity-40"
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+                Assign {selectedWithdrawalDbIds.length ? `(${selectedWithdrawalDbIds.length})` : ""}
+              </button>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              disabled={tab !== "deposits" || exporting}
-              onClick={handleExportDeposits}
+              disabled={exporting}
+              onClick={handleExportTransactions}
               className="inline-flex items-center gap-1.5 rounded-xl bg-admin-teal px-3.5 py-2 text-xs font-semibold text-white disabled:opacity-40"
             >
               Export
@@ -1363,6 +1931,7 @@ function TransactionsContent() {
                 onChange={(e) => {
                   setPerPage(e.target.value);
                   setDepositPage(1);
+                  setWithdrawalPage(1);
                 }}
                 className="rounded-lg border border-white/10 bg-admin-surface px-2 py-1.5 text-xs text-white"
               >
@@ -1379,7 +1948,7 @@ function TransactionsContent() {
         {actionError ? (
           <div className="border-b border-white/10 px-5 py-3 text-sm text-rose-400">{actionError}</div>
         ) : null}
-        <form onSubmit={runDepositSearch} className="border-b border-white/10 bg-white/5 px-5 py-4">
+        <form onSubmit={runTransactionSearch} className="border-b border-white/10 bg-white/5 px-5 py-4">
           {filterError ? (
             <div className="mb-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
               {filterError}
@@ -1396,29 +1965,33 @@ function TransactionsContent() {
                 onChange={(e) => {
                   setQ(e.target.value);
                   setDepositPage(1);
+                  setWithdrawalPage(1);
                 }}
                 placeholder="Search…"
                 className="w-full rounded-xl border border-white/10 bg-admin-surface px-4 py-2.5 text-sm text-white outline-none placeholder:text-slate-500"
               />
               {status === "Pending" ? (
                 <p className="mt-1.5 text-[11px] text-slate-500">
-                  Keyword search filters pending deposits only. Use filters below and Search for completed or
-                  rejected.
+                  Keyword search filters pending {tab === "deposits" ? "deposits" : "withdrawals"} only. Use
+                  filters below and Search for completed or rejected.
                 </p>
               ) : status === "Completed" ? (
                 <p className="mt-1.5 text-[11px] text-slate-500">
-                  Keyword search filters completed deposits only. Use filters below and Search to narrow by date
-                  or account.
+                  Keyword search filters completed {tab === "deposits" ? "deposits" : "withdrawals"} only. Use
+                  filters below and Search to narrow by date or account.
                 </p>
               ) : status === "Rejected" ? (
                 <p className="mt-1.5 text-[11px] text-slate-500">
-                  Keyword search filters rejected deposits only. Use filters below and Search to narrow by date
-                  or account.
+                  Keyword search filters rejected {tab === "deposits" ? "deposits" : "withdrawals"} only. Use
+                  filters below and Search to narrow by date or account.
                 </p>
               ) : null}
             </div>
 
-            <div className="flex w-full flex-wrap items-end gap-3 lg:flex-nowrap">
+            <div
+              className="flex w-full flex-wrap items-end gap-3 lg:flex-nowrap"
+              onKeyDown={handleAdvancedFilterKeyDown}
+            >
               {status === "Pending" ? (
                 <FilterField label="Search in" className="min-w-0 flex-1 basis-[8rem]">
                   <select
@@ -1485,6 +2058,7 @@ function TransactionsContent() {
               </FilterField>
               <button
                 type="submit"
+                data-search-type="advanced"
                 className="inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-admin-teal px-5 text-sm font-semibold text-white transition hover:brightness-110 sm:w-auto lg:ml-0"
               >
                 <Search className="h-4 w-4" />
@@ -1495,11 +2069,13 @@ function TransactionsContent() {
         </form>
 
         {/* Table — deposits vs withdrawals columns */}
-        {tab === "deposits" && depositsError ? (
-          <div className="border-b border-white/10 px-5 py-3 text-sm text-rose-400">{depositsError}</div>
+        {listError ? (
+          <div className="border-b border-white/10 px-5 py-3 text-sm text-rose-400">{listError}</div>
         ) : null}
-        {tab === "deposits" && depositsLoading ? (
-          <div className="px-5 py-10 text-center text-sm text-slate-400">Loading deposits…</div>
+        {listLoading ? (
+          <div className="px-5 py-10 text-center text-sm text-slate-400">
+            Loading {tab === "deposits" ? "deposits" : "withdrawals"}…
+          </div>
         ) : (
         <div className="overflow-x-auto">
           {tab === "withdrawals" ? (
@@ -1520,17 +2096,21 @@ function TransactionsContent() {
                   <th className="px-3 py-3">Platform</th>
                   <th className="px-3 py-3">Cashout Amt.</th>
                   <th className="px-3 py-3">Plat. ID</th>
-                  <th className="px-3 py-3">Cashout M.</th>
+                  <th className="whitespace-nowrap px-3 py-3">Cashout M.</th>
                   <th className="px-3 py-3">Receiving Amount</th>
                   <th className="px-3 py-3">Acc</th>
+                  <th className="px-3 py-3">Proof</th>
                   <th className="px-3 py-3">Action</th>
                   <th className="px-3 py-3">Status</th>
+                  {resolvedDepositStatus === "Rejected" ? (
+                    <th className="px-3 py-3">Rejected Reason</th>
+                  ) : null}
                   <th className="px-3 py-3">Assign</th>
                 </tr>
               </thead>
               <tbody>
                 {shown.map((r) => (
-                  <tr key={r.id} className="border-t border-white/10 text-slate-300 transition hover:bg-admin-teal/[0.05]">
+                  <tr key={r.id} className={transactionRowClassName(r)}>
                     <td className="px-3 py-3">
                       <input
                         type="checkbox"
@@ -1546,7 +2126,7 @@ function TransactionsContent() {
                       <DateTimeCell value={r.date} />
                     </td>
                     <td className="px-3 py-3">
-                      <IdNameCell id={r.account || r.userId} name={r.customer} />
+                      <IdNameCell id={r.userId} name={r.customer} />
                     </td>
                     <td className="px-3 py-3">
                       <CopyCell value={r.platform} />
@@ -1555,20 +2135,27 @@ function TransactionsContent() {
                       <CopyCell value={r.cashoutAmt || r.amount} />
                     </td>
                     <td className="px-3 py-3">
-                      <button
-                        type="button"
+                      <div
+                        role="button"
+                        tabIndex={0}
                         onClick={() => openProof(r)}
-                        className="inline-flex items-center gap-1.5 text-left"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            openProof(r);
+                          }
+                        }}
+                        className="inline-flex cursor-pointer items-center gap-1.5 text-left"
                         title="Today's transaction count for this platform user"
                       >
-                        <CopyCell value={r.platformId} />
-                        {r.todayTxCount ? (
+                        <PlatformIdCell value={r.platformId} isScammer={r.isScammer} />
+                        {r.todayTxCount > 1 ? (
                           <span className="admin-badge-glow h-5 min-w-5 px-1.5 text-[10px]">{r.todayTxCount}</span>
                         ) : null}
-                      </button>
+                      </div>
                     </td>
-                    <td className="px-3 py-3">
-                      <span className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs font-medium">
+                    <td className="whitespace-nowrap px-3 py-3">
+                      <span className="inline-flex whitespace-nowrap rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs font-medium">
                         {r.method}
                       </span>
                     </td>
@@ -1579,79 +2166,50 @@ function TransactionsContent() {
                       <CopyCell value={r.account} />
                     </td>
                     <td className="px-3 py-3">
-                      {isLockedByOther(r) ? (
-                        <span
-                          className="cursor-not-allowed text-[11px] text-amber-300/90"
-                          title={`This request is locked by ${r.lockedBy}.`}
-                        >
-                          Locked
-                        </span>
-                      ) : (
-                        <div className="relative flex gap-1">
-                          <button
-                            type="button"
-                            onClick={() => toggleRowReject(r.id)}
-                            className="rounded-lg bg-[#E11D48] p-1.5 text-white shadow-sm"
-                            title="Reject — reason required"
-                          >
-                            <AlertTriangle className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => approveDeposit(r.id)}
-                            className="rounded-lg bg-theme-green-action p-1.5 text-white shadow-sm"
-                            title="Approve"
-                          >
-                            <Check className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => openProof(r)}
+                        className={`rounded-lg p-1.5 ${r.proof ? "bg-theme-green-action/15 text-theme-green-action" : "bg-white/5 text-slate-400"}`}
+                        title="View proof"
+                      >
+                        <FileText className="h-4 w-4" />
+                      </button>
                     </td>
+                    <td className="px-3 py-3">{renderRowActions(r)}</td>
                     <td className="px-3 py-3">
                       <StatusPill
                         status={r.status}
                         onClick={() => openProof(r)}
                         title="View proof and approve / reject"
                       />
-                      {r.rejectReason ? (
-                        <p className="mt-1 max-w-[140px] text-[10px] leading-snug text-rose-300" title={r.rejectReason}>
-                          {r.rejectReason}
-                        </p>
-                      ) : null}
                     </td>
+                    {resolvedDepositStatus === "Rejected" ? (
+                      <td className="px-3 py-3 max-w-[220px]">
+                        {r.status === "Rejected" ? (
+                          <CopyCell value={formatDepositRejectedReason(r)} />
+                        ) : (
+                          <span className="text-slate-500">—</span>
+                        )}
+                      </td>
+                    ) : null}
                     <td className="px-3 py-3">
-                      {isLockedByOther(r) ? (
-                        <span className="text-[11px] text-amber-300" title={`Locked by ${r.lockedBy}`}>
-                          {r.lockedBy}
-                        </span>
-                      ) : !r.lockedBy && r.status.includes("Pending") ? (
-                        <button
-                          type="button"
-                          onClick={() => claimRequest(r.id)}
-                          className="text-xs font-semibold text-teal-300 underline-offset-2 hover:underline"
-                          title="Pick from queue — locks this request to you"
-                        >
-                          Pick
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelected([r.id]);
-                            setAssignOpen(true);
-                          }}
-                          className="text-xs font-semibold text-teal-400 underline-offset-2 hover:underline"
-                        >
-                          {r.assigned && r.assigned !== "—" ? r.assigned : "Unassigned"}
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelected([r.id]);
+                          setAssignOpen(true);
+                        }}
+                        className="text-xs font-semibold text-admin-teal underline-offset-2 hover:underline"
+                      >
+                        {r.assigned && r.assigned !== "—" ? r.assigned : "Unassigned"}
+                      </button>
                     </td>
                   </tr>
                 ))}
                 {shown.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="px-4 py-14 text-center text-slate-400">
-                      No results found
+                    <td colSpan={resolvedDepositStatus === "Rejected" ? 15 : 14} className="px-4 py-14 text-center text-slate-400">
+                      No Results Found
                     </td>
                   </tr>
                 ) : null}
@@ -1688,7 +2246,7 @@ function TransactionsContent() {
               </thead>
               <tbody>
                 {shown.map((r) => (
-                  <tr key={r.id} className={depositRowClassName(r)}>
+                  <tr key={r.id} className={transactionRowClassName(r)}>
                     <td className="px-3 py-3">
                       <input
                         type="checkbox"
@@ -1705,12 +2263,6 @@ function TransactionsContent() {
                     </td>
                     <td className="px-3 py-3">
                       <IdNameCell id={r.account || r.userId} name={r.customer} />
-                      {r.isScammer ? (
-                        <p className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-rose-300">
-                          <Info className="h-3 w-3" />
-                          Potential Scammer
-                        </p>
-                      ) : null}
                     </td>
                     <td className="px-3 py-3">
                       <span className="inline-flex whitespace-nowrap rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs">{r.method}</span>
@@ -1735,7 +2287,7 @@ function TransactionsContent() {
                         <FileText className="h-4 w-4" />
                       </button>
                     </td>
-                    <td className="px-3 py-3">{renderDepositRowActions(r)}</td>
+                    <td className="px-3 py-3">{renderRowActions(r)}</td>
                     <td className="px-3 py-3">
                       <StatusPill
                         status={r.status}
@@ -1780,25 +2332,31 @@ function TransactionsContent() {
         )}
 
         {/* Progressive disclosure — concept 3.3 */}
-        {tab === "deposits" && depositPagination.total_pages > 1 ? (
+        {activePagination.total_pages > 1 ? (
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4">
             <p className="text-xs text-slate-500">
-              Page {depositPagination.current_page} of {depositPagination.total_pages} ·{" "}
-              {depositPagination.total_count} total
+              Page {activePagination.current_page} of {activePagination.total_pages} ·{" "}
+              {activePagination.total_count} total
             </p>
             <div className="flex gap-2">
               <button
                 type="button"
-                disabled={!depositPagination.has_prev || depositsLoading}
-                onClick={() => setDepositPage((p) => Math.max(1, p - 1))}
+                disabled={!activePagination.has_prev || listLoading}
+                onClick={() =>
+                  tab === "deposits"
+                    ? setDepositPage((p) => Math.max(1, p - 1))
+                    : setWithdrawalPage((p) => Math.max(1, p - 1))
+                }
                 className="admin-btn-secondary disabled:opacity-50"
               >
                 Previous
               </button>
               <button
                 type="button"
-                disabled={!depositPagination.has_next || depositsLoading}
-                onClick={() => setDepositPage((p) => p + 1)}
+                disabled={!activePagination.has_next || listLoading}
+                onClick={() =>
+                  tab === "deposits" ? setDepositPage((p) => p + 1) : setWithdrawalPage((p) => p + 1)
+                }
                 className="admin-btn-secondary disabled:opacity-50"
               >
                 Next
@@ -1806,24 +2364,10 @@ function TransactionsContent() {
             </div>
           </div>
         ) : null}
-        {hasMore ? (
-          <div className="border-t border-white/10 px-5 py-4 text-center">
-            <p className="mb-2 text-xs text-slate-500">
-              Showing latest {shown.length} of {filtered.length} {title.toLowerCase()}
-            </p>
-            <button
-              type="button"
-              onClick={() => setViewAll(true)}
-              className="rounded-xl border border-teal-300/30 bg-teal-400/10 px-4 py-2 text-sm font-semibold text-teal-200 transition hover:bg-teal-400/20"
-            >
-              View all {title}
-            </button>
-          </div>
-        ) : null}
       </section>
 
       <AssignDepositsModal
-        open={assignOpen}
+        open={assignOpen && tab === "deposits"}
         depositIds={selectedDepositDbIds}
         onClose={() => setAssignOpen(false)}
         onAssigned={() => {
@@ -1832,22 +2376,32 @@ function TransactionsContent() {
         }}
       />
 
+      <AssignWithdrawalsModal
+        open={assignOpen && tab === "withdrawals"}
+        withdrawalIds={selectedWithdrawalDbIds}
+        onClose={() => setAssignOpen(false)}
+        onAssigned={() => {
+          setSelected([]);
+          loadWithdrawals();
+        }}
+      />
+
       <RejectReasonPanel
         key={rejectId || "reject-closed"}
         variant="modal"
-        open={Boolean(rejectId) && tab === "deposits"}
-        title="Reject this deposit?"
+        open={Boolean(rejectId)}
+        title={`Reject this ${tab === "deposits" ? "deposit" : "withdrawal"}?`}
         subtitle={
           rejectRecord
-            ? `${rejectRecord.id} · ${rejectRecord.customer} · ${rejectRecord.clientPay || rejectRecord.amount}`
+            ? `${rejectRecord.id} · ${rejectRecord.customer} · ${rejectRecord.clientPay || rejectRecord.cashoutAmt || rejectRecord.amount}`
             : undefined
         }
         onCancel={() => setRejectId(null)}
-        onConfirm={(reason) => rejectDeposit(reason, rejectId)}
+        onConfirm={(reason) => rejectTransaction(reason, rejectId)}
       />
 
       <DepositStatusConfirmModal
-        open={Boolean(pendingConfirmId) && tab === "deposits"}
+        open={Boolean(pendingConfirmId)}
         title="Set as Pending?"
         message={
           pendingConfirmRecord
@@ -1858,11 +2412,11 @@ function TransactionsContent() {
         confirmClassName="bg-[#D1900F]"
         busy={statusActionBusy}
         onCancel={() => setPendingConfirmId(null)}
-        onConfirm={() => pendingDeposit(pendingConfirmId)}
+        onConfirm={() => pendingTransaction(pendingConfirmId)}
       />
 
       <DepositStatusConfirmModal
-        open={Boolean(approveConfirmId) && tab === "deposits"}
+        open={Boolean(approveConfirmId)}
         title="Set as Completed?"
         message={
           approveConfirmRecord
@@ -1873,7 +2427,7 @@ function TransactionsContent() {
         confirmClassName="bg-theme-green-action"
         busy={statusActionBusy}
         onCancel={() => setApproveConfirmId(null)}
-        onConfirm={() => approveDeposit(approveConfirmId)}
+        onConfirm={() => approveTransaction(approveConfirmId)}
       />
 
       <EmailSendModal
@@ -1886,7 +2440,7 @@ function TransactionsContent() {
         error={emailSendError}
         onChange={(patch) => setEmailCompose((prev) => ({ ...prev, ...patch }))}
         onClose={() => setEmailModalOpen(false)}
-        onSend={handleSendDepositEmail}
+        onSend={handleSendEmail}
       />
 
       <SmsSendModal
@@ -1897,7 +2451,7 @@ function TransactionsContent() {
         error={smsSendError}
         onChange={(patch) => setSmsCompose((prev) => ({ ...prev, ...patch }))}
         onClose={() => setSmsModalOpen(false)}
-        onSend={handleSendDepositSms}
+        onSend={handleSendSms}
       />
 
       {proof ? (
@@ -1930,6 +2484,7 @@ function TransactionsContent() {
                   proofs={getSubmittedProofs(proof)}
                   activeId={activeProofId || getSubmittedProofs(proof)[0]?.id}
                   onOpenImage={(file) => openSubmittedImage(proof, file)}
+                  fetchProofBlob={activeProofFetcher}
                 />
               </div>
 
@@ -1938,56 +2493,75 @@ function TransactionsContent() {
                   Rejection reason (customer-facing): <span className="font-semibold">{proof.rejectReason}</span>
                 </div>
               ) : null}
-              <h4 className="mb-2 mt-5 text-sm font-semibold text-white">
-                Same-day transactions grid
-              </h4>
-              <div className="overflow-x-auto rounded-xl border border-white/10">
-                <table className="min-w-[640px] w-full text-left text-sm">
-                  <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
-                    <tr>
-                      <th className="px-3 py-2">Tran. ID</th>
-                      <th className="px-3 py-2">Platform ID</th>
-                      <th className="px-3 py-2">Amount</th>
-                      <th className="px-3 py-2">Method</th>
-                      <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2">Proof</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {source
-                      .filter((r) => r.userId === proof.userId || r.customer === proof.customer)
-                      .map((r) => (
-                        <tr key={r.id} className="border-t border-white/10 text-slate-300">
-                          <td className="px-3 py-2">
-                            <CopyCell value={r.id} />
-                          </td>
-                          <td className="px-3 py-2">
-                            <CopyCell value={r.platformId} />
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-2">{r.cashoutAmt || r.amount}</td>
-                          <td className="whitespace-nowrap px-3 py-2">{r.method}</td>
-                          <td className="px-3 py-2">
-                            <StatusPill status={r.status} />
-                          </td>
-                          <td className="px-3 py-2">
-                            {r.proof ? (
-                              <button
-                                type="button"
-                                onClick={() => openSubmittedImage(r)}
-                                className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-teal-300 hover:underline"
-                              >
-                                <Eye className="h-3 w-3" />
-                                View submitted
-                              </button>
-                            ) : (
-                              <span className="text-slate-500">Not submitted</span>
-                            )}
-                          </td>
+              {tab === "withdrawals" ? (
+                <>
+                  <h4 className="mb-2 mt-5 text-sm font-semibold text-white">
+                    Same-day transactions grid
+                  </h4>
+                  <p className="mb-2 text-[11px] text-slate-500">
+                    Same platform method and Plat. ID since today&apos;s business day (from 0:10 AM).
+                  </p>
+                  <div className="overflow-x-auto rounded-xl border border-white/10">
+                    <table className="min-w-[640px] w-full text-left text-sm">
+                      <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
+                        <tr>
+                          <th className="px-3 py-2">Tran. ID</th>
+                          <th className="px-3 py-2">Platform ID</th>
+                          <th className="px-3 py-2">Amount</th>
+                          <th className="px-3 py-2">Method</th>
+                          <th className="px-3 py-2">Status</th>
+                          <th className="px-3 py-2">Proof</th>
                         </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
+                      </thead>
+                      <tbody>
+                        {similarWithdrawalsLoading ? (
+                          <tr>
+                            <td colSpan={6} className="px-3 py-6 text-center text-slate-400">
+                              Loading same-day transactions…
+                            </td>
+                          </tr>
+                        ) : similarWithdrawals.length ? (
+                          similarWithdrawals.map((r) => (
+                            <tr key={r.id} className="border-t border-white/10 text-slate-300">
+                              <td className="px-3 py-2">
+                                <CopyCell value={r.id} />
+                              </td>
+                              <td className="px-3 py-2">
+                                <CopyCell value={r.platformId} />
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2">{r.cashoutAmt || r.amount}</td>
+                              <td className="whitespace-nowrap px-3 py-2">{r.method}</td>
+                              <td className="px-3 py-2">
+                                <StatusPill status={r.status} />
+                              </td>
+                              <td className="px-3 py-2">
+                                {r.proof ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => openSubmittedImage(r)}
+                                    className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-teal-300 hover:underline"
+                                  >
+                                    <Eye className="h-3 w-3" />
+                                    View submitted
+                                  </button>
+                                ) : (
+                                  <span className="text-slate-500">Not submitted</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={6} className="px-3 py-6 text-center text-slate-400">
+                              No same-day transactions for this platform ID.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
 
               <div className="mt-4">
                 <SubmittedFilesList
@@ -2004,6 +2578,7 @@ function TransactionsContent() {
               proof={imageLightbox?.proof}
               file={imageLightbox?.file}
               onClose={() => setImageLightbox(null)}
+              fetchProofBlob={activeProofFetcher}
             />
 
             {isLockedByOther(proof) ? (

@@ -24,7 +24,10 @@ export default function CopyCell({ value, sub }) {
       </div>
       <button
         type="button"
-        onClick={copy}
+        onClick={(e) => {
+          e.stopPropagation();
+          copy();
+        }}
         className="mt-0.5 shrink-0 rounded p-0.5 text-slate-500 transition hover:bg-white/10 hover:text-teal-300"
         title="Copy"
       >
