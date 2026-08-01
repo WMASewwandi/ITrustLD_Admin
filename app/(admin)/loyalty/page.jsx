@@ -8,11 +8,11 @@ import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm
 import RejectReasonPanel from "@/components/admin/reject-reason-panel";
 import CopyCell, { FilterField, IdNameCell, PlatformIdCell, StatusPill, inputCls } from "@/components/admin/queue-ui";
 import { fetchLoyaltyOrders, updateLoyaltyOrderStatus } from "@/lib/loyalty-orders";
+import { fetchBonusClaims, updateBonusClaimStatus } from "@/lib/loyalty-bonus-claims";
 import {
   AFFILIATE_BONUS_CONFIG,
   AFFILIATE_LOYALTY_LEVELS,
   AFFILIATE_POINT_COLLECTION,
-  BONUS_CLAIMS,
   LOYALTY_BONUS_CONFIG,
   LOYALTY_POINT_COLLECTION,
   LOYALTY_RANKING_USERS,
@@ -49,7 +49,7 @@ function LoyaltyDetailModal({
   onRequestReopen,
 }) {
   const [rejectOpen, setRejectOpen] = useState(false);
-  const usesOrderConfirmFlow = tab === "orders";
+  const usesOrderConfirmFlow = tab === "orders" || tab === "bonus";
 
   useEffect(() => {
     if (!open) setRejectOpen(false);
@@ -59,10 +59,10 @@ function LoyaltyDetailModal({
 
   const title =
     tab === "bonus" ? "Bonus claim details" : tab === "vouchers" ? "Voucher claim details" : "Loyalty order details";
-  // Pending: approve + reject · Rejected: approve + reopen · Completed: reject + reopen
+  // Pending: approve + reject · Rejected: approve + reopen · Claimed/Completed: reject + reopen
   const canApprove = record.status === "Pending" || record.status === "Rejected";
   const canReject = record.status === "Pending" || record.status === "Completed" || record.status === "Claimed";
-  const canReopen = record.status === "Rejected" || record.status === "Completed";
+  const canReopen = record.status === "Rejected" || record.status === "Completed" || record.status === "Claimed";
 
   return (
     <div className="admin-modal-overlay z-[80]" onClick={onClose}>
@@ -186,8 +186,8 @@ function LoyaltyDetailModal({
                   ? "Review this claim, then approve or reject."
                   : record.status === "Rejected"
                     ? "Rejected — approve again or reopen as pending."
-                    : record.status === "Completed"
-                      ? "Completed — reject or reopen as pending if needed."
+                    : record.status === "Completed" || record.status === "Claimed"
+                      ? "Claimed — reject or reopen as pending if needed."
                       : "Already processed."}
               </p>
             </div>
@@ -297,7 +297,26 @@ function LoyaltyContent() {
     from: "",
     to: "",
   });
-  const [bonuses, setBonuses] = useState(BONUS_CLAIMS);
+  const [bonuses, setBonuses] = useState([]);
+  const [bonusLoading, setBonusLoading] = useState(false);
+  const [bonusError, setBonusError] = useState("");
+  const [bonusPage, setBonusPage] = useState(1);
+  const [bonusPerPage, setBonusPerPage] = useState("20");
+  const [bonusPagination, setBonusPagination] = useState({
+    page: 1,
+    total_pages: 1,
+    total: 0,
+    per_page: 20,
+  });
+  const [bonusStatusBusy, setBonusStatusBusy] = useState(false);
+  const [bonusActionError, setBonusActionError] = useState("");
+  const [appliedBonusFilters, setAppliedBonusFilters] = useState({
+    status: params.get("status") || "Pending",
+    keyword: "",
+    duration: "",
+    from: "",
+    to: "",
+  });
   const [vouchers, setVouchers] = useState(VOUCHERS);
   const [rejectId, setRejectId] = useState(null);
   const [approveConfirmId, setApproveConfirmId] = useState(null);
@@ -365,27 +384,78 @@ function LoyaltyContent() {
     }
   }, [appliedOrderFilters, ordersPage, ordersPerPage]);
 
+  const loadBonusClaims = useCallback(async () => {
+    setBonusLoading(true);
+    setBonusError("");
+    try {
+      const data = await fetchBonusClaims({
+        status: appliedBonusFilters.status,
+        page: bonusPage,
+        perPage: Number(bonusPerPage) || 20,
+        keyword: appliedBonusFilters.keyword,
+        duration: appliedBonusFilters.duration,
+        from: appliedBonusFilters.from,
+        to: appliedBonusFilters.to,
+      });
+      setBonuses(data.claims || []);
+      setBonusPagination(
+        data.pagination || {
+          page: 1,
+          total_pages: 1,
+          total: 0,
+          per_page: 20,
+        },
+      );
+    } catch (err) {
+      setBonusError(err.message || "Failed to load bonus claims.");
+      setBonuses([]);
+    } finally {
+      setBonusLoading(false);
+    }
+  }, [appliedBonusFilters, bonusPage, bonusPerPage]);
+
   const ordersRangeStart =
     ordersPagination.total === 0 ? 0 : (ordersPagination.page - 1) * ordersPagination.per_page + 1;
   const ordersRangeEnd = Math.min(ordersPagination.page * ordersPagination.per_page, ordersPagination.total);
+  const bonusRangeStart =
+    bonusPagination.total === 0 ? 0 : (bonusPagination.page - 1) * bonusPagination.per_page + 1;
+  const bonusRangeEnd = Math.min(bonusPagination.page * bonusPagination.per_page, bonusPagination.total);
   const rejectOrderRecord = useMemo(() => {
     if (!rejectId || tab !== "orders") return null;
     return orders.find((r) => r.id === rejectId) ?? null;
   }, [rejectId, tab, orders]);
+  const rejectBonusRecord = useMemo(() => {
+    if (!rejectId || tab !== "bonus") return null;
+    return bonuses.find((r) => r.id === rejectId) ?? null;
+  }, [rejectId, tab, bonuses]);
   const approveOrderRecord = useMemo(() => {
     if (!approveConfirmId || tab !== "orders") return null;
     return orders.find((r) => r.id === approveConfirmId) ?? null;
   }, [approveConfirmId, tab, orders]);
+  const approveBonusRecord = useMemo(() => {
+    if (!approveConfirmId || tab !== "bonus") return null;
+    return bonuses.find((r) => r.id === approveConfirmId) ?? null;
+  }, [approveConfirmId, tab, bonuses]);
   const reopenOrderRecord = useMemo(() => {
     if (!reopenConfirmId || tab !== "orders") return null;
     return orders.find((r) => r.id === reopenConfirmId) ?? null;
   }, [reopenConfirmId, tab, orders]);
+  const reopenBonusRecord = useMemo(() => {
+    if (!reopenConfirmId || tab !== "bonus") return null;
+    return bonuses.find((r) => r.id === reopenConfirmId) ?? null;
+  }, [reopenConfirmId, tab, bonuses]);
 
   useEffect(() => {
     if (tab !== "orders") return undefined;
     loadOrders();
     return undefined;
   }, [tab, loadOrders]);
+
+  useEffect(() => {
+    if (tab !== "bonus") return undefined;
+    loadBonusClaims();
+    return undefined;
+  }, [tab, loadBonusClaims]);
 
   useEffect(() => {
     if (tab !== "orders") return undefined;
@@ -397,11 +467,21 @@ function LoyaltyContent() {
     return undefined;
   }, [status, tab]);
 
+  useEffect(() => {
+    if (tab !== "bonus") return undefined;
+    setBonusPage(1);
+    setAppliedBonusFilters((prev) => {
+      if (prev.status === status) return prev;
+      return { ...prev, status };
+    });
+    return undefined;
+  }, [status, tab]);
+
   const list = tab === "bonus" ? bonuses : tab === "vouchers" ? vouchers : orders;
 
   const filtered = useMemo(() => {
     if (tab === "management") return [];
-    if (tab === "orders") return orders;
+    if (tab === "orders" || tab === "bonus") return list;
     return list.filter((r) => {
       if (status !== "All" && r.status !== status && !(status === "Pending" && String(r.status).includes("Pending"))) {
         return false;
@@ -411,7 +491,7 @@ function LoyaltyContent() {
     });
   }, [list, status, q, tab, orders]);
 
-  const ordersRecordCount = tab === "orders" ? ordersPagination.total : filtered.length;
+  const ordersRecordCount = tab === "orders" ? ordersPagination.total : tab === "bonus" ? bonusPagination.total : filtered.length;
 
   const pageTitle =
     tab === "orders"
@@ -454,6 +534,22 @@ function LoyaltyContent() {
     }
   }
 
+  async function handleBonusStatusUpdate(id, nextStatus) {
+    setBonusStatusBusy(true);
+    setBonusActionError("");
+    try {
+      await updateBonusClaimStatus({ transactionId: id, status: nextStatus });
+      await loadBonusClaims();
+      if (detail?.id === id) {
+        setDetail(null);
+      }
+    } catch (err) {
+      setBonusActionError(err.message || "Failed to update bonus claim status.");
+    } finally {
+      setBonusStatusBusy(false);
+    }
+  }
+
   function approve(id) {
     const now = new Date().toISOString().slice(0, 16).replace("T", " ");
     if (tab === "orders") {
@@ -461,8 +557,10 @@ function LoyaltyContent() {
       return;
     }
     if (tab === "bonus") {
-      setBonuses((prev) => prev.map((r) => (r.id === id ? { ...r, status: "Claimed", admin: "Admin" } : r)));
-    } else if (tab === "vouchers") {
+      handleBonusStatusUpdate(id, "Claimed");
+      return;
+    }
+    if (tab === "vouchers") {
       setVouchers((prev) =>
         prev.map((r) =>
           r.id === id
@@ -480,10 +578,10 @@ function LoyaltyContent() {
       return;
     }
     if (tab === "bonus") {
-      setBonuses((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, status: "Rejected", rejectReason: reason, admin: "Admin" } : r))
-      );
-    } else if (tab === "vouchers") {
+      handleBonusStatusUpdate(id, "Rejected");
+      return;
+    }
+    if (tab === "vouchers") {
       setVouchers((prev) =>
         prev.map((r) =>
           r.id === id
@@ -510,10 +608,10 @@ function LoyaltyContent() {
       return;
     }
     if (tab === "bonus") {
-      setBonuses((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, status: "Pending", admin: "—", rejectReason: undefined } : r))
-      );
-    } else if (tab === "vouchers") {
+      handleBonusStatusUpdate(id, "Pending");
+      return;
+    }
+    if (tab === "vouchers") {
       setVouchers((prev) =>
         prev.map((r) =>
           r.id === id
@@ -543,12 +641,29 @@ function LoyaltyContent() {
     });
   }
 
+  function applyBonusFilters() {
+    setBonusPage(1);
+    setAppliedBonusFilters({
+      status,
+      keyword: q,
+      duration,
+      from,
+      to,
+    });
+  }
+
   function handleOrderFilterKeyDown(event) {
     if (event.key !== "Enter") return;
     if (event.target instanceof HTMLButtonElement) return;
-    if (tab !== "orders") return;
-    event.preventDefault();
-    applyOrderFilters();
+    if (tab === "orders") {
+      event.preventDefault();
+      applyOrderFilters();
+      return;
+    }
+    if (tab === "bonus") {
+      event.preventDefault();
+      applyBonusFilters();
+    }
   }
 
   function resetOrderFilters() {
@@ -559,6 +674,22 @@ function LoyaltyContent() {
     setStatus("Pending");
     setOrdersPage(1);
     setAppliedOrderFilters({
+      status: "Pending",
+      keyword: "",
+      duration: "",
+      from: "",
+      to: "",
+    });
+  }
+
+  function resetBonusFilters() {
+    setQ("");
+    setFrom("");
+    setTo("");
+    setDuration("");
+    setStatus("Pending");
+    setBonusPage(1);
+    setAppliedBonusFilters({
       status: "Pending",
       keyword: "",
       duration: "",
@@ -1276,7 +1407,9 @@ function LoyaltyContent() {
                   {ordersRecordCount} records
                   {tab === "bonus" && status === "Rejected"
                     ? " · reopen or re-approve rejected claims"
-                    : tab === "vouchers"
+                    : tab === "bonus" && status === "Claimed"
+                      ? " · reject or reopen claimed bonuses"
+                      : tab === "vouchers"
                       ? " · approve gift vouchers · reject with reason"
                       : " · approve / reject"}
                 </p>
@@ -1376,9 +1509,13 @@ function LoyaltyContent() {
                       onClick={() => {
                         if (tab === "orders") {
                           applyOrderFilters();
+                          return;
+                        }
+                        if (tab === "bonus") {
+                          applyBonusFilters();
                         }
                       }}
-                      disabled={tab === "orders" && ordersLoading}
+                      disabled={(tab === "orders" && ordersLoading) || (tab === "bonus" && bonusLoading)}
                       className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
                     >
                       Apply
@@ -1388,6 +1525,10 @@ function LoyaltyContent() {
                       onClick={() => {
                         if (tab === "orders") {
                           resetOrderFilters();
+                          return;
+                        }
+                        if (tab === "bonus") {
+                          resetBonusFilters();
                           return;
                         }
                         setQ("");
@@ -1412,13 +1553,23 @@ function LoyaltyContent() {
                 ? ordersPagination.total === 0
                   ? "Showing 0 results"
                   : `Showing ${ordersRangeStart}–${ordersRangeEnd} of ${ordersPagination.total} results`
-                : `Showing ${filtered.length} results`}
+                : tab === "bonus"
+                  ? bonusPagination.total === 0
+                    ? "Showing 0 results"
+                    : `Showing ${bonusRangeStart}–${bonusRangeEnd} of ${bonusPagination.total} results`
+                  : `Showing ${filtered.length} results`}
             </p>
             {tab === "orders" && ordersError ? (
               <p className="mt-2 text-xs text-rose-400">{ordersError}</p>
             ) : null}
             {tab === "orders" && orderActionError ? (
               <p className="mt-2 text-xs text-rose-400">{orderActionError}</p>
+            ) : null}
+            {tab === "bonus" && bonusError ? (
+              <p className="mt-2 text-xs text-rose-400">{bonusError}</p>
+            ) : null}
+            {tab === "bonus" && bonusActionError ? (
+              <p className="mt-2 text-xs text-rose-400">{bonusActionError}</p>
             ) : null}
           </div>
 
@@ -1558,6 +1709,8 @@ function LoyaltyContent() {
                   ) : null}
                 </tbody>
               </table>
+            ) : tab === "bonus" && bonusLoading ? (
+              <div className="px-4 py-14 text-center text-slate-400">Loading bonus claims…</div>
             ) : tab === "bonus" ? (
               <table className="min-w-[1150px] w-full text-left text-[13px]">
                 <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
@@ -1596,23 +1749,31 @@ function LoyaltyContent() {
                         <CopyCell value={r.received} />
                       </td>
                       <td className="px-3 py-3">
-                        <CopyCell value={r.platformId} sub={r.email} />
+                        <PlatformIdCell
+                          method={r.method}
+                          platformId={r.platformId}
+                          platformName={r.platformName}
+                          platform={r.platform}
+                          platformDetail={r.platformDetail}
+                        />
                       </td>
                       <td className="px-3 py-3">
                         {r.status === "Pending" ? (
                           <div className="flex gap-1">
                             <button
                               type="button"
+                              disabled={bonusStatusBusy}
                               onClick={() => setRejectId(r.id)}
-                              className="rounded-lg bg-[#E11D48] p-1.5 text-white"
+                              className="rounded-lg bg-[#E11D48] p-1.5 text-white disabled:opacity-50"
                               title="Reject"
                             >
                               <X className="h-3.5 w-3.5" />
                             </button>
                             <button
                               type="button"
-                              onClick={() => approve(r.id)}
-                              className="rounded-lg bg-theme-green-action p-1.5 text-white"
+                              disabled={bonusStatusBusy}
+                              onClick={() => setApproveConfirmId(r.id)}
+                              className="rounded-lg bg-theme-green-action p-1.5 text-white disabled:opacity-50"
                               title="Approve"
                             >
                               <Check className="h-3.5 w-3.5" />
@@ -1622,16 +1783,39 @@ function LoyaltyContent() {
                           <div className="flex gap-1">
                             <button
                               type="button"
-                              onClick={() => approve(r.id)}
-                              className="rounded-lg bg-theme-green-action p-1.5 text-white"
+                              disabled={bonusStatusBusy}
+                              onClick={() => setApproveConfirmId(r.id)}
+                              className="rounded-lg bg-theme-green-action p-1.5 text-white disabled:opacity-50"
                               title="Approve / claim"
                             >
                               <Check className="h-3.5 w-3.5" />
                             </button>
                             <button
                               type="button"
-                              onClick={() => reopen(r.id)}
-                              className="rounded-lg bg-[#D1900F] p-1.5 text-white"
+                              disabled={bonusStatusBusy}
+                              onClick={() => setReopenConfirmId(r.id)}
+                              className="rounded-lg bg-[#D1900F] p-1.5 text-white disabled:opacity-50"
+                              title="Reopen as pending"
+                            >
+                              <RefreshCw className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : r.status === "Claimed" ? (
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              disabled={bonusStatusBusy}
+                              onClick={() => setRejectId(r.id)}
+                              className="rounded-lg bg-[#E11D48] p-1.5 text-white disabled:opacity-50"
+                              title="Reject"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={bonusStatusBusy}
+                              onClick={() => setReopenConfirmId(r.id)}
+                              className="rounded-lg bg-[#D1900F] p-1.5 text-white disabled:opacity-50"
                               title="Reopen as pending"
                             >
                               <RefreshCw className="h-3.5 w-3.5" />
@@ -1647,11 +1831,6 @@ function LoyaltyContent() {
                           onClick={() => openDetail(r)}
                           title="View details and approve / reject"
                         />
-                        {r.rejectReason ? (
-                          <p className="mt-1 max-w-[140px] truncate text-[10px] text-rose-300" title={r.rejectReason}>
-                            {r.rejectReason}
-                          </p>
-                        ) : null}
                       </td>
                       <td className="px-3 py-3 text-xs text-slate-400">{r.admin || "—"}</td>
                     </tr>
@@ -1969,21 +2148,74 @@ function LoyaltyContent() {
                 ) : null}
               </div>
             </div>
+          ) : tab === "bonus" ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4">
+              <p className="text-xs text-slate-500">
+                {bonusPagination.total === 0
+                  ? "No records"
+                  : `Showing ${bonusRangeStart}–${bonusRangeEnd} of ${bonusPagination.total}`}
+                {bonusPagination.total_pages > 1
+                  ? ` · Page ${bonusPagination.page} of ${bonusPagination.total_pages}`
+                  : null}
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="inline-flex items-center gap-2 text-xs text-slate-500">
+                  Per page
+                  <select
+                    value={bonusPerPage}
+                    onChange={(e) => {
+                      setBonusPerPage(e.target.value);
+                      setBonusPage(1);
+                    }}
+                    disabled={bonusLoading}
+                    className="rounded-lg border border-white/10 bg-admin-surface px-2 py-1.5 text-xs text-white disabled:opacity-50"
+                  >
+                    {["10", "20", "25", "50"].map((n) => (
+                      <option key={n} value={n} className="bg-admin-surface">
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {bonusPagination.total_pages > 1 ? (
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={bonusPagination.page <= 1 || bonusLoading}
+                      onClick={() => setBonusPage((p) => Math.max(1, p - 1))}
+                      className="admin-btn-secondary disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      disabled={bonusPagination.page >= bonusPagination.total_pages || bonusLoading}
+                      onClick={() => setBonusPage((p) => p + 1)}
+                      className="admin-btn-secondary disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
           ) : null}
         </section>
       )}
 
       <DepositStatusConfirmModal
-        open={Boolean(approveConfirmId) && tab === "orders"}
+        open={Boolean(approveConfirmId) && (tab === "orders" || tab === "bonus")}
         title="Set as Approved?"
         message={
           approveOrderRecord
             ? `${approveOrderRecord.id} · ${approveOrderRecord.customer}`
-            : undefined
+            : approveBonusRecord
+              ? `${approveBonusRecord.id} · ${approveBonusRecord.customer}`
+              : undefined
         }
         confirmLabel="Yes"
         confirmClassName="bg-theme-green-action"
-        busy={orderStatusBusy}
+        busy={tab === "orders" ? orderStatusBusy : bonusStatusBusy}
         onCancel={() => setApproveConfirmId(null)}
         onConfirm={() => {
           approve(approveConfirmId);
@@ -1992,16 +2224,18 @@ function LoyaltyContent() {
       />
 
       <DepositStatusConfirmModal
-        open={Boolean(reopenConfirmId) && tab === "orders"}
+        open={Boolean(reopenConfirmId) && (tab === "orders" || tab === "bonus")}
         title="Set as Pending?"
         message={
           reopenOrderRecord
             ? `${reopenOrderRecord.id} · ${reopenOrderRecord.customer}`
-            : undefined
+            : reopenBonusRecord
+              ? `${reopenBonusRecord.id} · ${reopenBonusRecord.customer}`
+              : undefined
         }
         confirmLabel="Yes"
         confirmClassName="bg-[#D1900F]"
-        busy={orderStatusBusy}
+        busy={tab === "orders" ? orderStatusBusy : bonusStatusBusy}
         onCancel={() => setReopenConfirmId(null)}
         onConfirm={() => {
           reopen(reopenConfirmId);
@@ -2010,16 +2244,18 @@ function LoyaltyContent() {
       />
 
       <DepositStatusConfirmModal
-        open={Boolean(rejectId) && tab === "orders"}
+        open={Boolean(rejectId) && (tab === "orders" || tab === "bonus")}
         title="Set as Rejected?"
         message={
           rejectOrderRecord
             ? `${rejectOrderRecord.id} · ${rejectOrderRecord.customer}`
-            : undefined
+            : rejectBonusRecord
+              ? `${rejectBonusRecord.id} · ${rejectBonusRecord.customer}`
+              : undefined
         }
         confirmLabel="Yes"
         confirmClassName="bg-[#E11D48]"
-        busy={orderStatusBusy}
+        busy={tab === "orders" ? orderStatusBusy : bonusStatusBusy}
         onCancel={() => setRejectId(null)}
         onConfirm={() => {
           rejectRecord(rejectId);
@@ -2028,10 +2264,8 @@ function LoyaltyContent() {
       />
 
       <RejectModal
-        open={Boolean(rejectId) && tab !== "orders"}
-        title={
-          tab === "bonus" ? "Reject bonus claim" : tab === "vouchers" ? "Reject voucher claim" : "Reject loyalty claim"
-        }
+        open={Boolean(rejectId) && tab === "vouchers"}
+        title="Reject voucher claim"
         onClose={() => setRejectId(null)}
         onConfirm={(reason) => {
           rejectRecord(rejectId, reason);
