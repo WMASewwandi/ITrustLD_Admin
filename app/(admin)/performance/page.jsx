@@ -1,8 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Breadcrumb from "@/components/admin/breadcrumb";
+import {
+  PERFORMANCE_PERIODS,
+  fetchMyPerformance,
+} from "@/lib/performance";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -10,6 +14,7 @@ import {
   Clock3,
   Gift,
   HandCoins,
+  Loader2,
   Percent,
   Target,
   TrendingUp,
@@ -17,73 +22,15 @@ import {
   Wallet,
 } from "lucide-react";
 
-const PERIODS = ["Daily", "Weekly", "Monthly"];
-
-const PERIOD_DATA = {
-  Daily: {
-    metrics: {
-      handled: 24,
-      handledDelta: "+3 vs yesterday",
-      successRate: "96.1%",
-      successDelta: "+1.2%",
-      commission: "$186",
-      commissionDelta: "+$22",
-    },
-    trend: {
-      labels: ["6a", "8a", "10a", "12p", "2p", "4p", "6p", "8p"],
-      values: [2, 4, 8, 12, 10, 14, 18, 16],
-      subtitle: "Transactions by hour — today",
-    },
-    breakdown: [
-      { label: "Deposits", count: 15, pct: 62, commission: "$118", icon: Banknote, color: "text-theme-green-action", bar: "bg-theme-green-action" },
-      { label: "Withdrawals", count: 7, pct: 29, commission: "$54", icon: HandCoins, color: "text-[#FB7185]", bar: "bg-[#FB7185]" },
-      { label: "Loyalty", count: 2, pct: 9, commission: "$14", icon: Gift, color: "text-[#FBBF24]", bar: "bg-[#FBBF24]" },
-    ],
-    audit: { by: "System Admin", at: "Jul 17, 2026 · 6:32 PM" },
-  },
-  Weekly: {
-    metrics: {
-      handled: 148,
-      handledDelta: "+12 vs last week",
-      successRate: "94.2%",
-      successDelta: "+0.8%",
-      commission: "$1,240",
-      commissionDelta: "+$96",
-    },
-    trend: {
-      labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-      values: [18, 22, 19, 26, 24, 28, 11],
-      subtitle: "Daily volume — current week",
-    },
-    breakdown: [
-      { label: "Deposits", count: 92, pct: 62, commission: "$768", icon: Banknote, color: "text-theme-green-action", bar: "bg-theme-green-action" },
-      { label: "Withdrawals", count: 44, pct: 30, commission: "$398", icon: HandCoins, color: "text-[#FB7185]", bar: "bg-[#FB7185]" },
-      { label: "Loyalty", count: 12, pct: 8, commission: "$74", icon: Gift, color: "text-[#FBBF24]", bar: "bg-[#FBBF24]" },
-    ],
-    audit: { by: "System Admin", at: "Jul 17, 2026 · 6:00 PM" },
-  },
-  Monthly: {
-    metrics: {
-      handled: 612,
-      handledDelta: "+48 vs last month",
-      successRate: "93.4%",
-      successDelta: "-0.3%",
-      commission: "$4,860",
-      commissionDelta: "+$420",
-    },
-    trend: {
-      labels: ["W1", "W2", "W3", "W4"],
-      values: [138, 152, 148, 174],
-      subtitle: "Weekly volume — July 2026",
-    },
-    breakdown: [
-      { label: "Deposits", count: 378, pct: 62, commission: "$3,012", icon: Banknote, color: "text-theme-green-action", bar: "bg-theme-green-action" },
-      { label: "Withdrawals", count: 186, pct: 30, commission: "$1,548", icon: HandCoins, color: "text-[#FB7185]", bar: "bg-[#FB7185]" },
-      { label: "Loyalty", count: 48, pct: 8, commission: "$300", icon: Gift, color: "text-[#FBBF24]", bar: "bg-[#FBBF24]" },
-    ],
-    audit: { by: "Sub Admin", at: "Jul 17, 2026 · 5:45 PM" },
-  },
+const BREAKDOWN_ICONS = {
+  Deposits: { icon: Banknote, color: "text-theme-green-action", bar: "bg-theme-green-action" },
+  Withdrawals: { icon: HandCoins, color: "text-[#FB7185]", bar: "bg-[#FB7185]" },
+  Loyalty: { icon: Gift, color: "text-[#FBBF24]", bar: "bg-[#FBBF24]" },
 };
+
+function Skeleton({ className = "" }) {
+  return <div className={`animate-pulse rounded-lg bg-white/10 ${className}`} />;
+}
 
 function TrendChart({ labels, values }) {
   const max = Math.max(...values, 1);
@@ -97,14 +44,14 @@ function TrendChart({ labels, values }) {
   const chartH = h - padT - padB;
   const barGap = labels.length > 10 ? 4 : 10;
   const barW = (chartW - barGap * (values.length - 1)) / values.length;
-  const ticks = [0, Math.round(max * 0.25), Math.round(max * 0.5), Math.round(max * 0.75), max];
+  const ticks = [...new Set([0, Math.round(max * 0.25), Math.round(max * 0.5), Math.round(max * 0.75), max])];
 
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="h-52 w-full" role="img" aria-label="Performance trend chart">
-      {ticks.map((t) => {
+      {ticks.map((t, tickIndex) => {
         const y = padT + chartH - (t / max) * chartH;
         return (
-          <g key={t}>
+          <g key={`tick-${tickIndex}-${t}`}>
             <line x1={padL} y1={y} x2={w - padR} y2={y} stroke="#2a2d3d" strokeWidth="1" />
             <text x={padL - 6} y={y + 3} textAnchor="end" className="fill-slate-500" fontSize="9">
               {t}
@@ -113,11 +60,11 @@ function TrendChart({ labels, values }) {
         );
       })}
       {values.map((v, i) => {
-        const barH = Math.max((v / max) * chartH, 2);
+        const barH = Math.max((v / max) * chartH, v > 0 ? 2 : 0);
         const x = padL + i * (barW + barGap);
         const y = padT + chartH - barH;
         return (
-          <g key={labels[i]}>
+          <g key={`bar-${i}-${labels[i]}`}>
             <rect
               x={x}
               y={y}
@@ -164,34 +111,55 @@ function DeltaBadge({ value }) {
 
 export default function PerformancePage() {
   const [period, setPeriod] = useState("Weekly");
-  const data = useMemo(() => PERIOD_DATA[period], [period]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [data, setData] = useState(null);
 
-  const metricCards = [
-    {
-      label: "Transactions Handled",
-      value: data.metrics.handled.toLocaleString(),
-      delta: data.metrics.handledDelta,
-      icon: Target,
-      glow: "bg-admin-teal",
-      color: "text-admin-teal",
-    },
-    {
-      label: "Success Rate",
-      value: data.metrics.successRate,
-      delta: data.metrics.successDelta,
-      icon: Percent,
-      glow: "bg-theme-green-action",
-      color: "text-theme-green-action",
-    },
-    {
-      label: "Commission Earned",
-      value: data.metrics.commission,
-      delta: data.metrics.commissionDelta,
-      icon: Wallet,
-      glow: "bg-[#FBBF24]",
-      color: "text-[#FBBF24]",
-    },
-  ];
+  const loadPerformance = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetchMyPerformance(period);
+      setData(response);
+    } catch (err) {
+      setError(err.message || "Failed to load performance.");
+    } finally {
+      setLoading(false);
+    }
+  }, [period]);
+
+  useEffect(() => {
+    loadPerformance();
+  }, [loadPerformance]);
+
+  const metricCards = data
+    ? [
+        {
+          label: "Transactions Handled",
+          value: Number(data.metrics.handled || 0).toLocaleString(),
+          delta: data.metrics.handledDelta,
+          icon: Target,
+          glow: "bg-admin-teal",
+          color: "text-admin-teal",
+        },
+        {
+          label: "Success Rate",
+          value: data.metrics.successRate,
+          delta: data.metrics.successDelta,
+          icon: Percent,
+          glow: "bg-theme-green-action",
+          color: "text-theme-green-action",
+        },
+        {
+          label: "Commission Earned",
+          value: data.metrics.commission,
+          delta: data.metrics.commissionDelta,
+          icon: Wallet,
+          glow: "bg-[#FBBF24]",
+          color: "text-[#FBBF24]",
+        },
+      ]
+    : [];
 
   return (
     <div className="pb-10">
@@ -209,7 +177,7 @@ export default function PerformancePage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {PERIODS.map((p) => (
+          {PERFORMANCE_PERIODS.map((p) => (
             <button
               key={p}
               type="button"
@@ -233,23 +201,42 @@ export default function PerformancePage() {
         </div>
       </div>
 
+      {error ? (
+        <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {error}
+          <button type="button" className="ml-3 underline" onClick={loadPerformance}>
+            Retry
+          </button>
+        </div>
+      ) : null}
+
       <div className="grid gap-4 sm:grid-cols-3">
-        {metricCards.map((m, i) => (
-          <article key={m.label} className={`admin-card admin-fade-up admin-fade-up-delay-${i + 1} p-5`}>
-            <div className={`admin-stat-glow -right-6 -top-8 ${m.glow}`} />
+        {(loading && !data ? Array.from({ length: 3 }) : metricCards).map((m, i) => (
+          <article key={m?.label || i} className={`admin-card admin-fade-up admin-fade-up-delay-${i + 1} p-5`}>
+            <div className={`admin-stat-glow -right-6 -top-8 ${m?.glow || "bg-admin-teal"}`} />
             <div className="relative">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-[11px] uppercase tracking-wide text-slate-400">{m.label}</p>
-                  <p className="mt-2 text-3xl font-bold tabular-nums text-white">{m.value}</p>
+              {loading && !data ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-9 w-28" />
+                  <Skeleton className="h-5 w-20" />
                 </div>
-                <span className={`flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 ${m.color}`}>
-                  <m.icon className="h-4 w-4" />
-                </span>
-              </div>
-              <div className="mt-3 border-t border-white/10 pt-3">
-                <DeltaBadge value={m.delta} />
-              </div>
+              ) : (
+                <>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wide text-slate-400">{m.label}</p>
+                      <p className="mt-2 text-3xl font-bold tabular-nums text-white">{m.value}</p>
+                    </div>
+                    <span className={`flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 ${m.color}`}>
+                      <m.icon className="h-4 w-4" />
+                    </span>
+                  </div>
+                  <div className="mt-3 border-t border-white/10 pt-3">
+                    <DeltaBadge value={m.delta} />
+                  </div>
+                </>
+              )}
             </div>
           </article>
         ))}
@@ -259,64 +246,82 @@ export default function PerformancePage() {
         <section className="admin-card admin-fade-up admin-fade-up-delay-2 p-5 lg:col-span-3">
           <div className="mb-1 flex items-start justify-between gap-2">
             <div>
-              <h2 className="text-sm font-semibold text-white">Daily trend</h2>
-              <p className="mt-0.5 text-xs text-slate-500">{data.trend.subtitle}</p>
+              <h2 className="text-sm font-semibold text-white">Activity trend</h2>
+              <p className="mt-0.5 text-xs text-slate-500">{data?.trend?.subtitle || "Loading trend…"}</p>
             </div>
             <span className="rounded-lg bg-white/5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
               {period}
             </span>
           </div>
-          <TrendChart labels={data.trend.labels} values={data.trend.values} />
+          {loading && !data ? (
+            <Skeleton className="mt-4 h-52 w-full" />
+          ) : (
+            <TrendChart labels={data?.trend?.labels || []} values={data?.trend?.values || []} />
+          )}
         </section>
 
         <section className="admin-card admin-fade-up admin-fade-up-delay-3 p-5 lg:col-span-2">
           <h2 className="text-sm font-semibold text-white">Breakdown by type</h2>
           <p className="mt-0.5 text-xs text-slate-500">Volume and commission share</p>
           <ul className="mt-5 space-y-4">
-            {data.breakdown.map((row) => (
-              <li key={row.label}>
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <span className={`flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 ${row.color}`}>
-                      <row.icon className="h-4 w-4" />
-                    </span>
-                    <div>
-                      <p className="text-sm font-medium text-white">{row.label}</p>
-                      <p className="text-[11px] text-slate-500">{row.commission} commission</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold tabular-nums text-white">{row.count}</p>
-                    <p className="text-[11px] text-slate-500">{row.pct}%</p>
-                  </div>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                  <div className={`h-full rounded-full ${row.bar}`} style={{ width: `${row.pct}%` }} />
-                </div>
-              </li>
-            ))}
+            {(loading && !data ? Array.from({ length: 3 }) : data?.breakdown || []).map((row, index) => {
+              const meta = BREAKDOWN_ICONS[row?.label] || BREAKDOWN_ICONS.Deposits;
+              const Icon = meta.icon;
+              return (
+                <li key={row?.label || index}>
+                  {loading && !data ? (
+                    <Skeleton className="h-12 w-full" />
+                  ) : (
+                    <>
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <span className={`flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 ${meta.color}`}>
+                            <Icon className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <p className="text-sm font-medium text-white">{row.label}</p>
+                            <p className="text-[11px] text-slate-500">{row.commission} commission</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold tabular-nums text-white">{row.count}</p>
+                          <p className="text-[11px] text-slate-500">{row.pct}%</p>
+                        </div>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                        <div className={`h-full rounded-full ${meta.bar}`} style={{ width: `${row.pct}%` }} />
+                      </div>
+                    </>
+                  )}
+                </li>
+              );
+            })}
           </ul>
-          <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-500">Total handled</span>
-              <span className="font-semibold tabular-nums text-white">
-                {data.breakdown.reduce((s, r) => s + r.count, 0)}
-              </span>
+          {data ? (
+            <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500">Total handled</span>
+                <span className="font-semibold tabular-nums text-white">
+                  {(data.breakdown || []).reduce((sum, row) => sum + row.count, 0)}
+                </span>
+              </div>
             </div>
-          </div>
+          ) : null}
         </section>
       </div>
 
-      <p className="admin-fade-up admin-fade-up-delay-4 mt-6 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-        <span className="inline-flex items-center gap-1.5">
-          <Clock3 className="h-3.5 w-3.5 text-slate-600" />
-          Last updated {data.audit.at}
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <User className="h-3.5 w-3.5 text-slate-600" />
-          Updated by {data.audit.by}
-        </span>
-      </p>
+      {data?.audit ? (
+        <p className="admin-fade-up admin-fade-up-delay-4 mt-6 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+          <span className="inline-flex items-center gap-1.5">
+            <Clock3 className="h-3.5 w-3.5 text-slate-600" />
+            Last updated {data.audit.at}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <User className="h-3.5 w-3.5 text-slate-600" />
+            Updated by {data.audit.by}
+          </span>
+        </p>
+      ) : null}
     </div>
   );
 }
