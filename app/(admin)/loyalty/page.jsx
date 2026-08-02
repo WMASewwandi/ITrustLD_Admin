@@ -10,15 +10,12 @@ import CopyCell, { FilterField, IdNameCell, PlatformIdCell, StatusPill, inputCls
 import { fetchLoyaltyOrders, updateLoyaltyOrderStatus } from "@/lib/loyalty-orders";
 import { fetchBonusClaims, updateBonusClaimStatus } from "@/lib/loyalty-bonus-claims";
 import {
-  AFFILIATE_BONUS_CONFIG,
-  AFFILIATE_LOYALTY_LEVELS,
-  AFFILIATE_POINT_COLLECTION,
-  LOYALTY_BONUS_CONFIG,
-  LOYALTY_POINT_COLLECTION,
-  LOYALTY_RANKING_USERS,
-  VOUCHERS,
-} from "@/lib/mock-data";
-import { AlertTriangle, Check, Mail, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
+  completeVoucherClaim,
+  fetchVoucherClaims,
+  rejectVoucherClaim,
+} from "@/lib/loyalty-voucher-claims";
+import LoyaltyManagementPanel from "@/components/admin/loyalty-management-panel";
+import { Check, RefreshCw, Search, X } from "lucide-react";
 
 const TABS = [
   { id: "orders", label: "Orders" },
@@ -49,7 +46,7 @@ function LoyaltyDetailModal({
   onRequestReopen,
 }) {
   const [rejectOpen, setRejectOpen] = useState(false);
-  const usesOrderConfirmFlow = tab === "orders" || tab === "bonus";
+  const usesOrderConfirmFlow = tab === "orders" || tab === "bonus" || tab === "vouchers";
 
   useEffect(() => {
     if (!open) setRejectOpen(false);
@@ -60,9 +57,15 @@ function LoyaltyDetailModal({
   const title =
     tab === "bonus" ? "Bonus claim details" : tab === "vouchers" ? "Voucher claim details" : "Loyalty order details";
   // Pending: approve + reject · Rejected: approve + reopen · Claimed/Completed: reject + reopen
-  const canApprove = record.status === "Pending" || record.status === "Rejected";
-  const canReject = record.status === "Pending" || record.status === "Completed" || record.status === "Claimed";
-  const canReopen = record.status === "Rejected" || record.status === "Completed" || record.status === "Claimed";
+  const canApprove = tab === "vouchers" ? record.status === "Pending" : record.status === "Pending" || record.status === "Rejected";
+  const canReject =
+    tab === "vouchers"
+      ? record.status === "Pending"
+      : record.status === "Pending" || record.status === "Completed" || record.status === "Claimed";
+  const canReopen =
+    tab === "vouchers"
+      ? false
+      : record.status === "Rejected" || record.status === "Completed" || record.status === "Claimed";
 
   return (
     <div className="admin-modal-overlay z-[80]" onClick={onClose}>
@@ -272,7 +275,6 @@ function LoyaltyContent() {
   const params = useSearchParams();
   const [tab, setTab] = useState(params.get("tab") || "orders");
   const [status, setStatus] = useState(params.get("status") || "Pending");
-  const [audience, setAudience] = useState("Normal Users");
   const [q, setQ] = useState("");
   const [duration, setDuration] = useState("");
   const [from, setFrom] = useState("");
@@ -317,41 +319,34 @@ function LoyaltyContent() {
     from: "",
     to: "",
   });
-  const [vouchers, setVouchers] = useState(VOUCHERS);
+  const [vouchers, setVouchers] = useState([]);
+  const [voucherLoading, setVoucherLoading] = useState(false);
+  const [voucherError, setVoucherError] = useState("");
+  const [voucherPage, setVoucherPage] = useState(1);
+  const [voucherPerPage, setVoucherPerPage] = useState("20");
+  const [voucherPagination, setVoucherPagination] = useState({
+    page: 1,
+    total_pages: 1,
+    total: 0,
+    per_page: 20,
+  });
+  const [voucherStatusBusy, setVoucherStatusBusy] = useState(false);
+  const [voucherActionError, setVoucherActionError] = useState("");
+  const [appliedVoucherFilters, setAppliedVoucherFilters] = useState({
+    status: params.get("status") || "Pending",
+    keyword: "",
+    duration: "",
+    from: "",
+    to: "",
+  });
   const [rejectId, setRejectId] = useState(null);
   const [approveConfirmId, setApproveConfirmId] = useState(null);
   const [reopenConfirmId, setReopenConfirmId] = useState(null);
   const [detail, setDetail] = useState(null);
-  const [pointRows, setPointRows] = useState(LOYALTY_POINT_COLLECTION);
-  const [bonusRows, setBonusRows] = useState(LOYALTY_BONUS_CONFIG);
-  const [activatePoints, setActivatePoints] = useState(true);
-  const [activateBonus, setActivateBonus] = useState(false);
-  const [ranking, setRanking] = useState(LOYALTY_RANKING_USERS);
-  const [rankSelectAll, setRankSelectAll] = useState(false);
-  const [affiliatePoints, setAffiliatePoints] = useState(AFFILIATE_POINT_COLLECTION);
-  const [affiliateBonus, setAffiliateBonus] = useState(AFFILIATE_BONUS_CONFIG);
-  const [affiliateLevels, setAffiliateLevels] = useState(AFFILIATE_LOYALTY_LEVELS);
-  const [activateAffPoints, setActivateAffPoints] = useState(true);
-  const [activateAffBonus, setActivateAffBonus] = useState(true);
-
-  const isAffiliate = audience === "Affiliate Partners";
-
-  useEffect(() => {
-    if (audience === "Affiliate Partners") {
-      setActivateAffPoints(true);
-      setActivateAffBonus(true);
-    }
-  }, [audience]);
-
   useEffect(() => {
     const nextTab = params.get("tab") || "orders";
     setTab(nextTab);
     setStatus(params.get("status") || (nextTab === "management" ? "All" : "Pending"));
-    if (params.get("audience") === "affiliate") {
-      setAudience("Affiliate Partners");
-    } else if (params.get("audience") === "normal") {
-      setAudience("Normal Users");
-    }
   }, [params]);
 
   const loadOrders = useCallback(async () => {
@@ -414,12 +409,45 @@ function LoyaltyContent() {
     }
   }, [appliedBonusFilters, bonusPage, bonusPerPage]);
 
+  const loadVoucherClaims = useCallback(async () => {
+    setVoucherLoading(true);
+    setVoucherError("");
+    try {
+      const data = await fetchVoucherClaims({
+        status: appliedVoucherFilters.status,
+        page: voucherPage,
+        perPage: Number(voucherPerPage) || 20,
+        keyword: appliedVoucherFilters.keyword,
+        duration: appliedVoucherFilters.duration,
+        from: appliedVoucherFilters.from,
+        to: appliedVoucherFilters.to,
+      });
+      setVouchers(data.claims || []);
+      setVoucherPagination(
+        data.pagination || {
+          page: 1,
+          total_pages: 1,
+          total: 0,
+          per_page: 20,
+        },
+      );
+    } catch (err) {
+      setVoucherError(err.message || "Failed to load voucher claims.");
+      setVouchers([]);
+    } finally {
+      setVoucherLoading(false);
+    }
+  }, [appliedVoucherFilters, voucherPage, voucherPerPage]);
+
   const ordersRangeStart =
     ordersPagination.total === 0 ? 0 : (ordersPagination.page - 1) * ordersPagination.per_page + 1;
   const ordersRangeEnd = Math.min(ordersPagination.page * ordersPagination.per_page, ordersPagination.total);
   const bonusRangeStart =
     bonusPagination.total === 0 ? 0 : (bonusPagination.page - 1) * bonusPagination.per_page + 1;
   const bonusRangeEnd = Math.min(bonusPagination.page * bonusPagination.per_page, bonusPagination.total);
+  const voucherRangeStart =
+    voucherPagination.total === 0 ? 0 : (voucherPagination.page - 1) * voucherPagination.per_page + 1;
+  const voucherRangeEnd = Math.min(voucherPagination.page * voucherPagination.per_page, voucherPagination.total);
   const rejectOrderRecord = useMemo(() => {
     if (!rejectId || tab !== "orders") return null;
     return orders.find((r) => r.id === rejectId) ?? null;
@@ -444,6 +472,14 @@ function LoyaltyContent() {
     if (!reopenConfirmId || tab !== "bonus") return null;
     return bonuses.find((r) => r.id === reopenConfirmId) ?? null;
   }, [reopenConfirmId, tab, bonuses]);
+  const approveVoucherRecord = useMemo(() => {
+    if (!approveConfirmId || tab !== "vouchers") return null;
+    return vouchers.find((r) => r.id === approveConfirmId) ?? null;
+  }, [approveConfirmId, tab, vouchers]);
+  const rejectVoucherRecord = useMemo(() => {
+    if (!rejectId || tab !== "vouchers") return null;
+    return vouchers.find((r) => r.id === rejectId) ?? null;
+  }, [rejectId, tab, vouchers]);
 
   useEffect(() => {
     if (tab !== "orders") return undefined;
@@ -456,6 +492,12 @@ function LoyaltyContent() {
     loadBonusClaims();
     return undefined;
   }, [tab, loadBonusClaims]);
+
+  useEffect(() => {
+    if (tab !== "vouchers") return undefined;
+    loadVoucherClaims();
+    return undefined;
+  }, [tab, loadVoucherClaims]);
 
   useEffect(() => {
     if (tab !== "orders") return undefined;
@@ -477,11 +519,21 @@ function LoyaltyContent() {
     return undefined;
   }, [status, tab]);
 
+  useEffect(() => {
+    if (tab !== "vouchers") return undefined;
+    setVoucherPage(1);
+    setAppliedVoucherFilters((prev) => {
+      if (prev.status === status) return prev;
+      return { ...prev, status };
+    });
+    return undefined;
+  }, [status, tab]);
+
   const list = tab === "bonus" ? bonuses : tab === "vouchers" ? vouchers : orders;
 
   const filtered = useMemo(() => {
     if (tab === "management") return [];
-    if (tab === "orders" || tab === "bonus") return list;
+    if (tab === "orders" || tab === "bonus" || tab === "vouchers") return list;
     return list.filter((r) => {
       if (status !== "All" && r.status !== status && !(status === "Pending" && String(r.status).includes("Pending"))) {
         return false;
@@ -491,7 +543,14 @@ function LoyaltyContent() {
     });
   }, [list, status, q, tab, orders]);
 
-  const ordersRecordCount = tab === "orders" ? ordersPagination.total : tab === "bonus" ? bonusPagination.total : filtered.length;
+  const ordersRecordCount =
+    tab === "orders"
+      ? ordersPagination.total
+      : tab === "bonus"
+        ? bonusPagination.total
+        : tab === "vouchers"
+          ? voucherPagination.total
+          : filtered.length;
 
   const pageTitle =
     tab === "orders"
@@ -550,8 +609,39 @@ function LoyaltyContent() {
     }
   }
 
+  async function handleVoucherComplete(id) {
+    setVoucherStatusBusy(true);
+    setVoucherActionError("");
+    try {
+      await completeVoucherClaim({ voucherId: id });
+      await loadVoucherClaims();
+      if (detail?.id === id) {
+        setDetail(null);
+      }
+    } catch (err) {
+      setVoucherActionError(err.message || "Failed to complete voucher claim.");
+    } finally {
+      setVoucherStatusBusy(false);
+    }
+  }
+
+  async function handleVoucherReject(id, reason) {
+    setVoucherStatusBusy(true);
+    setVoucherActionError("");
+    try {
+      await rejectVoucherClaim({ voucherId: id, rejectionReason: reason });
+      await loadVoucherClaims();
+      if (detail?.id === id) {
+        setDetail(null);
+      }
+    } catch (err) {
+      setVoucherActionError(err.message || "Failed to reject voucher claim.");
+    } finally {
+      setVoucherStatusBusy(false);
+    }
+  }
+
   function approve(id) {
-    const now = new Date().toISOString().slice(0, 16).replace("T", " ");
     if (tab === "orders") {
       handleOrderStatusUpdate(id, "Completed");
       return;
@@ -561,18 +651,11 @@ function LoyaltyContent() {
       return;
     }
     if (tab === "vouchers") {
-      setVouchers((prev) =>
-        prev.map((r) =>
-          r.id === id
-            ? { ...r, status: "Claimed", admin: "System Admin", claimedBy: "System Admin", claimedDate: now }
-            : r
-        )
-      );
+      handleVoucherComplete(id);
     }
   }
 
   function rejectRecord(id, reason) {
-    const now = new Date().toISOString().slice(0, 16).replace("T", " ");
     if (tab === "orders") {
       handleOrderStatusUpdate(id, "Rejected");
       return;
@@ -582,19 +665,7 @@ function LoyaltyContent() {
       return;
     }
     if (tab === "vouchers") {
-      setVouchers((prev) =>
-        prev.map((r) =>
-          r.id === id
-            ? {
-                ...r,
-                status: "Rejected",
-                rejectReason: reason,
-                rejectedDate: now,
-                admin: "System Admin",
-              }
-            : r
-        )
-      );
+      handleVoucherReject(id, reason);
     }
   }
 
@@ -609,24 +680,6 @@ function LoyaltyContent() {
     }
     if (tab === "bonus") {
       handleBonusStatusUpdate(id, "Pending");
-      return;
-    }
-    if (tab === "vouchers") {
-      setVouchers((prev) =>
-        prev.map((r) =>
-          r.id === id
-            ? {
-                ...r,
-                status: "Pending",
-                admin: "—",
-                rejectReason: undefined,
-                rejectedDate: undefined,
-                claimedBy: undefined,
-                claimedDate: undefined,
-              }
-            : r
-        )
-      );
     }
   }
 
@@ -652,6 +705,17 @@ function LoyaltyContent() {
     });
   }
 
+  function applyVoucherFilters() {
+    setVoucherPage(1);
+    setAppliedVoucherFilters({
+      status,
+      keyword: q,
+      duration,
+      from,
+      to,
+    });
+  }
+
   function handleOrderFilterKeyDown(event) {
     if (event.key !== "Enter") return;
     if (event.target instanceof HTMLButtonElement) return;
@@ -663,6 +727,11 @@ function LoyaltyContent() {
     if (tab === "bonus") {
       event.preventDefault();
       applyBonusFilters();
+      return;
+    }
+    if (tab === "vouchers") {
+      event.preventDefault();
+      applyVoucherFilters();
     }
   }
 
@@ -698,6 +767,22 @@ function LoyaltyContent() {
     });
   }
 
+  function resetVoucherFilters() {
+    setQ("");
+    setFrom("");
+    setTo("");
+    setDuration("");
+    setStatus("Pending");
+    setVoucherPage(1);
+    setAppliedVoucherFilters({
+      status: "Pending",
+      keyword: "",
+      duration: "",
+      from: "",
+      to: "",
+    });
+  }
+
   return (
     <div>
       <Breadcrumb items={[{ label: "Loyalty", href: "/loyalty" }, { label: pageTitle }]} />
@@ -723,680 +808,7 @@ function LoyaltyContent() {
       </div>
 
       {tab === "management" ? (
-        <div className="admin-fade-up space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h1 className="text-xl font-bold text-white sm:text-2xl">Loyalty Management</h1>
-              <p className="mt-0.5 text-xs text-slate-400">
-                {isAffiliate
-                  ? "Affiliate partners · point collection · bonus · loyalty levels"
-                  : "Point collection · bonus · user ranking · Normal Users"}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              {["Normal Users", "Affiliate Partners"].map((a) => (
-                <button
-                  key={a}
-                  type="button"
-                  onClick={() => setAudience(a)}
-                  className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
-                    audience === a
-                      ? "bg-gradient-to-r from-admin-teal to-admin-teal-deep text-white"
-                      : "border border-white/10 text-slate-400 hover:text-white"
-                  }`}
-                >
-                  {a}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {isAffiliate ? (
-            <>
-              {/* Affiliate Point Collection */}
-              <section className="admin-card overflow-visible p-0">
-                <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <h2 className="text-lg font-semibold text-white">Point Collection</h2>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <label className="inline-flex items-center gap-2 text-sm text-slate-400">
-                      <input
-                        type="checkbox"
-                        checked={activateAffPoints}
-                        onChange={(e) => setActivateAffPoints(e.target.checked)}
-                        className="rounded border-white/20"
-                      />
-                      Activate Amount
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const nextId = String(Math.max(...affiliatePoints.map((r) => Number(r.id)), 0) + 1);
-                        setAffiliatePoints((prev) => [
-                          {
-                            id: nextId,
-                            adminId: "1",
-                            calAmount: "1",
-                            changedDate: new Date().toISOString().slice(0, 19).replace("T", " "),
-                            active: false,
-                          },
-                          ...prev,
-                        ]);
-                      }}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-xs font-semibold text-white"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Add Amount
-                    </button>
-                  </div>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-left text-[13px]">
-                    <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
-                      <tr>
-                        <th className="px-4 py-3">ID</th>
-                        <th className="px-4 py-3">Admin ID</th>
-                        <th className="px-4 py-3">Cal Amount</th>
-                        <th className="px-4 py-3">Changed Date</th>
-                        <th className="px-4 py-3">Set as Active</th>
-                        <th className="px-4 py-3">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {affiliatePoints.map((r) => (
-                        <tr key={r.id} className="border-t border-white/10 text-slate-300">
-                          <td className="px-4 py-3 font-medium text-white">{r.id}</td>
-                          <td className="px-4 py-3">{r.adminId}</td>
-                          <td className="px-4 py-3">
-                            <input
-                              value={r.calAmount}
-                              onChange={(e) =>
-                                setAffiliatePoints((prev) =>
-                                  prev.map((row) => (row.id === r.id ? { ...row, calAmount: e.target.value } : row))
-                                )
-                              }
-                              className="w-20 rounded-lg border border-white/10 bg-admin-surface px-2 py-1.5 text-sm text-white"
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-slate-400">{r.changedDate}</td>
-                          <td className="px-4 py-3">
-                            <input
-                              type="checkbox"
-                              checked={r.active}
-                              onChange={(e) =>
-                                setAffiliatePoints((prev) =>
-                                  prev.map((row) =>
-                                    row.id === r.id
-                                      ? { ...row, active: e.target.checked }
-                                      : e.target.checked
-                                        ? { ...row, active: false }
-                                        : row
-                                  )
-                                )
-                              }
-                              className="rounded border-white/20"
-                            />
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex gap-1.5">
-                              <button type="button" className="rounded-lg bg-theme-green-action/90 p-1.5 text-white" title="Edit">
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setAffiliatePoints((prev) => prev.filter((row) => row.id !== r.id))}
-                                className="rounded-lg bg-[#E11D48] p-1.5 text-white"
-                                title="Delete"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-
-              {/* Affiliate Bonus */}
-              <section className="admin-card overflow-visible p-0">
-                <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <h2 className="text-lg font-semibold text-white">Bonus</h2>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <label className="inline-flex items-center gap-2 text-sm text-slate-400">
-                      <input
-                        type="checkbox"
-                        checked={activateAffBonus}
-                        onChange={(e) => setActivateAffBonus(e.target.checked)}
-                        className="rounded border-white/20"
-                      />
-                      Activate Amount
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const nextId = String(Math.max(...affiliateBonus.map((r) => Number(r.id)), 0) + 1);
-                        setAffiliateBonus((prev) => [
-                          {
-                            id: nextId,
-                            adminId: "1",
-                            calAmount: "50",
-                            changedDate: new Date().toISOString().slice(0, 19).replace("T", " "),
-                            active: false,
-                          },
-                          ...prev,
-                        ]);
-                      }}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-xs font-semibold text-white"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Add Amount
-                    </button>
-                  </div>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-left text-[13px]">
-                    <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
-                      <tr>
-                        <th className="px-4 py-3">ID</th>
-                        <th className="px-4 py-3">Admin ID</th>
-                        <th className="px-4 py-3">Cal Amount</th>
-                        <th className="px-4 py-3">Changed Date</th>
-                        <th className="px-4 py-3">Set as Active</th>
-                        <th className="px-4 py-3">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {affiliateBonus.map((r) => (
-                        <tr key={r.id} className="border-t border-white/10 text-slate-300">
-                          <td className="px-4 py-3 font-medium text-white">{r.id}</td>
-                          <td className="px-4 py-3">{r.adminId}</td>
-                          <td className="px-4 py-3">
-                            <input
-                              value={r.calAmount}
-                              onChange={(e) =>
-                                setAffiliateBonus((prev) =>
-                                  prev.map((row) => (row.id === r.id ? { ...row, calAmount: e.target.value } : row))
-                                )
-                              }
-                              className="w-24 rounded-lg border border-white/10 bg-admin-surface px-2 py-1.5 text-sm text-white"
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-slate-400">{r.changedDate}</td>
-                          <td className="px-4 py-3">
-                            <input
-                              type="checkbox"
-                              checked={r.active}
-                              onChange={(e) =>
-                                setAffiliateBonus((prev) =>
-                                  prev.map((row) =>
-                                    row.id === r.id
-                                      ? { ...row, active: e.target.checked }
-                                      : e.target.checked
-                                        ? { ...row, active: false }
-                                        : row
-                                  )
-                                )
-                              }
-                              className="rounded border-white/20"
-                            />
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex gap-1.5">
-                              <button type="button" className="rounded-lg bg-theme-green-action/90 p-1.5 text-white" title="Edit">
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setAffiliateBonus((prev) => prev.filter((row) => row.id !== r.id))}
-                                className="rounded-lg bg-[#E11D48] p-1.5 text-white"
-                                title="Delete"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-
-              {/* Loyalty levels — Silver / Gold / Platinum */}
-              {affiliateLevels.map((level, levelIdx) => (
-                <section key={level.name} className="admin-card overflow-visible p-0">
-                  <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                    <h2 className="text-lg font-semibold text-white">Loyalty — {level.name}</h2>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <label className="inline-flex items-center gap-2 text-sm text-slate-400">
-                        <input
-                          type="checkbox"
-                          checked={level.activate}
-                          onChange={(e) =>
-                            setAffiliateLevels((prev) =>
-                              prev.map((lv, i) => (i === levelIdx ? { ...lv, activate: e.target.checked } : lv))
-                            )
-                          }
-                          className="rounded border-white/20"
-                        />
-                        Activate Amount
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setAffiliateLevels((prev) =>
-                            prev.map((lv, i) => {
-                              if (i !== levelIdx) return lv;
-                              const nextId = String(Math.max(...lv.rows.map((r) => Number(r.id)), 0) + 1);
-                              return {
-                                ...lv,
-                                rows: [
-                                  {
-                                    id: nextId,
-                                    adminId: "1",
-                                    calAmount: "1",
-                                    changedDate: new Date().toISOString().slice(0, 19).replace("T", " "),
-                                    active: false,
-                                  },
-                                  ...lv.rows,
-                                ],
-                              };
-                            })
-                          )
-                        }
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-xs font-semibold text-white"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        Add Amount
-                      </button>
-                    </div>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-left text-[13px]">
-                      <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
-                        <tr>
-                          <th className="px-4 py-3">ID</th>
-                          <th className="px-4 py-3">Admin ID</th>
-                          <th className="px-4 py-3">Cal Amount</th>
-                          <th className="px-4 py-3">Changed Date</th>
-                          <th className="px-4 py-3">Set as Active</th>
-                          <th className="px-4 py-3">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {level.rows.map((r) => (
-                          <tr key={`${level.name}-${r.id}`} className="border-t border-white/10 text-slate-300">
-                            <td className="px-4 py-3 font-medium text-white">{r.id}</td>
-                            <td className="px-4 py-3">{r.adminId}</td>
-                            <td className="px-4 py-3">
-                              <input
-                                value={r.calAmount}
-                                onChange={(e) =>
-                                  setAffiliateLevels((prev) =>
-                                    prev.map((lv, i) =>
-                                      i === levelIdx
-                                        ? {
-                                            ...lv,
-                                            rows: lv.rows.map((row) =>
-                                              row.id === r.id ? { ...row, calAmount: e.target.value } : row
-                                            ),
-                                          }
-                                        : lv
-                                    )
-                                  )
-                                }
-                                className="w-20 rounded-lg border border-white/10 bg-admin-surface px-2 py-1.5 text-sm text-white"
-                              />
-                            </td>
-                            <td className="px-4 py-3 text-slate-400">{r.changedDate}</td>
-                            <td className="px-4 py-3">
-                              <input
-                                type="checkbox"
-                                checked={r.active}
-                                onChange={(e) =>
-                                  setAffiliateLevels((prev) =>
-                                    prev.map((lv, i) =>
-                                      i === levelIdx
-                                        ? {
-                                            ...lv,
-                                            rows: lv.rows.map((row) =>
-                                              row.id === r.id
-                                                ? { ...row, active: e.target.checked }
-                                                : e.target.checked
-                                                  ? { ...row, active: false }
-                                                  : row
-                                            ),
-                                          }
-                                        : lv
-                                    )
-                                  )
-                                }
-                                className="rounded border-white/20"
-                              />
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex gap-1.5">
-                                <button type="button" className="rounded-lg bg-theme-green-action/90 p-1.5 text-white" title="Edit">
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setAffiliateLevels((prev) =>
-                                      prev.map((lv, i) =>
-                                        i === levelIdx
-                                          ? { ...lv, rows: lv.rows.filter((row) => row.id !== r.id) }
-                                          : lv
-                                      )
-                                    )
-                                  }
-                                  className="rounded-lg bg-[#E11D48] p-1.5 text-white"
-                                  title="Delete"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              ))}
-            </>
-          ) : (
-            <>
-              {/* Normal Users panels keep existing Point Collection / Bonus / Ranking */}
-          <section className="admin-card overflow-visible p-0">
-            <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-lg font-semibold text-white">Point Collection</h2>
-              <div className="flex flex-wrap items-center gap-3">
-                <label className="inline-flex items-center gap-2 text-sm text-slate-400">
-                  <input
-                    type="checkbox"
-                    checked={activatePoints}
-                    onChange={(e) => setActivatePoints(e.target.checked)}
-                    className="rounded border-white/20"
-                  />
-                  Activate Amount
-                </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const nextId = String(Math.max(...pointRows.map((r) => Number(r.id)), 0) + 1);
-                    setPointRows((prev) => [
-                      {
-                        id: nextId,
-                        adminId: "1",
-                        calAmount: "1",
-                        changedDate: new Date().toISOString().slice(0, 19).replace("T", " "),
-                        active: false,
-                      },
-                      ...prev,
-                    ]);
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-xs font-semibold text-white"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add Amount
-                </button>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-[13px]">
-                <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
-                  <tr>
-                    <th className="px-4 py-3">ID</th>
-                    <th className="px-4 py-3">Admin ID</th>
-                    <th className="px-4 py-3">Cal Amount</th>
-                    <th className="px-4 py-3">Changed Date</th>
-                    <th className="px-4 py-3">Set as Active</th>
-                    <th className="px-4 py-3">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pointRows.map((r) => (
-                    <tr key={r.id} className="border-t border-white/10 text-slate-300">
-                      <td className="px-4 py-3 font-medium text-white">{r.id}</td>
-                      <td className="px-4 py-3">{r.adminId}</td>
-                      <td className="px-4 py-3">
-                        <input
-                          value={r.calAmount}
-                          onChange={(e) =>
-                            setPointRows((prev) =>
-                              prev.map((row) => (row.id === r.id ? { ...row, calAmount: e.target.value } : row))
-                            )
-                          }
-                          className="w-20 rounded-lg border border-white/10 bg-admin-surface px-2 py-1.5 text-sm text-white"
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-slate-400">{r.changedDate}</td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          checked={r.active}
-                          onChange={(e) =>
-                            setPointRows((prev) =>
-                              prev.map((row) =>
-                                row.id === r.id
-                                  ? { ...row, active: e.target.checked }
-                                  : e.target.checked
-                                    ? { ...row, active: false }
-                                    : row
-                              )
-                            )
-                          }
-                          className="rounded border-white/20"
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1.5">
-                          <button type="button" className="rounded-lg bg-theme-green-action/90 p-1.5 text-white" title="Edit">
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setPointRows((prev) => prev.filter((row) => row.id !== r.id))}
-                            className="rounded-lg bg-[#E11D48] p-1.5 text-white"
-                            title="Delete"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          {/* Bonus */}
-          <section className="admin-card overflow-visible p-0">
-            <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-lg font-semibold text-white">Bonus</h2>
-              <div className="flex flex-wrap items-center gap-3">
-                <label className="inline-flex items-center gap-2 text-sm text-slate-400">
-                  <input
-                    type="checkbox"
-                    checked={activateBonus}
-                    onChange={(e) => setActivateBonus(e.target.checked)}
-                    className="rounded border-white/20"
-                  />
-                  Activate Amount
-                </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const nextId = String(Math.max(...bonusRows.map((r) => Number(r.id)), 0) + 1);
-                    setBonusRows((prev) => [
-                      {
-                        id: nextId,
-                        adminId: "1",
-                        bonusAmount: "5",
-                        changedDate: new Date().toISOString().slice(0, 19).replace("T", " "),
-                        active: false,
-                      },
-                      ...prev,
-                    ]);
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-xs font-semibold text-white"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add Amount
-                </button>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-[13px]">
-                <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
-                  <tr>
-                    <th className="px-4 py-3">ID</th>
-                    <th className="px-4 py-3">Admin ID</th>
-                    <th className="px-4 py-3">Bonus Amount</th>
-                    <th className="px-4 py-3">Changed Date</th>
-                    <th className="px-4 py-3">Set as Active</th>
-                    <th className="px-4 py-3">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bonusRows.map((r) => (
-                    <tr key={r.id} className="border-t border-white/10 text-slate-300">
-                      <td className="px-4 py-3 font-medium text-white">{r.id}</td>
-                      <td className="px-4 py-3">{r.adminId}</td>
-                      <td className="px-4 py-3">
-                        <input
-                          value={r.bonusAmount}
-                          onChange={(e) =>
-                            setBonusRows((prev) =>
-                              prev.map((row) => (row.id === r.id ? { ...row, bonusAmount: e.target.value } : row))
-                            )
-                          }
-                          className="w-24 rounded-lg border border-white/10 bg-admin-surface px-2 py-1.5 text-sm text-white"
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-slate-400">{r.changedDate}</td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          checked={r.active}
-                          onChange={(e) =>
-                            setBonusRows((prev) =>
-                              prev.map((row) =>
-                                row.id === r.id
-                                  ? { ...row, active: e.target.checked }
-                                  : e.target.checked
-                                    ? { ...row, active: false }
-                                    : row
-                              )
-                            )
-                          }
-                          className="rounded border-white/20"
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1.5">
-                          <button type="button" className="rounded-lg bg-theme-green-action/90 p-1.5 text-white" title="Edit">
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setBonusRows((prev) => prev.filter((row) => row.id !== r.id))}
-                            className="rounded-lg bg-[#E11D48] p-1.5 text-white"
-                            title="Delete"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          {/* User Ranking */}
-          <section className="admin-card overflow-visible p-0">
-            <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-white">User Ranking</h2>
-                <p className="mt-0.5 text-xs text-slate-400">12-month evaluation · {audience}</p>
-              </div>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-xs font-semibold text-white"
-              >
-                <Mail className="h-3.5 w-3.5" />
-                Send Email
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-[13px]">
-                <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
-                  <tr>
-                    <th className="px-4 py-3">
-                      <input
-                        type="checkbox"
-                        checked={rankSelectAll}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setRankSelectAll(checked);
-                          setRanking((prev) => prev.map((u) => ({ ...u, selected: checked })));
-                        }}
-                        className="rounded border-white/20"
-                      />
-                    </th>
-                    <th className="px-4 py-3">User ID</th>
-                    <th className="px-4 py-3">Name</th>
-                    <th className="px-4 py-3">Points</th>
-                    <th className="px-4 py-3">Tier</th>
-                    <th className="px-4 py-3">Email</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ranking.map((u) => (
-                    <tr key={u.id} className="border-t border-white/10 text-slate-300 hover:bg-admin-teal/[0.05]">
-                      <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          checked={!!u.selected}
-                          onChange={(e) =>
-                            setRanking((prev) =>
-                              prev.map((row) => (row.id === u.id ? { ...row, selected: e.target.checked } : row))
-                            )
-                          }
-                          className="rounded border-white/20"
-                        />
-                      </td>
-                      <td className="px-4 py-3 font-medium text-white">{u.id}</td>
-                      <td className="px-4 py-3">{u.name}</td>
-                      <td className="px-4 py-3 font-semibold text-[#FBBF24]">{u.points}</td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-                            u.tier === "VVIP"
-                              ? "bg-[#236B6B]/20 text-[#C084FC]"
-                              : u.tier === "VIP"
-                                ? "bg-admin-teal/20 text-admin-teal"
-                                : "bg-white/10 text-slate-400"
-                          }`}
-                        >
-                          {u.tier}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-400">{u.email}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-            </>
-          )}
-        </div>
+        <LoyaltyManagementPanel />
       ) : (
         <section className="admin-card overflow-visible p-0">
           <div className="border-b border-white/10 px-5 py-4">
@@ -1414,13 +826,20 @@ function LoyaltyContent() {
                       : " · approve / reject"}
                 </p>
               </div>
-              {tab === "vouchers" ? (
+              {(tab === "orders" || tab === "bonus" || tab === "vouchers") ? (
                 <div className="flex flex-wrap gap-1.5">
-                  {[
-                    ["Pending", "Pending"],
-                    ["Claimed", "Claimed"],
-                    ["Rejected", "Rejected"],
-                  ].map(([label, value]) => (
+                  {(tab === "orders"
+                    ? [
+                        ["Pending", "Pending"],
+                        ["Completed", "Completed"],
+                        ["Rejected", "Rejected"],
+                      ]
+                    : [
+                        ["Pending", "Pending"],
+                        ["Claimed", "Claimed"],
+                        ["Rejected", "Rejected"],
+                      ]
+                  ).map(([label, value]) => (
                     <button
                       key={value}
                       type="button"
@@ -1453,7 +872,7 @@ function LoyaltyContent() {
                     onChange={(e) => setQ(e.target.value)}
                     placeholder={
                       tab === "vouchers"
-                        ? "Search voucher token or amount…"
+                        ? "Search platform ID, token, account…"
                         : "Search…"
                     }
                     className={`${inputCls} pl-9`}
@@ -1467,20 +886,6 @@ function LoyaltyContent() {
                   Filter
                 </span>
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-                  {tab === "vouchers" && (status === "Claimed" || status === "Rejected") ? null : (
-                    <FilterField label="Status" className="min-w-[140px] flex-1">
-                      <select value={status} onChange={(e) => setStatus(e.target.value)} className={inputCls}>
-                        {(tab === "bonus" || tab === "vouchers"
-                          ? ["All", "Pending", "Claimed", "Rejected"]
-                          : ["All", "Pending", "Completed", "Rejected"]
-                        ).map((s) => (
-                          <option key={s} value={s} className="bg-admin-surface">
-                            {s === "All" ? "All Statuses" : s}
-                          </option>
-                        ))}
-                      </select>
-                    </FilterField>
-                  )}
                   <FilterField label="From" className="min-w-[140px] flex-1">
                     <input
                       type="date"
@@ -1513,9 +918,17 @@ function LoyaltyContent() {
                         }
                         if (tab === "bonus") {
                           applyBonusFilters();
+                          return;
+                        }
+                        if (tab === "vouchers") {
+                          applyVoucherFilters();
                         }
                       }}
-                      disabled={(tab === "orders" && ordersLoading) || (tab === "bonus" && bonusLoading)}
+                      disabled={
+                        (tab === "orders" && ordersLoading) ||
+                        (tab === "bonus" && bonusLoading) ||
+                        (tab === "vouchers" && voucherLoading)
+                      }
                       className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
                     >
                       Apply
@@ -1531,13 +944,14 @@ function LoyaltyContent() {
                           resetBonusFilters();
                           return;
                         }
+                        if (tab === "vouchers") {
+                          resetVoucherFilters();
+                          return;
+                        }
                         setQ("");
                         setFrom("");
                         setTo("");
-                        setDuration("Today");
-                        if (!(tab === "vouchers" && (status === "Claimed" || status === "Rejected"))) {
-                          setStatus("All");
-                        }
+                        setDuration("");
                       }}
                       className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:bg-white/5 hover:text-white"
                     >
@@ -1557,6 +971,10 @@ function LoyaltyContent() {
                   ? bonusPagination.total === 0
                     ? "Showing 0 results"
                     : `Showing ${bonusRangeStart}–${bonusRangeEnd} of ${bonusPagination.total} results`
+                  : tab === "vouchers"
+                    ? voucherPagination.total === 0
+                      ? "Showing 0 results"
+                      : `Showing ${voucherRangeStart}–${voucherRangeEnd} of ${voucherPagination.total} results`
                   : `Showing ${filtered.length} results`}
             </p>
             {tab === "orders" && ordersError ? (
@@ -1571,10 +989,18 @@ function LoyaltyContent() {
             {tab === "bonus" && bonusActionError ? (
               <p className="mt-2 text-xs text-rose-400">{bonusActionError}</p>
             ) : null}
+            {tab === "vouchers" && voucherError ? (
+              <p className="mt-2 text-xs text-rose-400">{voucherError}</p>
+            ) : null}
+            {tab === "vouchers" && voucherActionError ? (
+              <p className="mt-2 text-xs text-rose-400">{voucherActionError}</p>
+            ) : null}
           </div>
 
           <div className="overflow-x-auto">
-            {tab === "orders" && ordersLoading ? (
+            {tab === "vouchers" && voucherLoading ? (
+              <div className="px-4 py-14 text-center text-slate-400">Loading voucher claims…</div>
+            ) : tab === "orders" && ordersLoading ? (
               <div className="px-4 py-14 text-center text-slate-400">Loading loyalty orders…</div>
             ) : tab === "orders" ? (
               <table className="min-w-[1100px] w-full text-left text-[13px]">
@@ -1702,7 +1128,7 @@ function LoyaltyContent() {
                   ))}
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="px-4 py-14 text-center text-slate-400">
+                      <td colSpan={11} className="px-4 py-14 text-center text-slate-400">
                         No Results Found
                       </td>
                     </tr>
@@ -1837,7 +1263,7 @@ function LoyaltyContent() {
                   ))}
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="px-4 py-14 text-center text-slate-400">
+                      <td colSpan={11} className="px-4 py-14 text-center text-slate-400">
                         No Results Found
                       </td>
                     </tr>
@@ -1857,21 +1283,28 @@ function LoyaltyContent() {
                     <th className="px-3 py-3">Voucher Token</th>
                     <th className="px-3 py-3">Rejection Reason</th>
                     <th className="px-3 py-3">Rejected Date</th>
-                    <th className="px-3 py-3">Action</th>
+                    <th className="px-3 py-3">Rejected By</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((r) => (
                     <tr key={r.id} className="border-t border-white/10 text-slate-300 hover:bg-admin-teal/[0.05]">
                       <td className="px-3 py-3">
-                        <button
-                          type="button"
+                        <div
+                          role="button"
+                          tabIndex={0}
                           onClick={() => openDetail(r)}
-                          className="text-left"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              openDetail(r);
+                            }
+                          }}
+                          className="cursor-pointer text-left"
                           title="View details"
                         >
                           <CopyCell value={r.id} />
-                        </button>
+                        </div>
                       </td>
                       <td className="px-3 py-3">
                         <CopyCell value={r.date} />
@@ -1897,31 +1330,12 @@ function LoyaltyContent() {
                       <td className="px-3 py-3">
                         <CopyCell value={r.rejectedDate || "N/A"} />
                       </td>
-                      <td className="px-3 py-3">
-                        <div className="flex gap-1">
-                          <button
-                            type="button"
-                            onClick={() => approve(r.id)}
-                            className="rounded-lg bg-theme-green-action p-1.5 text-white"
-                            title="Approve / claim"
-                          >
-                            <Check className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => reopen(r.id)}
-                            className="rounded-lg bg-[#D1900F] p-1.5 text-white"
-                            title="Reopen as pending"
-                          >
-                            <RefreshCw className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </td>
+                      <td className="px-3 py-3 text-xs text-slate-400">{r.admin || "—"}</td>
                     </tr>
                   ))}
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="px-4 py-14 text-center text-slate-400">
+                      <td colSpan={11} className="px-4 py-14 text-center text-slate-400">
                         No Results Found
                       </td>
                     </tr>
@@ -1947,14 +1361,21 @@ function LoyaltyContent() {
                   {filtered.map((r) => (
                     <tr key={r.id} className="border-t border-white/10 text-slate-300 hover:bg-admin-teal/[0.05]">
                       <td className="px-3 py-3">
-                        <button
-                          type="button"
+                        <div
+                          role="button"
+                          tabIndex={0}
                           onClick={() => openDetail(r)}
-                          className="text-left"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              openDetail(r);
+                            }
+                          }}
+                          className="cursor-pointer text-left"
                           title="View details"
                         >
                           <CopyCell value={r.id} />
-                        </button>
+                        </div>
                       </td>
                       <td className="px-3 py-3">
                         <CopyCell value={r.date} />
@@ -1992,7 +1413,7 @@ function LoyaltyContent() {
                 </tbody>
               </table>
             ) : tab === "vouchers" ? (
-              <table className="min-w-[1100px] w-full text-left text-[13px]">
+              <table className="min-w-[1200px] w-full text-left text-[13px]">
                 <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                   <tr>
                     <th className="px-3 py-3">#</th>
@@ -2002,6 +1423,7 @@ function LoyaltyContent() {
                     <th className="px-3 py-3">Amount</th>
                     <th className="px-3 py-3">Platform</th>
                     <th className="px-3 py-3">Voucher / Token</th>
+                    <th className="px-3 py-3">Duplicates</th>
                     <th className="px-3 py-3">Action</th>
                     <th className="px-3 py-3">Status</th>
                     <th className="px-3 py-3">Admin</th>
@@ -2030,42 +1452,43 @@ function LoyaltyContent() {
                         <CopyCell value={r.token || "—"} />
                       </td>
                       <td className="px-3 py-3">
+                        {r.duplicates?.is_daily_duplicate || r.duplicates?.is_monthly_duplicate ? (
+                          <span
+                            className="inline-flex rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-semibold text-rose-300"
+                            title={
+                              r.duplicates?.is_daily_duplicate
+                                ? `${r.duplicates.daily_count} duplicates today`
+                                : `${r.duplicates.monthly_count} duplicates in 30 days`
+                            }
+                          >
+                            {r.duplicates?.is_daily_duplicate
+                              ? `${r.duplicates.daily_count} today`
+                              : `${r.duplicates.monthly_count} / 30d`}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
                         {r.status === "Pending" ? (
                           <div className="flex gap-1">
                             <button
                               type="button"
+                              disabled={voucherStatusBusy}
                               onClick={() => setRejectId(r.id)}
-                              className="rounded-lg bg-[#E11D48] p-1.5 text-white shadow-sm"
+                              className="rounded-lg bg-[#E11D48] p-1.5 text-white shadow-sm disabled:opacity-50"
                               title="Reject"
                             >
-                              <AlertTriangle className="h-3.5 w-3.5" />
+                              <X className="h-3.5 w-3.5" />
                             </button>
                             <button
                               type="button"
-                              onClick={() => approve(r.id)}
-                              className="rounded-lg bg-theme-green-action p-1.5 text-white shadow-sm"
+                              disabled={voucherStatusBusy}
+                              onClick={() => setApproveConfirmId(r.id)}
+                              className="rounded-lg bg-theme-green-action p-1.5 text-white shadow-sm disabled:opacity-50"
                               title="Approve / claim"
                             >
                               <Check className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        ) : r.status === "Rejected" ? (
-                          <div className="flex gap-1">
-                            <button
-                              type="button"
-                              onClick={() => approve(r.id)}
-                              className="rounded-lg bg-theme-green-action p-1.5 text-white"
-                              title="Approve"
-                            >
-                              <Check className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => reopen(r.id)}
-                              className="rounded-lg bg-[#D1900F] p-1.5 text-white"
-                              title="Reopen"
-                            >
-                              <RefreshCw className="h-3.5 w-3.5" />
                             </button>
                           </div>
                         ) : (
@@ -2087,7 +1510,7 @@ function LoyaltyContent() {
                   ))}
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="px-4 py-14 text-center text-slate-400">
+                      <td colSpan={11} className="px-4 py-14 text-center text-slate-400">
                         No Results Found
                       </td>
                     </tr>
@@ -2199,23 +1622,78 @@ function LoyaltyContent() {
                 ) : null}
               </div>
             </div>
+          ) : tab === "vouchers" ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4">
+              <p className="text-xs text-slate-500">
+                {voucherPagination.total === 0
+                  ? "No records"
+                  : `Showing ${voucherRangeStart}–${voucherRangeEnd} of ${voucherPagination.total}`}
+                {voucherPagination.total_pages > 1
+                  ? ` · Page ${voucherPagination.page} of ${voucherPagination.total_pages}`
+                  : null}
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="inline-flex items-center gap-2 text-xs text-slate-500">
+                  Per page
+                  <select
+                    value={voucherPerPage}
+                    onChange={(e) => {
+                      setVoucherPerPage(e.target.value);
+                      setVoucherPage(1);
+                    }}
+                    disabled={voucherLoading}
+                    className="rounded-lg border border-white/10 bg-admin-surface px-2 py-1.5 text-xs text-white disabled:opacity-50"
+                  >
+                    {["10", "20", "25", "50"].map((n) => (
+                      <option key={n} value={n} className="bg-admin-surface">
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {voucherPagination.total_pages > 1 ? (
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={voucherPagination.page <= 1 || voucherLoading}
+                      onClick={() => setVoucherPage((p) => Math.max(1, p - 1))}
+                      className="admin-btn-secondary disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      disabled={voucherPagination.page >= voucherPagination.total_pages || voucherLoading}
+                      onClick={() => setVoucherPage((p) => p + 1)}
+                      className="admin-btn-secondary disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
           ) : null}
         </section>
       )}
 
       <DepositStatusConfirmModal
-        open={Boolean(approveConfirmId) && (tab === "orders" || tab === "bonus")}
+        open={Boolean(approveConfirmId) && (tab === "orders" || tab === "bonus" || tab === "vouchers")}
         title="Set as Approved?"
         message={
           approveOrderRecord
             ? `${approveOrderRecord.id} · ${approveOrderRecord.customer}`
             : approveBonusRecord
               ? `${approveBonusRecord.id} · ${approveBonusRecord.customer}`
-              : undefined
+              : approveVoucherRecord
+                ? `${approveVoucherRecord.id} · ${approveVoucherRecord.customer}`
+                : undefined
         }
         confirmLabel="Yes"
         confirmClassName="bg-theme-green-action"
-        busy={tab === "orders" ? orderStatusBusy : bonusStatusBusy}
+        busy={
+          tab === "orders" ? orderStatusBusy : tab === "bonus" ? bonusStatusBusy : voucherStatusBusy
+        }
         onCancel={() => setApproveConfirmId(null)}
         onConfirm={() => {
           approve(approveConfirmId);
