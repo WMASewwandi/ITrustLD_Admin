@@ -14,6 +14,7 @@ import {
   fetchVoucherClaims,
   rejectVoucherClaim,
 } from "@/lib/loyalty-voucher-claims";
+import { notifyAdminNavCountsRefresh } from "@/lib/notifications";
 import LoyaltyManagementPanel from "@/components/admin/loyalty-management-panel";
 import { Check, RefreshCw, Search, X } from "lucide-react";
 
@@ -586,6 +587,7 @@ function LoyaltyContent() {
       if (detail?.id === id) {
         setDetail(null);
       }
+      notifyAdminNavCountsRefresh();
     } catch (err) {
       setOrderActionError(err.message || "Failed to update loyalty order status.");
     } finally {
@@ -602,6 +604,7 @@ function LoyaltyContent() {
       if (detail?.id === id) {
         setDetail(null);
       }
+      notifyAdminNavCountsRefresh();
     } catch (err) {
       setBonusActionError(err.message || "Failed to update bonus claim status.");
     } finally {
@@ -618,6 +621,7 @@ function LoyaltyContent() {
       if (detail?.id === id) {
         setDetail(null);
       }
+      notifyAdminNavCountsRefresh();
     } catch (err) {
       setVoucherActionError(err.message || "Failed to complete voucher claim.");
     } finally {
@@ -634,6 +638,7 @@ function LoyaltyContent() {
       if (detail?.id === id) {
         setDetail(null);
       }
+      notifyAdminNavCountsRefresh();
     } catch (err) {
       setVoucherActionError(err.message || "Failed to reject voucher claim.");
     } finally {

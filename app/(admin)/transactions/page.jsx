@@ -11,6 +11,7 @@ import AssignDepositsModal from "@/components/admin/assign-deposits-modal";
 import AssignWithdrawalsModal from "@/components/admin/assign-withdrawals-modal";
 import { EmailSendModal, SmsSendModal } from "@/components/admin/customer-message-modals";
 import { sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
+import { notifyAdminNavCountsRefresh } from "@/lib/notifications";
 import {
   buildDepositQueryParams,
   downloadDepositsExport,
@@ -1494,6 +1495,7 @@ function TransactionsContent() {
       if (proof?.id === id) closeProof();
       if (tab === "deposits") await loadDeposits();
       else await loadWithdrawals();
+      notifyAdminNavCountsRefresh();
     } catch (err) {
       setActionError(err.message || "Failed to set transaction as pending.");
     } finally {
@@ -1527,6 +1529,7 @@ function TransactionsContent() {
       closeProof();
       if (tab === "deposits") await loadDeposits();
       else await loadWithdrawals();
+      notifyAdminNavCountsRefresh();
     } catch (err) {
       setActionError(err.message || "Failed to update transaction status.");
     } finally {
@@ -1550,6 +1553,7 @@ function TransactionsContent() {
       if (proof?.id === id) closeProof();
       if (tab === "deposits") await loadDeposits();
       else await loadWithdrawals();
+      notifyAdminNavCountsRefresh();
     } catch (err) {
       setActionError(err.message || "Failed to approve transaction.");
     } finally {
@@ -1582,6 +1586,7 @@ function TransactionsContent() {
       setRejectId(null);
       if (tab === "deposits") await loadDeposits();
       else await loadWithdrawals();
+      notifyAdminNavCountsRefresh();
     } catch (err) {
       setActionError(err.message || "Failed to reject transaction.");
     }
@@ -2373,6 +2378,7 @@ function TransactionsContent() {
         onAssigned={() => {
           setSelected([]);
           loadDeposits();
+          notifyAdminNavCountsRefresh();
         }}
       />
 
@@ -2383,6 +2389,7 @@ function TransactionsContent() {
         onAssigned={() => {
           setSelected([]);
           loadWithdrawals();
+          notifyAdminNavCountsRefresh();
         }}
       />
 

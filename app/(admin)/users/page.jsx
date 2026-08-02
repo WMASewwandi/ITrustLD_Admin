@@ -7,6 +7,7 @@ import RejectModal from "@/components/admin/reject-modal";
 import RejectReasonPanel from "@/components/admin/reject-reason-panel";
 import CopyCell, { FilterField, inputCls } from "@/components/admin/queue-ui";
 import { fetchCustomers, updateCustomerEmail, fetchCustomerKycDocuments, fetchKycDocumentBlob, approveCustomerKyc, rejectCustomerKyc, banCustomer, unbanCustomer, banMultipleCustomers, updateCustomerPartner, sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
+import { notifyAdminNavCountsRefresh } from "@/lib/notifications";
 import { useCan } from "@/contexts/admin-permissions";
 import {
   Ban,
@@ -717,12 +718,14 @@ function UsersContent() {
     const res = await approveCustomerKyc(user.accountHolderId, field);
     updateCustomerRow(res.customer);
     setKycDocs(null);
+    notifyAdminNavCountsRefresh();
   }
 
   async function handleRejectKyc(user, field, reason) {
     const res = await rejectCustomerKyc(user.accountHolderId, field, reason);
     updateCustomerRow(res.customer);
     setKycDocs(null);
+    notifyAdminNavCountsRefresh();
   }
 
   async function handleBanCustomer(userId, reason) {

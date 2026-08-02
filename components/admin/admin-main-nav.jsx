@@ -14,8 +14,7 @@ import {
 } from "lucide-react";
 import { DEFAULT_BOOKMARKS, TOP_NAV } from "@/lib/mock-data";
 import { logoutAdmin } from "@/lib/auth";
-import { fetchNavCounts } from "@/lib/notifications";
-import { ADMIN_NAV_COUNTS_REFRESH_EVENT } from "@/lib/help-tickets";
+import { fetchNavCounts, ADMIN_NAV_COUNTS_REFRESH_EVENT, NAV_COUNTS_POLL_MS } from "@/lib/notifications";
 import {
   applyBookmarkBadges,
   applyNavBadges,
@@ -123,10 +122,28 @@ function NavInner({ user, roleLabel }) {
     }
 
     loadCounts();
+    const intervalId = window.setInterval(loadCounts, NAV_COUNTS_POLL_MS);
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        loadCounts();
+      }
+    }
+
+    function handleFocus() {
+      loadCounts();
+    }
+
     window.addEventListener(ADMIN_NAV_COUNTS_REFRESH_EVENT, loadCounts);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleFocus);
+
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
       window.removeEventListener(ADMIN_NAV_COUNTS_REFRESH_EVENT, loadCounts);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleFocus);
     };
   }, [pathname, search]);
 
