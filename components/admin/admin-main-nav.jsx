@@ -15,6 +15,7 @@ import {
 import { DEFAULT_BOOKMARKS, TOP_NAV } from "@/lib/mock-data";
 import { logoutAdmin } from "@/lib/auth";
 import { fetchNavCounts } from "@/lib/notifications";
+import { ADMIN_NAV_COUNTS_REFRESH_EVENT } from "@/lib/help-tickets";
 import {
   applyBookmarkBadges,
   applyNavBadges,
@@ -122,8 +123,10 @@ function NavInner({ user, roleLabel }) {
     }
 
     loadCounts();
+    window.addEventListener(ADMIN_NAV_COUNTS_REFRESH_EVENT, loadCounts);
     return () => {
       cancelled = true;
+      window.removeEventListener(ADMIN_NAV_COUNTS_REFRESH_EVENT, loadCounts);
     };
   }, [pathname, search]);
 

@@ -1,47 +1,29 @@
 "use client";
 
-import { useState } from "react";
-import { Eye, Pencil, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Eye, Loader2, Pencil, Trash2, X } from "lucide-react";
 import Breadcrumb from "@/components/admin/breadcrumb";
+import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
 import { inputCls } from "@/components/admin/queue-ui";
-
-const INITIAL_BANNERS = [
-  {
-    id: "bn-1",
-    title: "Welcome Bonus — 10% Extra",
-    description: "Deposit this week and earn an extra 10% on your first transaction.",
-    color: "#0D9F1B",
-    ctaLink: "https://itrustld.com/promo/welcome",
-    displayType: "Static Banner",
-    audience: "Normal Users",
-    activeFrom: "2026-07-01",
-    activeTo: "2026-07-31",
-    mediaName: "welcome-bonus.gif",
-  },
-  {
-    id: "bn-2",
-    title: "Affiliate Tier Upgrade",
-    description: "Refer 5 new users this month to unlock Gold affiliate rewards.",
-    color: "#6858FF",
-    ctaLink: "https://itrustld.com/affiliate",
-    displayType: "Slider",
-    audience: "Affiliate Users",
-    activeFrom: "2026-06-15",
-    activeTo: "2026-08-15",
-    mediaName: "affiliate-slider.mp4",
-  },
-];
+import {
+  createPromotionalBanner,
+  deletePromotionalBanner,
+  fetchPromotionalBanners,
+  updatePromotionalBanner,
+} from "@/lib/promotional-banners";
 
 const EMPTY_FORM = {
   title: "",
   description: "",
   color: "#0D9F1B",
   ctaLink: "",
+  ctaLabel: "Learn More",
   displayType: "Static Banner",
   audience: "Normal Users",
   activeFrom: "",
   activeTo: "",
-  mediaName: "",
+  isActive: true,
+  sortOrder: 0,
 };
 
 function FieldLabel({ children, required }) {
@@ -55,10 +37,17 @@ function FieldLabel({ children, required }) {
 
 function formatDate(d) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  return new Date(`${d}T00:00:00`).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function BannerPreview({ banner }) {
+  const mediaUrl = banner.mediaPreviewUrl || banner.mediaUrl;
+  const isVideo = mediaUrl && /\.(mp4|webm|mov)(\?|$)/i.test(mediaUrl);
+
   return (
     <div
       className="overflow-hidden rounded-xl border border-white/10 shadow-lg"
@@ -68,6 +57,16 @@ function BannerPreview({ banner }) {
         <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Live Preview</p>
       </div>
       <div className="p-5">
+        {mediaUrl ? (
+          <div className="mb-4 overflow-hidden rounded-lg border border-white/10">
+            {isVideo ? (
+              <video src={mediaUrl} className="max-h-40 w-full object-cover" muted playsInline controls />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={mediaUrl} alt="" className="max-h-40 w-full object-cover" />
+            )}
+          </div>
+        ) : null}
         <div
           className="rounded-lg p-5"
           style={{ backgroundColor: `${banner.color}33`, borderLeft: `4px solid ${banner.color}` }}
@@ -79,15 +78,15 @@ function BannerPreview({ banner }) {
               className="mt-3 inline-block rounded-lg px-4 py-1.5 text-xs font-semibold text-white"
               style={{ backgroundColor: banner.color }}
             >
-              Learn More →
+              {banner.ctaLabel || "Learn More"} →
             </span>
           ) : null}
         </div>
         <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-400">
           <span className="rounded-full bg-white/10 px-2 py-0.5">{banner.displayType}</span>
           <span className="rounded-full bg-white/10 px-2 py-0.5">{banner.audience}</span>
-          {banner.mediaName ? (
-            <span className="rounded-full bg-white/10 px-2 py-0.5">{banner.mediaName}</span>
+          {!banner.isActive ? (
+            <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-rose-300">Inactive</span>
           ) : null}
         </div>
       </div>
@@ -96,10 +95,41 @@ function BannerPreview({ banner }) {
 }
 
 export default function BannersPage() {
-  const [banners, setBanners] = useState(INITIAL_BANNERS);
+  const [banners, setBanners] = useState([]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editId, setEditId] = useState(null);
+  const [mediaFile, setMediaFile] = useState(null);
+  const [mediaPreviewUrl, setMediaPreviewUrl] = useState("");
+  const [existingMediaUrl, setExistingMediaUrl] = useState("");
+  const [removeMedia, setRemoveMedia] = useState(false);
   const [flash, setFlash] = useState("");
+  const [pageError, setPageError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  const loadBanners = useCallback(async () => {
+    setLoading(true);
+    setPageError("");
+    try {
+      const data = await fetchPromotionalBanners();
+      setBanners(data.banners || []);
+    } catch (err) {
+      setPageError(err.message || "Failed to load promotional banners.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadBanners();
+  }, [loadBanners]);
+
+  useEffect(() => {
+    return () => {
+      if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl);
+    };
+  }, [mediaPreviewUrl]);
 
   function update(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -109,19 +139,54 @@ export default function BannersPage() {
   function resetForm() {
     setForm(EMPTY_FORM);
     setEditId(null);
+    setMediaFile(null);
+    setRemoveMedia(false);
+    setExistingMediaUrl("");
+    if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl);
+    setMediaPreviewUrl("");
     setFlash("");
   }
 
-  function handleSubmit(e) {
+  function handleMediaChange(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl);
+    setMediaFile(file);
+    setRemoveMedia(false);
+    setMediaPreviewUrl(URL.createObjectURL(file));
+    setFlash("");
+  }
+
+  function clearMedia() {
+    if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl);
+    setMediaFile(null);
+    setMediaPreviewUrl("");
+    setRemoveMedia(true);
+    setExistingMediaUrl("");
+  }
+
+  async function handleSubmit(e) {
     e.preventDefault();
-    const wasEdit = !!editId;
-    if (editId) {
-      setBanners((prev) => prev.map((b) => (b.id === editId ? { ...b, ...form } : b)));
-    } else {
-      setBanners((prev) => [{ id: `bn-${Date.now()}`, ...form }, ...prev]);
+    setSaving(true);
+    setFlash("");
+    setPageError("");
+    try {
+      const payload = { ...form, removeMedia };
+      if (editId) {
+        await updatePromotionalBanner(editId, payload, mediaFile);
+        setFlash("updated");
+      } else {
+        await createPromotionalBanner(payload, mediaFile);
+        setFlash("saved");
+      }
+      resetForm();
+      await loadBanners();
+    } catch (err) {
+      setPageError(err.message || "Failed to save banner.");
+    } finally {
+      setSaving(false);
     }
-    resetForm();
-    setFlash(wasEdit ? "updated" : "saved");
   }
 
   function startEdit(banner) {
@@ -130,16 +195,44 @@ export default function BannersPage() {
       description: banner.description,
       color: banner.color,
       ctaLink: banner.ctaLink,
+      ctaLabel: banner.ctaLabel || "Learn More",
       displayType: banner.displayType,
       audience: banner.audience,
-      activeFrom: banner.activeFrom,
-      activeTo: banner.activeTo,
-      mediaName: banner.mediaName,
+      activeFrom: banner.activeFrom || "",
+      activeTo: banner.activeTo || "",
+      isActive: banner.isActive !== false,
+      sortOrder: banner.sortOrder || 0,
     });
     setEditId(banner.id);
+    setMediaFile(null);
+    setRemoveMedia(false);
+    if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl);
+    setMediaPreviewUrl("");
+    setExistingMediaUrl(banner.mediaUrl || "");
     setFlash("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+
+  async function confirmDelete() {
+    if (!deleteConfirm) return;
+    setSaving(true);
+    try {
+      await deletePromotionalBanner(deleteConfirm.id);
+      setDeleteConfirm(null);
+      if (editId === deleteConfirm.id) resetForm();
+      await loadBanners();
+      setFlash("deleted");
+    } catch (err) {
+      setPageError(err.message || "Failed to delete banner.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const previewBanner = {
+    ...form,
+    mediaPreviewUrl: mediaPreviewUrl || (!removeMedia ? existingMediaUrl : ""),
+  };
 
   return (
     <div className="pb-10">
@@ -147,15 +240,19 @@ export default function BannersPage() {
 
       <div className="admin-fade-up mb-6">
         <h1 className="text-2xl font-bold tracking-tight text-white">Promotions & Banners</h1>
-        <p className="mt-1 text-sm text-slate-400">Create promotional banners with audience targeting and live preview.</p>
+        <p className="mt-1 text-sm text-slate-400">
+          Create promotional banners with audience targeting, scheduling, and live preview.
+        </p>
       </div>
+
+      {pageError ? (
+        <div className="admin-card mb-4 px-5 py-3 text-sm text-rose-300">{pageError}</div>
+      ) : null}
 
       <div className="grid gap-5 xl:grid-cols-2">
         <form onSubmit={handleSubmit} className="admin-card admin-fade-up p-5">
           <div className="mb-4 flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-100">
-              {editId ? "Edit Banner" : "Create Banner"}
-            </h2>
+            <h2 className="text-sm font-semibold text-slate-100">{editId ? "Edit Banner" : "Create Banner"}</h2>
             {editId ? (
               <button
                 type="button"
@@ -194,19 +291,36 @@ export default function BannersPage() {
                     onChange={(e) => update("color", e.target.value)}
                     className="h-10 w-12 cursor-pointer rounded-lg border border-white/10 bg-transparent"
                   />
-                  <input
-                    value={form.color}
-                    onChange={(e) => update("color", e.target.value)}
-                    className={inputCls}
-                  />
+                  <input value={form.color} onChange={(e) => update("color", e.target.value)} className={inputCls} />
                 </div>
               </label>
+              <label className="block">
+                <FieldLabel>Sort Order</FieldLabel>
+                <input
+                  type="number"
+                  min="0"
+                  value={form.sortOrder}
+                  onChange={(e) => update("sortOrder", Number(e.target.value) || 0)}
+                  className={inputCls}
+                />
+              </label>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
               <label className="block">
                 <FieldLabel>CTA Link</FieldLabel>
                 <input
                   value={form.ctaLink}
                   onChange={(e) => update("ctaLink", e.target.value)}
-                  placeholder="https://"
+                  placeholder="/dashboard/loyalty"
+                  className={inputCls}
+                />
+              </label>
+              <label className="block">
+                <FieldLabel>CTA Label</FieldLabel>
+                <input
+                  value={form.ctaLabel}
+                  onChange={(e) => update("ctaLabel", e.target.value)}
                   className={inputCls}
                 />
               </label>
@@ -241,25 +355,45 @@ export default function BannersPage() {
               </label>
             </div>
 
-            <label className="block">
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(e) => update("isActive", e.target.checked)}
+                className="rounded border-white/20 bg-admin-surface"
+              />
+              Active
+            </label>
+
+            <div className="block">
               <FieldLabel>Media (Image / GIF / Video)</FieldLabel>
+              {mediaPreviewUrl || existingMediaUrl ? (
+                <div className="mb-2 flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">
+                  <span className="truncate">{mediaFile?.name || "Current media attached"}</span>
+                  <button type="button" onClick={clearMedia} className="text-rose-300 hover:text-rose-200">
+                    Remove
+                  </button>
+                </div>
+              ) : null}
               <input
                 type="file"
                 accept="image/*,video/*,.gif"
-                onChange={(e) => update("mediaName", e.target.files?.[0]?.name || "")}
+                onChange={handleMediaChange}
                 className={`${inputCls} file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-slate-300`}
               />
-            </label>
+            </div>
 
             <button
               type="submit"
-              className="w-full rounded-xl bg-admin-teal px-5 py-2.5 text-sm font-semibold text-white transition hover:brightness-110"
+              disabled={saving}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-admin-teal px-5 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
             >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {editId ? "Update Banner" : "Save Banner"}
             </button>
             {flash ? (
               <p className="text-center text-sm text-theme-green-action">
-                Banner {flash} (frontend demo).
+                Banner {flash} successfully.
               </p>
             ) : null}
           </div>
@@ -270,14 +404,16 @@ export default function BannersPage() {
             <Eye className="h-4 w-4 text-admin-teal" />
             Preview
           </h2>
-          <BannerPreview banner={form} />
+          <BannerPreview banner={previewBanner} />
         </div>
       </div>
 
       <section className="admin-card admin-fade-up admin-fade-up-delay-2 mt-5 overflow-visible p-0">
         <div className="border-b border-white/10 px-5 py-3">
           <h2 className="text-sm font-semibold text-slate-100">All Banners</h2>
-          <p className="text-xs text-slate-500">{banners.length} promotion{banners.length !== 1 ? "s" : ""}</p>
+          <p className="text-xs text-slate-500">
+            {loading ? "Loading…" : `${banners.length} promotion${banners.length !== 1 ? "s" : ""}`}
+          </p>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-[900px] w-full text-left text-[13px]">
@@ -287,13 +423,20 @@ export default function BannersPage() {
                 <th className="px-4 py-3">Audience</th>
                 <th className="px-4 py-3">Display</th>
                 <th className="px-4 py-3">Active Period</th>
+                <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Action</th>
               </tr>
             </thead>
             <tbody>
-              {banners.length === 0 ? (
+              {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400">
+                  <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
+                    <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+                  </td>
+                </tr>
+              ) : banners.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
                     No banners yet.
                   </td>
                 </tr>
@@ -323,6 +466,15 @@ export default function BannersPage() {
                       {formatDate(b.activeFrom)} — {formatDate(b.activeTo)}
                     </td>
                     <td className="px-4 py-3">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                          b.isActive ? "bg-emerald-500/15 text-emerald-300" : "bg-slate-500/15 text-slate-400"
+                        }`}
+                      >
+                        {b.isActive ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex gap-1.5">
                         <button
                           type="button"
@@ -334,7 +486,7 @@ export default function BannersPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setBanners((prev) => prev.filter((x) => x.id !== b.id))}
+                          onClick={() => setDeleteConfirm({ id: b.id, title: b.title })}
                           className="rounded-lg bg-admin-danger p-1.5 text-white shadow-sm transition hover:brightness-110"
                           title="Delete"
                         >
@@ -349,6 +501,23 @@ export default function BannersPage() {
           </table>
         </div>
       </section>
+
+      <DepositStatusConfirmModal
+        open={Boolean(deleteConfirm)}
+        title="Delete promotional banner?"
+        message={
+          deleteConfirm
+            ? `This will permanently delete "${deleteConfirm.title}".`
+            : ""
+        }
+        confirmLabel="Delete"
+        confirmClassName="bg-[#E11D48]"
+        busy={saving}
+        onCancel={() => {
+          if (!saving) setDeleteConfirm(null);
+        }}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }
