@@ -2,6 +2,8 @@
 
 Separate Next.js admin portal for iTrustLD.
 
+**Linux deployment:** see [`deploy/README.md`](../../deploy/README.md).
+
 ## Run
 
 ```bash
