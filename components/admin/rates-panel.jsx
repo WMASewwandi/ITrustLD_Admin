@@ -14,9 +14,10 @@ import {
   updatePointWithdrawalRate,
   updateWithdrawalRate,
 } from "@/lib/rates";
+import { todayYmdColombo } from "@/lib/sl-time";
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return todayYmdColombo();
 }
 
 function dateInputValue(value) {

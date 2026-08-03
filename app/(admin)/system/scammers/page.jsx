@@ -14,7 +14,7 @@ import {
 import { Loader2, Plus, Search, Trash2, X } from "lucide-react";
 
 export default function ScammersPage() {
-  const canMutate = useCan("change_customer_account_status");
+  const canMutate = useCan(["change_scammer_status", "change_customer_account_status"]);
 
   const [rows, setRows] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, total_pages: 1, total: 0 });

@@ -748,7 +748,7 @@ function LoyaltyContent() {
     setStatus("Pending");
     setOrdersPage(1);
     setAppliedOrderFilters({
-      status: "Pending",
+                status: "Pending",
       keyword: "",
       duration: "",
       from: "",
@@ -826,7 +826,7 @@ function LoyaltyContent() {
                     ? " · reopen or re-approve rejected claims"
                     : tab === "bonus" && status === "Claimed"
                       ? " · reject or reopen claimed bonuses"
-                      : tab === "vouchers"
+                    : tab === "vouchers"
                       ? " · approve gift vouchers · reject with reason"
                       : " · approve / reject"}
                 </p>
@@ -840,9 +840,9 @@ function LoyaltyContent() {
                         ["Rejected", "Rejected"],
                       ]
                     : [
-                        ["Pending", "Pending"],
-                        ["Claimed", "Claimed"],
-                        ["Rejected", "Rejected"],
+                    ["Pending", "Pending"],
+                    ["Claimed", "Claimed"],
+                    ["Rejected", "Rejected"],
                       ]
                   ).map(([label, value]) => (
                     <button

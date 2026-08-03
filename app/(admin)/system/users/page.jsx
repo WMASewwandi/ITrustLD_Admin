@@ -17,15 +17,10 @@ import {
   X,
 } from "lucide-react";
 
+import { formatDateSl } from "@/lib/sl-time";
+
 function formatDate(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return formatDateSl(value);
 }
 
 function StatusBadge({ active }) {

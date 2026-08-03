@@ -16,6 +16,7 @@ import {
 
 const EMPTY_FORM = {
   name: "",
+  templateKey: "",
   type: "Email",
   subject: "",
   body: "",
@@ -48,6 +49,7 @@ function TypeBadge({ type }) {
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState([]);
   const [placeholders, setPlaceholders] = useState(TEMPLATE_PLACEHOLDERS);
+  const [systemKeys, setSystemKeys] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -63,6 +65,9 @@ export default function TemplatesPage() {
       setTemplates(data.templates || []);
       if (data.placeholders?.length) {
         setPlaceholders(data.placeholders);
+      }
+      if (data.systemKeys?.length) {
+        setSystemKeys(data.systemKeys);
       }
     } catch (err) {
       setError(err.message || "Failed to load templates.");
@@ -91,7 +96,10 @@ export default function TemplatesPage() {
     setError("");
     setSuccess("");
     try {
-      await createMessageTemplate(form);
+      await createMessageTemplate({
+        ...form,
+        template_key: form.templateKey || undefined,
+      });
       setForm(EMPTY_FORM);
       setFormKey((key) => key + 1);
       setSuccess("Template saved.");
@@ -147,7 +155,7 @@ export default function TemplatesPage() {
       <div className="admin-fade-up mb-6">
         <h1 className="text-2xl font-bold tracking-tight text-white">SMS / Email Templates</h1>
         <p className="mt-1 text-sm text-slate-400">
-          Create reusable message templates with dynamic placeholders.
+          Create reusable message templates with dynamic placeholders. Assign a system key to override automatic emails and SMS.
         </p>
       </div>
 
@@ -195,6 +203,24 @@ export default function TemplatesPage() {
                 </select>
               </label>
             </div>
+
+            <label className="block">
+              <FieldLabel>System Key (auto notifications)</FieldLabel>
+              <select
+                value={form.templateKey}
+                onChange={(e) => update("templateKey", e.target.value)}
+                className={inputCls}
+              >
+                {(systemKeys.length ? systemKeys : [{ key: "", label: "None (manual / reusable only)" }]).map((entry) => (
+                  <option key={entry.key || "none"} value={entry.key}>
+                    {entry.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-slate-500">
+                When active, this template replaces the built-in message for that event.
+              </p>
+            </label>
 
             {form.type === "Email" ? (
               <label className="block">
@@ -301,6 +327,7 @@ export default function TemplatesPage() {
               <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                 <tr>
                   <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3">System Key</th>
                   <th className="px-4 py-3">Type</th>
                   <th className="px-4 py-3">Audience</th>
                   <th className="px-4 py-3">Active</th>
@@ -310,7 +337,7 @@ export default function TemplatesPage() {
               <tbody>
                 {templates.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400">
+                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
                       No templates yet.
                     </td>
                   </tr>
@@ -323,6 +350,9 @@ export default function TemplatesPage() {
                       <td className="px-4 py-3">
                         <p className="font-medium text-white">{t.name}</p>
                         <p className="mt-0.5 max-w-xs truncate text-[11px] text-slate-500">{t.body}</p>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-[11px] text-slate-400">
+                        {t.templateKey || "—"}
                       </td>
                       <td className="px-4 py-3">
                         <TypeBadge type={t.type} />

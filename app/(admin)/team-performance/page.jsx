@@ -4,12 +4,12 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Breadcrumb from "@/components/admin/breadcrumb";
-import { getAdminUser } from "@/lib/auth";
 import {
   PERFORMANCE_PERIODS,
   canViewTeamPerformance,
   fetchTeamPerformance,
   formatPerformanceCommission,
+  getCurrentAdminAccess,
 } from "@/lib/performance";
 import {
   ArrowUpRight,
@@ -120,7 +120,8 @@ export default function TeamPerformancePage() {
   const [error, setError] = useState("");
   const [data, setData] = useState(null);
 
-  const allowed = canViewTeamPerformance(getAdminUser()?.roles ?? []);
+  const { roles, permissions } = getCurrentAdminAccess();
+  const allowed = canViewTeamPerformance(roles, permissions);
 
   const loadTeamPerformance = useCallback(async () => {
     if (!allowed) return;

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
 import CopyCell, { FilterField, inputCls } from "@/components/admin/queue-ui";
+import { useCan } from "@/contexts/admin-permissions";
 import {
   fetchHelpTickets,
   markAllHelpTicketsRead,
@@ -20,6 +21,7 @@ function buildReplySubject(subject) {
 }
 
 export default function HelpTicketsPage() {
+  const canReply = useCan("change_help_requests_status");
   const [rows, setRows] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, total_pages: 1, total: 0 });
   const [search, setSearch] = useState("");
@@ -415,6 +417,7 @@ export default function HelpTicketsPage() {
                     className={`${inputCls} min-h-[120px] resize-y`}
                   />
                 </div>
+                {canReply ? (
                 <button
                   type="button"
                   onClick={handleSendReply}
@@ -424,6 +427,11 @@ export default function HelpTicketsPage() {
                   {replyBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
                   {replyBusy ? "Sending…" : "Send reply"}
                 </button>
+                ) : (
+                  <p className="text-xs text-slate-500">
+                    You need &quot;Change Customer Help Status&quot; permission to reply.
+                  </p>
+                )}
               </div>
             </div>
           </div>

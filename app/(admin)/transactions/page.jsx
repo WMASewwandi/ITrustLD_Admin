@@ -10,6 +10,7 @@ import CopyCell, { FilterField, StatusPill, inputCls } from "@/components/admin/
 import AssignDepositsModal from "@/components/admin/assign-deposits-modal";
 import AssignWithdrawalsModal from "@/components/admin/assign-withdrawals-modal";
 import { EmailSendModal, SmsSendModal } from "@/components/admin/customer-message-modals";
+import { formatDateTimeParts } from "@/lib/sl-time";
 import { sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
 import { notifyAdminNavCountsRefresh } from "@/lib/notifications";
 import {
@@ -35,6 +36,8 @@ import {
   updateWithdrawalStatus,
   validateWithdrawalCustomDate,
 } from "@/lib/withdrawals";
+import { getAdminUser } from "@/lib/auth";
+import { useCan } from "@/contexts/admin-permissions";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -54,8 +57,6 @@ import {
 } from "lucide-react";
 
 const ASSIGNEES = ["sacl", "withdraw.ex", "deposit.ex", "Authorizer", "admin"];
-/** Demo session admin — used for queue lock ownership */
-const CURRENT_ADMIN = "sacl";
 const DURATION_OPTIONS = [
   "Today",
   "Yesterday",
@@ -130,12 +131,8 @@ function parseTabFiltersFromSearchParams(urlParams) {
 }
 
 function formatDateParts(value) {
-  if (!value) return { date: "—", time: "" };
-  const raw = String(value).trim();
-  const [datePart, timePart] = raw.split(" ");
-  const match = datePart?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  const date = match ? `${match[2]}/${match[3]}/${match[1]}` : datePart || "—";
-  return { date, time: timePart || "" };
+  const { date, time } = formatDateTimeParts(value);
+  return { date, time };
 }
 
 function DateTimeCell({ value }) {
@@ -486,6 +483,9 @@ function TransactionsContent() {
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const canUpdateDeposits = useCan("status_update_deposit_data");
+  const canUpdateWithdrawals = useCan("status_update_withdrawal_data");
+  const [currentAdminKey, setCurrentAdminKey] = useState("admin");
   const [tab, setTab] = useState(params.get("tab") === "withdrawals" ? "withdrawals" : "deposits");
   const [depositFilters, setDepositFilters] = useState(() =>
     params.get("tab") === "withdrawals"
@@ -546,8 +546,9 @@ function TransactionsContent() {
   const [withdrawalIsAdmin, setWithdrawalIsAdmin] = useState(false);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [smsModalOpen, setSmsModalOpen] = useState(false);
-  const [emailCompose, setEmailCompose] = useState({ receivers: "", subject: "", body: "", attachment: null });
-  const [smsCompose, setSmsCompose] = useState({ receivers: "", message: "" });
+  const [emailCompose, setEmailCompose] = useState({ receivers: "", subject: "", body: "", attachment: null, templateId: null });
+  const [smsCompose, setSmsCompose] = useState({ receivers: "", message: "", templateId: null });
+  const [contactTemplateVariables, setContactTemplateVariables] = useState({});
   const [emailSending, setEmailSending] = useState(false);
   const [smsSending, setSmsSending] = useState(false);
   const [emailSendError, setEmailSendError] = useState("");
@@ -909,6 +910,11 @@ function TransactionsContent() {
   buildWithdrawalUrlQueryRef.current = buildWithdrawalUrlQuery;
   routerRef.current = router;
   pathnameRef.current = pathname;
+
+  useEffect(() => {
+    const user = getAdminUser();
+    setCurrentAdminKey(user?.name || user?.email || String(user?.id || "admin"));
+  }, []);
 
   useEffect(() => {
     if (tab !== "deposits" || skipAutoLoadRef.current) return undefined;
@@ -1286,7 +1292,7 @@ function TransactionsContent() {
   }
 
   function isLockedByOther(r) {
-    return !!r.lockedBy && r.lockedBy !== CURRENT_ADMIN;
+    return !!r.lockedBy && r.lockedBy !== currentAdminKey;
   }
 
   function claimRequest(id) {
@@ -1294,11 +1300,13 @@ function TransactionsContent() {
     setter((prev) =>
       prev.map((r) =>
         r.id === id && !r.lockedBy
-          ? { ...r, assigned: CURRENT_ADMIN, lockedBy: CURRENT_ADMIN }
+          ? { ...r, assigned: currentAdminKey, lockedBy: currentAdminKey }
           : r
       )
     );
   }
+
+  const canMutateCurrentTab = tab === "deposits" ? canUpdateDeposits : canUpdateWithdrawals;
 
   const pendingRows =
     tab === "deposits"
@@ -1401,8 +1409,18 @@ function TransactionsContent() {
       setActionError(`Select ${label} with customer email addresses.`);
       return;
     }
+    const first = rows[0];
     setActionError("");
-    setEmailCompose({ receivers: emails.join(","), subject: "", body: "", attachment: null });
+    setEmailCompose({ receivers: emails.join(","), subject: "", body: "", attachment: null, templateId: null });
+    setContactTemplateVariables({
+      username: first?.customerName || "",
+      first_name: first?.customerName?.split(" ")[0] || "",
+      transaction_id: first?.transactionId || first?.id || "",
+      amount: first?.amount || first?.paymentAmount || "",
+      status: first?.status || "",
+      platform: first?.platform || first?.method || "",
+      account: first?.account || "",
+    });
     setEmailSendError("");
     setEmailModalOpen(true);
   }
@@ -1415,8 +1433,18 @@ function TransactionsContent() {
       setActionError(`Select ${label} with customer mobile numbers.`);
       return;
     }
+    const first = rows[0];
     setActionError("");
-    setSmsCompose({ receivers: mobiles.join(","), message: "" });
+    setSmsCompose({ receivers: mobiles.join(","), message: "", templateId: null });
+    setContactTemplateVariables({
+      username: first?.customerName || "",
+      first_name: first?.customerName?.split(" ")[0] || "",
+      transaction_id: first?.transactionId || first?.id || "",
+      amount: first?.amount || first?.paymentAmount || "",
+      status: first?.status || "",
+      platform: first?.platform || first?.method || "",
+      account: first?.account || "",
+    });
     setSmsSendError("");
     setSmsModalOpen(true);
   }
@@ -1430,6 +1458,8 @@ function TransactionsContent() {
         subject: emailCompose.subject,
         body: emailCompose.body,
         attachment: emailCompose.attachment,
+        templateId: emailCompose.templateId,
+        variables: contactTemplateVariables,
       });
       setEmailModalOpen(false);
     } catch (err) {
@@ -1446,6 +1476,8 @@ function TransactionsContent() {
       await sendCustomerSms({
         mobileNumbers: smsCompose.receivers,
         message: smsCompose.message,
+        templateId: smsCompose.templateId,
+        variables: contactTemplateVariables,
       });
       setSmsModalOpen(false);
     } catch (err) {
@@ -1593,6 +1625,10 @@ function TransactionsContent() {
   }
 
   function renderRowActions(r) {
+    if (!canMutateCurrentTab) {
+      return <span className="text-[11px] text-slate-500">—</span>;
+    }
+
     if (isLockedByOther(r)) {
       return (
         <span
@@ -2280,7 +2316,17 @@ function TransactionsContent() {
                       <CopyCell value={r.deposited || r.amount} />
                     </td>
                     <td className="px-3 py-3">
-                      <PlatformIdCell value={r.platformId} isScammer={r.isScammer} />
+                      <div className="inline-flex items-center gap-1.5">
+                        <PlatformIdCell value={r.platformId} isScammer={r.isScammer} />
+                        {r.todayTxCount > 1 ? (
+                          <span
+                            className="admin-badge-glow h-5 min-w-5 px-1.5 text-[10px]"
+                            title="Same-day transactions for this platform ID"
+                          >
+                            {r.todayTxCount}
+                          </span>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="px-3 py-3">
                       <button
@@ -2443,6 +2489,8 @@ function TransactionsContent() {
         subject={emailCompose.subject}
         body={emailCompose.body}
         attachment={emailCompose.attachment}
+        templateId={emailCompose.templateId}
+        templateVariables={contactTemplateVariables}
         saving={emailSending}
         error={emailSendError}
         onChange={(patch) => setEmailCompose((prev) => ({ ...prev, ...patch }))}
@@ -2454,6 +2502,8 @@ function TransactionsContent() {
         open={smsModalOpen}
         receivers={smsCompose.receivers}
         message={smsCompose.message}
+        templateId={smsCompose.templateId}
+        templateVariables={contactTemplateVariables}
         saving={smsSending}
         error={smsSendError}
         onChange={(patch) => setSmsCompose((prev) => ({ ...prev, ...patch }))}
@@ -2591,6 +2641,10 @@ function TransactionsContent() {
             {isLockedByOther(proof) ? (
               <div className="border-t border-amber-500/20 bg-amber-500/10 px-5 py-3 text-sm text-amber-200">
                 Locked by {proof.lockedBy} — claim or wait before approving or rejecting.
+              </div>
+            ) : !canMutateCurrentTab ? (
+              <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4 text-sm text-slate-400">
+                You do not have permission to update transaction status.
               </div>
             ) : (
               <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4">

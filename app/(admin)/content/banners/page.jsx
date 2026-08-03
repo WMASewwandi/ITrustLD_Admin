@@ -11,6 +11,7 @@ import {
   fetchPromotionalBanners,
   updatePromotionalBanner,
 } from "@/lib/promotional-banners";
+import { formatDateSl } from "@/lib/sl-time";
 
 const EMPTY_FORM = {
   title: "",
@@ -37,11 +38,7 @@ function FieldLabel({ children, required }) {
 
 function formatDate(d) {
   if (!d) return "—";
-  return new Date(`${d}T00:00:00`).toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return formatDateSl(`${d}T00:00:00`);
 }
 
 function BannerPreview({ banner }) {

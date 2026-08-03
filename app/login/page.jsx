@@ -143,7 +143,7 @@ function LoginForm() {
                   type="email"
                   required
                   autoComplete="username"
-                  placeholder="admin@itrustld.com"
+                  placeholder="you@email.com"
                   className="w-full rounded-xl border border-white/12 bg-admin-chrome-deep px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-admin-teal/60 focus:ring-2 focus:ring-admin-teal/20"
                 />
               </div>
@@ -199,7 +199,12 @@ function LoginForm() {
 
             <p className="mt-auto pt-8 text-center text-xs text-white/40 lg:text-left">
               User site is separate.{" "}
-              <Link href="http://localhost:3000" className="text-teal-300 transition hover:text-white">
+              <Link
+                href="https://www.itrustld.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-teal-300 transition hover:text-white"
+              >
                 Open user web
               </Link>
             </p>
