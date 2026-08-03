@@ -1,21 +1,40 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, Plus, Save, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ChevronDown, ChevronUp, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import { inputCls } from "@/components/admin/queue-ui";
-import { getLoyaltyTiers, saveLoyaltyTiers } from "@/lib/loyalty-tiers";
+import {
+  fetchLoyaltyMembershipTiers,
+  saveLoyaltyMembershipTiers,
+} from "@/lib/loyalty-tiers";
 
 export default function LoyaltyTiersPage() {
   const [tiers, setTiers] = useState([]);
   const [expandedId, setExpandedId] = useState(null);
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [pageError, setPageError] = useState("");
+
+  const loadTiers = useCallback(async () => {
+    setLoading(true);
+    setPageError("");
+    try {
+      const data = await fetchLoyaltyMembershipTiers();
+      const loaded = data.tiers || [];
+      setTiers(loaded);
+      setExpandedId((current) => current || loaded[0]?.id || null);
+    } catch (err) {
+      setPageError(err.message || "Failed to load loyalty tiers.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const loaded = getLoyaltyTiers();
-    setTiers(loaded);
-    setExpandedId(loaded[0]?.id || null);
-  }, []);
+    loadTiers();
+  }, [loadTiers]);
 
   function updateTier(id, patch) {
     setTiers((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
@@ -65,6 +84,7 @@ export default function LoyaltyTiersPage() {
       name: "New tier",
       points: 0,
       active: true,
+      isActive: true,
       benefits: ["New benefit detail"],
     };
     setTiers((prev) => [...prev, next]);
@@ -77,17 +97,26 @@ export default function LoyaltyTiersPage() {
     setSaved(false);
   }
 
-  function handleSave() {
-    const cleaned = tiers.map((t) => ({
-      ...t,
-      name: String(t.name || "").trim() || "Untitled",
-      points: Number(t.points) || 0,
-      benefits: (t.benefits || []).map((b) => String(b).trim()).filter(Boolean),
-    }));
-    setTiers(cleaned);
-    saveLoyaltyTiers(cleaned);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+  async function handleSave() {
+    setSaving(true);
+    setPageError("");
+    try {
+      const cleaned = tiers.map((t) => ({
+        id: t.id,
+        name: String(t.name || "").trim() || "Untitled",
+        points: Number(t.points) || 0,
+        active: t.active !== false && t.isActive !== false,
+        benefits: (t.benefits || []).map((b) => String(b).trim()).filter(Boolean),
+      }));
+      const data = await saveLoyaltyMembershipTiers(cleaned);
+      setTiers(data.tiers || cleaned);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      setPageError(err.message || "Failed to save loyalty tiers.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -106,8 +135,8 @@ export default function LoyaltyTiersPage() {
           </p>
           <h1 className="text-3xl font-bold tracking-tight text-white">Loyalty Tiers</h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-400">
-            Manage Normal → VVIP tiers and add multiple benefit details for each tier. These drive the
-            user Loyalty Levels benefits reveal.
+            Manage Normal → VVIP tiers and add multiple benefit details for each tier. Changes appear
+            in the user Loyalty Levels panel.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -122,13 +151,20 @@ export default function LoyaltyTiersPage() {
           <button
             type="button"
             onClick={handleSave}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110"
+            disabled={saving || loading}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
           >
-            <Save className="h-4 w-4" />
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save tiers
           </button>
         </div>
       </div>
+
+      {pageError ? (
+        <p className="mb-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm text-rose-200">
+          {pageError}
+        </p>
+      ) : null}
 
       {saved ? (
         <p className="mb-4 rounded-xl border border-theme-green-action/30 bg-theme-green-action/10 px-4 py-2 text-sm text-theme-green-action">
@@ -136,128 +172,138 @@ export default function LoyaltyTiersPage() {
         </p>
       ) : null}
 
-      <div className="space-y-3">
-        {tiers.map((tier, index) => {
-          const open = expandedId === tier.id;
-          return (
-            <section key={tier.id} className="admin-card admin-fade-up overflow-visible p-0">
-              <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-admin-teal/15 text-xs font-bold text-admin-teal">
-                    {index + 1}
-                  </span>
-                  <input
-                    value={tier.name}
-                    onChange={(e) => updateTier(tier.id, { name: e.target.value })}
-                    className={`${inputCls} max-w-[180px] font-semibold`}
-                    aria-label="Tier name"
-                  />
-                  <label className="flex items-center gap-2 text-xs text-slate-400">
-                    Points
+      {loading ? (
+        <div className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-12 text-sm text-slate-400">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          Loading loyalty tiers…
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {tiers.map((tier, index) => {
+            const open = expandedId === tier.id;
+            const isActive = tier.active !== false && tier.isActive !== false;
+            return (
+              <section key={tier.id} className="admin-card admin-fade-up overflow-visible p-0">
+                <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-admin-teal/15 text-xs font-bold text-admin-teal">
+                      {index + 1}
+                    </span>
                     <input
-                      value={tier.points}
-                      onChange={(e) =>
-                        updateTier(tier.id, {
-                          points: Number(String(e.target.value).replace(/\D/g, "")) || 0,
-                        })
-                      }
-                      inputMode="numeric"
-                      className={`${inputCls} w-32`}
+                      value={tier.name}
+                      onChange={(e) => updateTier(tier.id, { name: e.target.value })}
+                      className={`${inputCls} max-w-[180px] font-semibold`}
+                      aria-label="Tier name"
                     />
-                  </label>
-                  <label className="inline-flex items-center gap-2 text-sm text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(tier.active)}
-                      onChange={(e) => updateTier(tier.id, { active: e.target.checked })}
-                      className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action"
-                    />
-                    Active
-                  </label>
-                  <span className="text-xs text-slate-500">
-                    {(tier.benefits || []).length} benefit
-                    {(tier.benefits || []).length === 1 ? "" : "s"}
-                  </span>
-                </div>
+                    <label className="flex items-center gap-2 text-xs text-slate-400">
+                      Points
+                      <input
+                        value={tier.points}
+                        onChange={(e) =>
+                          updateTier(tier.id, {
+                            points: Number(String(e.target.value).replace(/\D/g, "")) || 0,
+                          })
+                        }
+                        inputMode="numeric"
+                        className={`${inputCls} w-32`}
+                      />
+                    </label>
+                    <label className="inline-flex items-center gap-2 text-sm text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(isActive)}
+                        onChange={(e) =>
+                          updateTier(tier.id, { active: e.target.checked, isActive: e.target.checked })
+                        }
+                        className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action"
+                      />
+                      Active
+                    </label>
+                    <span className="text-xs text-slate-500">
+                      {(tier.benefits || []).length} benefit
+                      {(tier.benefits || []).length === 1 ? "" : "s"}
+                    </span>
+                  </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedId(open ? null : tier.id)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/5"
-                  >
-                    {open ? (
-                      <>
-                        Hide benefits <ChevronUp className="h-3.5 w-3.5" />
-                      </>
-                    ) : (
-                      <>
-                        Edit benefits <ChevronDown className="h-3.5 w-3.5" />
-                      </>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removeTier(tier.id)}
-                    disabled={tiers.length <= 1}
-                    className="rounded-lg bg-[#E11D48] p-2 text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
-                    title="Remove tier"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {open ? (
-                <div className="px-5 py-4">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-white">
-                      Benefits – {tier.name || "Tier"} Level
-                    </h3>
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => addBenefit(tier.id)}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-theme-green-action/90 px-3 py-1.5 text-xs font-semibold text-white transition hover:brightness-110"
+                      onClick={() => setExpandedId(open ? null : tier.id)}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/5"
                     >
-                      <Plus className="h-3.5 w-3.5" />
-                      Add benefit
+                      {open ? (
+                        <>
+                          Hide benefits <ChevronUp className="h-3.5 w-3.5" />
+                        </>
+                      ) : (
+                        <>
+                          Edit benefits <ChevronDown className="h-3.5 w-3.5" />
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeTier(tier.id)}
+                      disabled={tiers.length <= 1}
+                      className="rounded-lg bg-[#E11D48] p-2 text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+                      title="Remove tier"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
-
-                  <div className="space-y-2">
-                    {(tier.benefits || []).length === 0 ? (
-                      <p className="rounded-xl border border-dashed border-white/15 px-4 py-6 text-center text-sm text-slate-500">
-                        No benefits yet. Click “Add benefit” to add details for this tier.
-                      </p>
-                    ) : (
-                      (tier.benefits || []).map((benefit, bi) => (
-                        <div key={`${tier.id}-b-${bi}`} className="flex items-start gap-2">
-                          <span className="mt-3 text-xs font-semibold text-slate-500">{bi + 1}.</span>
-                          <textarea
-                            value={benefit}
-                            onChange={(e) => updateBenefit(tier.id, bi, e.target.value)}
-                            rows={2}
-                            placeholder="Benefit detail…"
-                            className={`${inputCls} min-h-[44px] resize-y`}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeBenefit(tier.id, bi)}
-                            className="mt-1 rounded-lg bg-[#E11D48]/90 p-2 text-white transition hover:brightness-110"
-                            title="Remove benefit"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
                 </div>
-              ) : null}
-            </section>
-          );
-        })}
-      </div>
+
+                {open ? (
+                  <div className="px-5 py-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <h3 className="text-sm font-semibold text-white">
+                        Benefits – {tier.name || "Tier"} Level
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => addBenefit(tier.id)}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-theme-green-action/90 px-3 py-1.5 text-xs font-semibold text-white transition hover:brightness-110"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Add benefit
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      {(tier.benefits || []).length === 0 ? (
+                        <p className="rounded-xl border border-dashed border-white/15 px-4 py-6 text-center text-sm text-slate-500">
+                          No benefits yet. Click “Add benefit” to add details for this tier.
+                        </p>
+                      ) : (
+                        (tier.benefits || []).map((benefit, bi) => (
+                          <div key={`${tier.id}-b-${bi}`} className="flex items-start gap-2">
+                            <span className="mt-3 text-xs font-semibold text-slate-500">{bi + 1}.</span>
+                            <textarea
+                              value={benefit}
+                              onChange={(e) => updateBenefit(tier.id, bi, e.target.value)}
+                              rows={2}
+                              placeholder="Benefit detail…"
+                              className={`${inputCls} min-h-[44px] resize-y`}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeBenefit(tier.id, bi)}
+                              className="mt-1 rounded-lg bg-[#E11D48]/90 p-2 text-white transition hover:brightness-110"
+                              title="Remove benefit"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

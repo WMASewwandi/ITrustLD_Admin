@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -21,7 +21,17 @@ const HIGHLIGHTS = [
 ];
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="admin-canvas-dark flex min-h-dvh items-center justify-center text-white/50">Loading…</div>}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const inactiveNotice = searchParams.get("reason") === "inactive";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -113,6 +123,11 @@ export default function LoginPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+              {inactiveNotice ? (
+                <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100" role="status">
+                  Your session expired after 30 minutes of inactivity. Please sign in again.
+                </p>
+              ) : null}
               {error ? (
                 <p className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200" role="alert">
                   {error}
@@ -128,7 +143,7 @@ export default function LoginPage() {
                   type="email"
                   required
                   autoComplete="username"
-                  placeholder="admin@itrustld.com"
+                  placeholder="you@email.com"
                   className="w-full rounded-xl border border-white/12 bg-admin-chrome-deep px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-admin-teal/60 focus:ring-2 focus:ring-admin-teal/20"
                 />
               </div>
@@ -184,7 +199,12 @@ export default function LoginPage() {
 
             <p className="mt-auto pt-8 text-center text-xs text-white/40 lg:text-left">
               User site is separate.{" "}
-              <Link href="http://localhost:3000" className="text-teal-300 transition hover:text-white">
+              <Link
+                href="https://www.itrustld.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-teal-300 transition hover:text-white"
+              >
                 Open user web
               </Link>
             </p>

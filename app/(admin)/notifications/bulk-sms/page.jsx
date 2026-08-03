@@ -1,38 +1,21 @@
 "use client";
 
-import { useState } from "react";
-import { Clock, Send, Users } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Clock, Loader2, Send, Users, XCircle } from "lucide-react";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import { inputCls } from "@/components/admin/queue-ui";
+import {
+  cancelBulkSmsCampaign,
+  createBulkSmsCampaign,
+  fetchBulkSmsCampaigns,
+} from "@/lib/bulk-sms";
+import { fetchMessageTemplates } from "@/lib/message-templates";
 
-const INITIAL_QUEUE = [
-  {
-    id: "q-1",
-    recipients: "All users",
-    message: "iTrustLD maintenance tonight 11 PM–1 AM. Services resume automatically.",
-    scheduled: "2026-07-16 18:00",
-    status: "Sent",
-    sent: 1240,
-    total: 1240,
-  },
-  {
-    id: "q-2",
-    recipients: "Affiliate users",
-    message: "New affiliate tier rewards are live! Check your dashboard for details.",
-    scheduled: "2026-07-17 10:00",
-    status: "Sending",
-    sent: 87,
-    total: 156,
-  },
-  {
-    id: "q-3",
-    recipients: "Pending KYC segment",
-    message: "Complete your KYC verification to unlock full deposit and withdrawal limits.",
-    scheduled: "2026-07-17 20:00",
-    status: "Queued",
-    sent: 0,
-    total: 312,
-  },
+const RECIPIENT_OPTIONS = [
+  "All users",
+  "Normal users",
+  "Affiliate users",
+  "Pending KYC segment",
 ];
 
 function FieldLabel({ children, required }) {
@@ -50,7 +33,9 @@ function StatusBadge({ status }) {
       ? "bg-theme-green-action/20 text-emerald-300 ring-1 ring-theme-green-action/30"
       : status === "Sending"
         ? "bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30"
-        : "bg-sky-500/20 text-sky-300 ring-1 ring-sky-500/30";
+        : status === "Failed" || status === "Cancelled"
+          ? "bg-red-500/20 text-red-300 ring-1 ring-red-500/30"
+          : "bg-sky-500/20 text-sky-300 ring-1 ring-sky-500/30";
   return (
     <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${tone}`}>
       {status}
@@ -76,43 +61,105 @@ function ProgressBar({ sent, total }) {
 }
 
 export default function BulkSmsPage() {
-  const [queue, setQueue] = useState(INITIAL_QUEUE);
-  const [queued, setQueued] = useState(false);
-  const [form, setForm] = useState({ recipients: "All users", message: "", schedule: "" });
+  const [queue, setQueue] = useState([]);
+  const [stats, setStats] = useState({ queued: 0, sending: 0, sent: 0 });
+  const [smsTemplates, setSmsTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [form, setForm] = useState({ recipients: "All users", message: "", schedule: "", templateId: "" });
+
+  const loadQueue = useCallback(async () => {
+    setError("");
+    try {
+      const data = await fetchBulkSmsCampaigns();
+      setQueue(data.campaigns || []);
+      setStats(data.stats || { queued: 0, sending: 0, sent: 0 });
+    } catch (err) {
+      setError(err.message || "Failed to load bulk SMS queue.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadTemplates = useCallback(async () => {
+    try {
+      const data = await fetchMessageTemplates();
+      const templates = (data.templates || []).filter((t) => t.type === "SMS" && t.active);
+      setSmsTemplates(templates);
+    } catch {
+      setSmsTemplates([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadQueue();
+    loadTemplates();
+  }, [loadQueue, loadTemplates]);
+
+  useEffect(() => {
+    const hasActiveJobs = queue.some((job) => job.status === "Queued" || job.status === "Sending");
+    if (!hasActiveJobs) return undefined;
+
+    const intervalId = window.setInterval(loadQueue, 5000);
+    return () => window.clearInterval(intervalId);
+  }, [queue, loadQueue]);
 
   function update(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
-    setQueued(false);
+    setSuccess("");
   }
 
-  function handleSubmit(e) {
+  function handleTemplateSelect(templateId) {
+    const template = smsTemplates.find((t) => String(t.id) === String(templateId));
+    setForm((prev) => ({
+      ...prev,
+      templateId,
+      message: template?.body || prev.message,
+    }));
+    setSuccess("");
+  }
+
+  async function handleSubmit(e) {
     e.preventDefault();
-    const entry = {
-      id: `q-${Date.now()}`,
-      recipients: form.recipients,
-      message: form.message,
-      scheduled: form.schedule || new Date().toISOString().slice(0, 16).replace("T", " "),
-      status: "Queued",
-      sent: 0,
-      total: Math.floor(Math.random() * 400) + 100,
-    };
-    setQueue((prev) => [entry, ...prev]);
-    setForm((prev) => ({ ...prev, message: "", schedule: "" }));
-    setQueued(true);
+    setSaving(true);
+    setError("");
+    setSuccess("");
+    try {
+      await createBulkSmsCampaign({
+        recipients: form.recipients,
+        message: form.message,
+        schedule: form.schedule || null,
+      });
+      setForm((prev) => ({ ...prev, message: "", schedule: "", templateId: "" }));
+      setSuccess("Bulk SMS queued successfully.");
+      await loadQueue();
+    } catch (err) {
+      setError(err.message || "Failed to queue bulk SMS.");
+    } finally {
+      setSaving(false);
+    }
   }
 
-  const stats = {
-    queued: queue.filter((q) => q.status === "Queued").length,
-    sending: queue.filter((q) => q.status === "Sending").length,
-    sent: queue.filter((q) => q.status === "Sent").length,
-  };
+  async function handleCancel(id) {
+    if (!window.confirm("Cancel this bulk SMS campaign?")) return;
+    setError("");
+    try {
+      await cancelBulkSmsCampaign(id);
+      setSuccess("Campaign cancelled.");
+      await loadQueue();
+    } catch (err) {
+      setError(err.message || "Failed to cancel campaign.");
+    }
+  }
 
   return (
     <div className="pb-10">
       <Breadcrumb
         items={[
-          { label: "Notifications", href: "/notifications/bulk-sms" },
-          { label: "Bulk SMS" },
+          { label: "Content", href: "/content/templates" },
+          { label: "Bulk SMS Queue" },
         ]}
       />
 
@@ -122,6 +169,17 @@ export default function BulkSmsPage() {
           Queue bulk SMS campaigns — messages send automatically in the background.
         </p>
       </div>
+
+      {error ? (
+        <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {error}
+        </div>
+      ) : null}
+      {success ? (
+        <div className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+          {success}
+        </div>
+      ) : null}
 
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
         {[
@@ -151,12 +209,29 @@ export default function BulkSmsPage() {
                 onChange={(e) => update("recipients", e.target.value)}
                 className={inputCls}
               >
-                <option>All users</option>
-                <option>Normal users</option>
-                <option>Affiliate users</option>
-                <option>Pending KYC segment</option>
+                {RECIPIENT_OPTIONS.map((option) => (
+                  <option key={option}>{option}</option>
+                ))}
               </select>
             </label>
+
+            {smsTemplates.length > 0 ? (
+              <label className="block">
+                <FieldLabel>Use SMS Template (optional)</FieldLabel>
+                <select
+                  value={form.templateId}
+                  onChange={(e) => handleTemplateSelect(e.target.value)}
+                  className={inputCls}
+                >
+                  <option value="">Custom message</option>
+                  {smsTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
 
             <label className="block">
               <FieldLabel required>Message</FieldLabel>
@@ -180,80 +255,103 @@ export default function BulkSmsPage() {
                 onChange={(e) => update("schedule", e.target.value)}
                 className={inputCls}
               />
+              <p className="mt-1 text-[11px] text-slate-500">Leave empty to send immediately.</p>
             </label>
 
             <button
               type="submit"
-              className="w-full rounded-xl bg-admin-teal px-5 py-2.5 text-sm font-semibold text-white transition hover:brightness-110"
+              disabled={saving}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-admin-teal px-5 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
             >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Queue Bulk SMS
             </button>
-            {queued ? (
-              <p className="text-center text-sm text-theme-green-action">
-                Message entered queue — will send automatically (frontend demo).
-              </p>
-            ) : null}
           </div>
         </form>
 
         <section className="admin-card admin-fade-up admin-fade-up-delay-1 overflow-visible p-0 xl:col-span-3">
           <div className="border-b border-white/10 px-5 py-3">
             <h2 className="text-sm font-semibold text-slate-100">Queue Status</h2>
-            <p className="text-xs text-slate-500">{queue.length} job{queue.length !== 1 ? "s" : ""} in history</p>
+            <p className="text-xs text-slate-500">
+              {loading ? "Loading…" : `${queue.length} job${queue.length !== 1 ? "s" : ""} in history`}
+            </p>
           </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-[720px] w-full text-left text-[13px]">
-              <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
-                <tr>
-                  <th className="px-4 py-3">Recipients</th>
-                  <th className="px-4 py-3">Message</th>
-                  <th className="px-4 py-3">Scheduled</th>
-                  <th className="px-4 py-3">Progress</th>
-                  <th className="px-4 py-3">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {queue.length === 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 px-5 py-10 text-sm text-slate-400">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading queue…
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-[720px] w-full text-left text-[13px]">
+                <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400">
-                      No queued messages yet.
-                    </td>
+                    <th className="px-4 py-3">Recipients</th>
+                    <th className="px-4 py-3">Message</th>
+                    <th className="px-4 py-3">Scheduled</th>
+                    <th className="px-4 py-3">Progress</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Action</th>
                   </tr>
-                ) : (
-                  queue.map((job) => (
-                    <tr
-                      key={job.id}
-                      className="border-t border-white/10 text-slate-300 transition hover:bg-admin-teal/[0.04]"
-                    >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <Users className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-                          <span className="font-medium text-white">{job.recipients}</span>
-                        </div>
-                      </td>
-                      <td className="max-w-[200px] px-4 py-3">
-                        <p className="truncate text-slate-400" title={job.message}>
-                          {job.message}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5 tabular-nums text-slate-400">
-                          <Clock className="h-3 w-3 shrink-0" />
-                          {job.scheduled}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <ProgressBar sent={job.sent} total={job.total} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={job.status} />
+                </thead>
+                <tbody>
+                  {queue.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
+                        No queued messages yet.
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ) : (
+                    queue.map((job) => (
+                      <tr
+                        key={job.id}
+                        className="border-t border-white/10 text-slate-300 transition hover:bg-admin-teal/[0.04]"
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <Users className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                            <span className="font-medium text-white">{job.recipients}</span>
+                          </div>
+                        </td>
+                        <td className="max-w-[200px] px-4 py-3">
+                          <p className="truncate text-slate-400" title={job.message}>
+                            {job.message}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5 tabular-nums text-slate-400">
+                            <Clock className="h-3 w-3 shrink-0" />
+                            {job.scheduled}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <ProgressBar sent={job.sent} total={job.total} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <StatusBadge status={job.status} />
+                        </td>
+                        <td className="px-4 py-3">
+                          {job.status === "Queued" || job.status === "Sending" ? (
+                            <button
+                              type="button"
+                              onClick={() => handleCancel(job.id)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-white/15"
+                              title="Cancel campaign"
+                            >
+                              <XCircle className="h-3.5 w-3.5" />
+                              Cancel
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-500">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       </div>
     </div>

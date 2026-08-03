@@ -1,45 +1,45 @@
 "use client";
 
-import { useState } from "react";
-import { Pencil, Plus, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { inputCls } from "@/components/admin/queue-ui";
-import { CURRENCY_TYPES } from "@/lib/mock-data";
+import {
+  createCurrencyType,
+  deleteCurrencyType,
+  fetchCurrencyTypes,
+  mapCurrencyTypeToRow,
+  toggleCurrencyTypeStatus,
+  updateCurrencyType,
+} from "@/lib/currency-types";
 
 const emptyForm = {
   name: "",
   code: "",
   symbol: "",
   description: "",
-  active: true,
 };
 
-function nextId(rows) {
-  const max = rows.reduce((acc, row) => {
-    const n = Number(String(row.id).replace(/\D/g, ""));
-    return Number.isFinite(n) ? Math.max(acc, n) : acc;
-  }, 0);
-  return `CT-${max + 1}`;
-}
-
-function ActiveCheckbox({ checked, onChange }) {
+function ActiveCheckbox({ checked, onChange, disabled }) {
   return (
     <input
       type="checkbox"
       checked={checked}
       onChange={onChange}
-      className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action"
+      disabled={disabled}
+      className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action disabled:cursor-not-allowed disabled:opacity-60"
       title={checked ? "Active" : "Set as active"}
     />
   );
 }
 
-function ActionButtons({ onEdit, onDelete }) {
+function ActionButtons({ onEdit, onDelete, disabled }) {
   return (
-    <div className="flex gap-1.5">
+    <div className="flex justify-end gap-1.5">
       <button
         type="button"
         onClick={onEdit}
-        className="rounded-lg bg-theme-green-action/90 p-1.5 text-white shadow-sm transition hover:brightness-110"
+        disabled={disabled}
+        className="rounded-lg bg-theme-green-action/90 p-1.5 text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
         title="Edit"
       >
         <Pencil className="h-3.5 w-3.5" />
@@ -47,7 +47,8 @@ function ActionButtons({ onEdit, onDelete }) {
       <button
         type="button"
         onClick={onDelete}
-        className="rounded-lg bg-[#E11D48] p-1.5 text-white shadow-sm transition hover:brightness-110"
+        disabled={disabled}
+        className="rounded-lg bg-[#E11D48] p-1.5 text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
         title="Delete"
       >
         <Trash2 className="h-3.5 w-3.5" />
@@ -56,7 +57,7 @@ function ActionButtons({ onEdit, onDelete }) {
   );
 }
 
-function ModalShell({ title, onClose, children, onSave }) {
+function ModalShell({ title, onClose, children, onSave, saving }) {
   return (
     <div className="admin-modal-overlay" onClick={onClose}>
       <div
@@ -78,14 +79,15 @@ function ModalShell({ title, onClose, children, onSave }) {
         >
           {children}
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="admin-btn-secondary">
+            <button type="button" onClick={onClose} className="admin-btn-secondary" disabled={saving}>
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+              disabled={saving}
+              className="rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
             >
-              Save
+              {saving ? "Saving…" : "Save"}
             </button>
           </div>
         </form>
@@ -95,8 +97,28 @@ function ModalShell({ title, onClose, children, onSave }) {
 }
 
 export default function CurrencyTypesPanel() {
-  const [rows, setRows] = useState(CURRENCY_TYPES);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
   const [modal, setModal] = useState(null);
+
+  const reloadCurrencyTypes = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchCurrencyTypes();
+      setRows((data?.currencyTypes || []).map(mapCurrencyTypeToRow));
+    } catch (error) {
+      console.error(error);
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    reloadCurrencyTypes();
+  }, [reloadCurrencyTypes]);
 
   function openAdd() {
     setModal({ mode: "add", ...emptyForm });
@@ -110,36 +132,90 @@ export default function CurrencyTypesPanel() {
       code: row.code,
       symbol: row.symbol,
       description: row.description,
-      active: row.active,
     });
   }
 
-  function save() {
-    if (!modal) return;
-    const { mode, id, name, code, symbol, description, active } = modal;
-    if (!name.trim() || !code.trim() || !symbol.trim()) return;
+  async function save() {
+    if (!modal || saving) return;
+    const { mode, id, name, code, symbol, description } = modal;
+    if (!name.trim() || !code.trim() || !symbol.trim() || !description.trim()) return;
 
     const payload = {
       name: name.trim(),
       code: code.trim(),
       symbol: symbol.trim(),
       description: description.trim(),
-      active: Boolean(active),
     };
 
-    if (mode === "edit") {
-      setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...payload } : row)));
-    } else {
-      setRows((prev) => [...prev, { id: nextId(prev), ...payload }]);
+    setSaving(true);
+    try {
+      if (mode === "edit") {
+        const data = await updateCurrencyType(id, payload);
+        const currencyType = data?.currencyType;
+        if (currencyType) {
+          setRows((prev) =>
+            prev.map((row) => (row.id === id ? mapCurrencyTypeToRow(currencyType) : row)),
+          );
+        } else {
+          await reloadCurrencyTypes();
+        }
+      } else {
+        const data = await createCurrencyType(payload);
+        const currencyType = data?.currencyType;
+        if (currencyType) {
+          setRows((prev) => [...prev, mapCurrencyTypeToRow(currencyType)]);
+        } else {
+          await reloadCurrencyTypes();
+        }
+      }
+      setModal(null);
+    } catch (error) {
+      window.alert(error?.message || "Could not save currency type.");
+    } finally {
+      setSaving(false);
     }
-    setModal(null);
   }
 
-  function toggleActive(id) {
+  async function toggleActive(row) {
+    if (togglingId === row.id) return;
+
+    const nextActive = !row.active;
     setRows((prev) =>
-      prev.map((row) => (row.id === id ? { ...row, active: !row.active } : row))
+      prev.map((item) => (item.id === row.id ? { ...item, active: nextActive } : item)),
     );
+    setTogglingId(row.id);
+
+    try {
+      const data = await toggleCurrencyTypeStatus(row.id, nextActive);
+      if (data?.currencyType) {
+        setRows((prev) =>
+          prev.map((item) =>
+            item.id === row.id ? mapCurrencyTypeToRow(data.currencyType) : item,
+          ),
+        );
+      }
+    } catch (error) {
+      setRows((prev) =>
+        prev.map((item) => (item.id === row.id ? { ...item, active: row.active } : item)),
+      );
+      window.alert(error?.message || "Could not update currency type status.");
+    } finally {
+      setTogglingId(null);
+    }
   }
+
+  async function remove(id) {
+    if (!window.confirm("Delete this currency type?")) return;
+
+    try {
+      await deleteCurrencyType(id);
+      setRows((prev) => prev.filter((row) => row.id !== id));
+    } catch (error) {
+      window.alert(error?.message || "Could not delete currency type.");
+    }
+  }
+
+  const busy = loading || saving;
 
   return (
     <div className="mt-5">
@@ -149,7 +225,8 @@ export default function CurrencyTypesPanel() {
           <button
             type="button"
             onClick={openAdd}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-110"
+            disabled={busy}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
           >
             <Plus className="h-3.5 w-3.5" />
             Add Currency
@@ -164,31 +241,48 @@ export default function CurrencyTypesPanel() {
                 <th className="px-4 py-3">Symbol</th>
                 <th className="px-4 py-3">Description</th>
                 <th className="px-4 py-3">Set as Active</th>
-                <th className="px-4 py-3">Action</th>
+                <th className="px-4 py-3 text-right">Action</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} className="border-t border-white/10 text-slate-300">
-                  <td className="px-4 py-3 font-medium text-white">{row.name}</td>
-                  <td className="px-4 py-3">{row.code}</td>
-                  <td className="px-4 py-3">{row.symbol}</td>
-                  <td className="px-4 py-3">{row.description}</td>
-                  <td className="px-4 py-3">
-                    <ActiveCheckbox
-                      checked={row.active}
-                      onChange={() => toggleActive(row.id)}
-                    />
-                  </td>
-                  <td className="px-4 py-3">
-                    <ActionButtons
-                      onEdit={() => openEdit(row)}
-                      onDelete={() => setRows((prev) => prev.filter((r) => r.id !== row.id))}
-                    />
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-400">
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading currency types…
+                    </span>
                   </td>
                 </tr>
-              ))}
-              {rows.length === 0 ? (
+              ) : null}
+              {!loading
+                ? rows.map((row) => (
+                    <tr
+                      key={row.id}
+                      className="border-t border-white/10 text-slate-300 transition hover:bg-admin-teal/[0.05]"
+                    >
+                      <td className="px-4 py-3 font-medium text-white">{row.name}</td>
+                      <td className="px-4 py-3">{row.code}</td>
+                      <td className="px-4 py-3">{row.symbol}</td>
+                      <td className="px-4 py-3">{row.description}</td>
+                      <td className="px-4 py-3">
+                        <ActiveCheckbox
+                          checked={row.active}
+                          disabled={togglingId === row.id || saving}
+                          onChange={() => toggleActive(row)}
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <ActionButtons
+                          disabled={busy || togglingId === row.id}
+                          onEdit={() => openEdit(row)}
+                          onDelete={() => remove(row.id)}
+                        />
+                      </td>
+                    </tr>
+                  ))
+                : null}
+              {!loading && rows.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-400">
                     No currency types yet. Click Add Currency to create one.
@@ -205,6 +299,7 @@ export default function CurrencyTypesPanel() {
           title={modal.mode === "edit" ? "Edit Currency" : "Add Currency"}
           onClose={() => setModal(null)}
           onSave={save}
+          saving={saving}
         >
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-slate-300">Name</span>
@@ -239,20 +334,12 @@ export default function CurrencyTypesPanel() {
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-slate-300">Description</span>
             <input
+              required
               value={modal.description}
               onChange={(e) => setModal((m) => ({ ...m, description: e.target.value }))}
               className={inputCls}
               placeholder="e.g. All USD wallet"
             />
-          </label>
-          <label className="flex items-center gap-2.5">
-            <input
-              type="checkbox"
-              checked={modal.active}
-              onChange={(e) => setModal((m) => ({ ...m, active: e.target.checked }))}
-              className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action"
-            />
-            <span className="text-sm font-medium text-slate-300">Active</span>
           </label>
         </ModalShell>
       ) : null}

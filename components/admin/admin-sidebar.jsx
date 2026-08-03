@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -22,6 +22,8 @@ import {
   Users,
 } from "lucide-react";
 import { SIDEBAR_NAV } from "@/lib/mock-data";
+import { useAdminPermissions } from "@/contexts/admin-permissions";
+import { filterSidebarSections } from "@/lib/permissions";
 
 const ICONS = {
   LayoutDashboard,
@@ -88,6 +90,11 @@ function activeOpenIds(pathname, search) {
 function SidebarInner({ collapsed, onToggle, mobileOpen, onCloseMobile }) {
   const pathname = usePathname();
   const search = useSearchParams();
+  const permissions = useAdminPermissions();
+  const sidebarSections = useMemo(
+    () => filterSidebarSections(SIDEBAR_NAV, permissions),
+    [permissions]
+  );
   const [openIds, setOpenIds] = useState([]);
 
   useEffect(() => {
@@ -214,7 +221,7 @@ function SidebarInner({ collapsed, onToggle, mobileOpen, onCloseMobile }) {
           ) : null}
 
           <ul className="space-y-0.5">
-            {SIDEBAR_NAV.map((section) => {
+            {sidebarSections.map((section) => {
               const Icon = ICONS[section.icon] || LayoutDashboard;
               const active = sectionActive(pathname, search, section);
               const expanded = openIds.includes(section.id);

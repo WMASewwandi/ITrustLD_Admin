@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import CopyCell, { inputCls } from "@/components/admin/queue-ui";
 import { createSystemUser, fetchSystemUsers, updateSystemUser } from "@/lib/system-users";
+import { useCan } from "@/contexts/admin-permissions";
 import {
   Clock3,
   Loader2,
@@ -16,15 +17,10 @@ import {
   X,
 } from "lucide-react";
 
+import { formatDateSl } from "@/lib/sl-time";
+
 function formatDate(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return formatDateSl(value);
 }
 
 function StatusBadge({ active }) {
@@ -61,6 +57,7 @@ export default function SystemUsersPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState(EMPTY_CREATE_FORM);
   const [saving, setSaving] = useState(false);
+  const canManageUsers = useCan("system_user_manage_activity");
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -207,14 +204,16 @@ export default function SystemUsersPage() {
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={openCreate}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-admin-teal px-3.5 py-2 text-xs font-semibold text-white transition hover:brightness-110"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Create System User
-            </button>
+            {canManageUsers ? (
+              <button
+                type="button"
+                onClick={openCreate}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-admin-teal px-3.5 py-2 text-xs font-semibold text-white transition hover:brightness-110"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Create System User
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -297,14 +296,16 @@ export default function SystemUsersPage() {
                     </div>
                   </td>
                   <td className="px-3 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => openEdit(user)}
-                      className="inline-flex rounded-lg bg-admin-teal p-1.5 text-white shadow-sm transition hover:brightness-110"
-                      title="Edit user"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
+                    {canManageUsers ? (
+                      <button
+                        type="button"
+                        onClick={() => openEdit(user)}
+                        className="inline-flex rounded-lg bg-admin-teal p-1.5 text-white shadow-sm transition hover:brightness-110"
+                        title="Edit user"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
                   </td>
                 </tr>
               ))}

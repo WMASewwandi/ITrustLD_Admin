@@ -16,6 +16,9 @@ import {
 } from "lucide-react";
 import { NAV } from "@/lib/mock-data";
 import { logoutAdmin } from "@/lib/auth";
+import { useAdminPermissions } from "@/contexts/admin-permissions";
+import { hasPermission } from "@/lib/permissions";
+import { useMemo } from "react";
 
 function isActiveCategory(pathname, category) {
   if (category.href && pathname.startsWith(category.href.split("?")[0])) return true;
@@ -25,6 +28,15 @@ function isActiveCategory(pathname, category) {
 export default function AdminNav() {
   const pathname = usePathname();
   const router = useRouter();
+  const permissions = useAdminPermissions();
+  const navItems = useMemo(
+    () =>
+      NAV.map((cat) => ({
+        ...cat,
+        items: (cat.items || []).filter((item) => hasPermission(permissions, item.permission)),
+      })).filter((cat) => cat.href || (cat.items && cat.items.length > 0)),
+    [permissions]
+  );
   const [open, setOpen] = useState(null);
   const [mobile, setMobile] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -71,7 +83,7 @@ export default function AdminNav() {
           </Link>
 
           <nav className="hidden items-center gap-0.5 2xl:flex">
-            {NAV.map((cat) => {
+            {navItems.map((cat) => {
               const active = isActiveCategory(pathname, cat);
               return (
                 <div key={cat.label} className="relative">

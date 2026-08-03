@@ -1,88 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Pencil, Plus, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { inputCls } from "@/components/admin/queue-ui";
+import { useCan } from "@/contexts/admin-permissions";
 import {
-  DEPOSIT_RATES_BY_METHOD,
-  POINT_WITHDRAWAL_PAYMENT_OPTIONS,
-  POINT_WITHDRAWAL_RATES_BY_METHOD,
-  RATE_METHOD_OPTIONS,
-  WITHDRAWAL_RATES_BY_METHOD,
-} from "@/lib/mock-data";
-
-function isRedeMethod(method) {
-  return method === "REDE" || method === "Rede";
-}
-
-/** Normalize URL / nav method keys for mock-data lookups */
-function ratesMethodKey(method) {
-  if (isRedeMethod(method)) return "REDE";
-  return method;
-}
-
-function demoAdminId(method) {
-  return method === "Crypto" ||
-    method === "Perfect Money" ||
-    method === "Skrill" ||
-    method === "Neteller" ||
-    method === "XM" ||
-    isRedeMethod(method)
-    ? "1"
-    : "admin";
-}
-
-function usesDateTime(method) {
-  return (
-    method === "Crypto" ||
-    method === "Perfect Money" ||
-    method === "Skrill" ||
-    method === "Neteller" ||
-    method === "XM" ||
-    isRedeMethod(method)
-  );
-}
-
-function displayMethodName(method) {
-  if (method === "Bank Transfer") return "Bank transfer";
-  if (method === "Perfect Money") return "Perfect money";
-  if (method === "XM") return "Xm";
-  if (isRedeMethod(method)) return "Rede";
-  return method;
-}
-
-function cloneRows(source) {
-  return (source || []).map((row) => ({ ...row }));
-}
-
-function nextId(rows) {
-  const max = rows.reduce((acc, row) => {
-    const n = Number(row.id);
-    return Number.isFinite(n) ? Math.max(acc, n) : acc;
-  }, 0);
-  return max + 1;
-}
+  addPointWithdrawalRate,
+  createRates,
+  deletePointWithdrawalRate,
+  deleteRate,
+  fetchRatesForMethod,
+  updateDepositRate,
+  updatePointWithdrawalRate,
+  updateWithdrawalRate,
+} from "@/lib/rates";
+import { todayYmdColombo } from "@/lib/sl-time";
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function nowDateTime() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-function formatRate(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return String(value ?? "");
-  return n.toFixed(2);
-}
-
-function formatApplicableDate(value) {
-  if (!value) return nowDateTime();
-  if (value.includes(" ")) return value;
-  return `${value} 00:00:00`;
+  return todayYmdColombo();
 }
 
 function dateInputValue(value) {
@@ -91,60 +26,21 @@ function dateInputValue(value) {
 }
 
 function titleForMethod(method) {
-  return `${displayMethodName(method)} Rates`;
-}
-
-function modalTitleForMethod(method, mode) {
-  const label = `${displayMethodName(method)} Rate`;
-  return mode === "edit" ? `Edit ${label}` : `Add New ${label}`;
+  return `${method} Rates`;
 }
 
 function pointSectionTitle(method) {
-  return `${displayMethodName(method)} Point Withdrawal Rates`;
+  return `${method} Point Withdrawal Rates`;
 }
 
-function defaultTransferMethod(method) {
-  if (
-    method === "Crypto" ||
-    method === "Perfect Money" ||
-    method === "Skrill" ||
-    method === "Neteller" ||
-    method === "XM" ||
-    isRedeMethod(method)
-  ) {
-    return "XM";
-  }
-  return RATE_METHOD_OPTIONS[0];
-}
-
-function defaultPointPaymentOption(method) {
-  if (method === "Crypto") return "Crypto";
-  if (method === "Perfect Money") return "Perfect money";
-  if (method === "Skrill") return "Skrill";
-  if (method === "Neteller") return "Neteller";
-  if (method === "XM") return "XM";
-  if (isRedeMethod(method)) return "REDE";
-  return POINT_WITHDRAWAL_PAYMENT_OPTIONS[0];
-}
-
-function showsPointWithdrawal(method) {
+function ActionButtons({ onEdit, onDelete, disabled }) {
   return (
-    method === "Crypto" ||
-    method === "Perfect Money" ||
-    method === "Skrill" ||
-    method === "Neteller" ||
-    method === "XM" ||
-    isRedeMethod(method)
-  );
-}
-
-function ActionButtons({ onEdit, onDelete }) {
-  return (
-    <div className="flex gap-1.5">
+    <div className="flex justify-end gap-1.5">
       <button
         type="button"
         onClick={onEdit}
-        className="rounded-lg bg-theme-green-action/90 p-1.5 text-white shadow-sm transition hover:brightness-110"
+        disabled={disabled}
+        className="rounded-lg bg-theme-green-action/90 p-1.5 text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
         title="Edit"
       >
         <Pencil className="h-3.5 w-3.5" />
@@ -152,7 +48,8 @@ function ActionButtons({ onEdit, onDelete }) {
       <button
         type="button"
         onClick={onDelete}
-        className="rounded-lg bg-[#E11D48] p-1.5 text-white shadow-sm transition hover:brightness-110"
+        disabled={disabled}
+        className="rounded-lg bg-[#E11D48] p-1.5 text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
         title="Delete"
       >
         <Trash2 className="h-3.5 w-3.5" />
@@ -161,7 +58,7 @@ function ActionButtons({ onEdit, onDelete }) {
   );
 }
 
-function RatesTable({ title, columns, rows, emptyLabel, renderCells, onEdit, onDelete }) {
+function RatesTable({ title, columns, rows, emptyLabel, renderCells, onEdit, onDelete, canMutate, busy }) {
   return (
     <section className="admin-card admin-fade-up overflow-visible p-0">
       {title ? (
@@ -174,7 +71,10 @@ function RatesTable({ title, columns, rows, emptyLabel, renderCells, onEdit, onD
           <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
             <tr>
               {columns.map((col) => (
-                <th key={col} className="px-4 py-3">
+                <th
+                  key={col}
+                  className={`px-4 py-3 ${col === "Action" ? "text-right" : ""}`}
+                >
                   {col}
                 </th>
               ))}
@@ -184,8 +84,12 @@ function RatesTable({ title, columns, rows, emptyLabel, renderCells, onEdit, onD
             {rows.map((row) => (
               <tr key={row.id} className="border-t border-white/10 text-slate-300">
                 {renderCells(row)}
-                <td className="px-4 py-3">
-                  <ActionButtons onEdit={() => onEdit(row)} onDelete={() => onDelete(row.id)} />
+                <td className="px-4 py-3 text-right">
+                  <ActionButtons
+                    onEdit={() => onEdit(row)}
+                    onDelete={() => onDelete(row)}
+                    disabled={!canMutate || busy}
+                  />
                 </td>
               </tr>
             ))}
@@ -204,32 +108,52 @@ function RatesTable({ title, columns, rows, emptyLabel, renderCells, onEdit, onD
 }
 
 export default function RatesPanel({ method }) {
-  const dataKey = ratesMethodKey(method);
-  const [deposits, setDeposits] = useState(() => cloneRows(DEPOSIT_RATES_BY_METHOD[dataKey]));
-  const [withdrawals, setWithdrawals] = useState(() =>
-    cloneRows(WITHDRAWAL_RATES_BY_METHOD[dataKey])
-  );
-  const [pointRates, setPointRates] = useState(() =>
-    cloneRows(POINT_WITHDRAWAL_RATES_BY_METHOD[dataKey])
-  );
+  const canMutate = useCan("change_currency_configs");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [paymentOption, setPaymentOption] = useState(null);
+  const [wallets, setWallets] = useState([]);
+  const [deposits, setDeposits] = useState([]);
+  const [withdrawals, setWithdrawals] = useState([]);
+  const [pointRates, setPointRates] = useState([]);
   const [modal, setModal] = useState(null);
   const [pointModal, setPointModal] = useState(null);
 
-  const showPointSection = showsPointWithdrawal(method);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await fetchRatesForMethod(method);
+      setPaymentOption(data.paymentOption || null);
+      setWallets(data.wallets || []);
+      setDeposits(data.depositRates || []);
+      setWithdrawals(data.withdrawalRates || []);
+      setPointRates(data.pointWithdrawalRates || []);
+    } catch (err) {
+      setError(err.message || "Failed to load rates.");
+      setPaymentOption(null);
+      setWallets([]);
+      setDeposits([]);
+      setWithdrawals([]);
+      setPointRates([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [method]);
 
   useEffect(() => {
-    const key = ratesMethodKey(method);
-    setDeposits(cloneRows(DEPOSIT_RATES_BY_METHOD[key]));
-    setWithdrawals(cloneRows(WITHDRAWAL_RATES_BY_METHOD[key]));
-    setPointRates(cloneRows(POINT_WITHDRAWAL_RATES_BY_METHOD[key]));
+    load();
     setModal(null);
     setPointModal(null);
-  }, [method]);
+    setSuccess("");
+  }, [load]);
 
   function openAdd() {
     setModal({
       mode: "add",
-      transferMethod: defaultTransferMethod(method),
+      walletId: wallets[0]?.id ? String(wallets[0].id) : "",
       depositRate: "",
       withdrawRate: "",
     });
@@ -240,9 +164,9 @@ export default function RatesPanel({ method }) {
       mode: "edit",
       kind: "deposit",
       id: row.id,
-      transferMethod: row.topupMethod,
+      walletId: row.walletId ? String(row.walletId) : "",
+      topupMethodId: row.topupMethodId,
       depositRate: String(row.depositRate),
-      withdrawRate: "",
     });
   }
 
@@ -251,8 +175,8 @@ export default function RatesPanel({ method }) {
       mode: "edit",
       kind: "withdrawal",
       id: row.id,
-      transferMethod: row.cashoutMethod,
-      depositRate: "",
+      walletId: row.walletId ? String(row.walletId) : "",
+      cashoutMethodId: row.cashoutMethodId,
       withdrawRate: String(row.withdrawRate),
     });
   }
@@ -260,7 +184,6 @@ export default function RatesPanel({ method }) {
   function openAddPoint() {
     setPointModal({
       mode: "add",
-      paymentOption: defaultPointPaymentOption(method),
       rate: "",
       applicableDate: todayIso(),
     });
@@ -270,143 +193,136 @@ export default function RatesPanel({ method }) {
     setPointModal({
       mode: "edit",
       id: row.id,
-      paymentOption: row.paymentOption,
       rate: String(row.rate),
       applicableDate: dateInputValue(row.applicableDate),
     });
   }
 
-  function saveModal() {
-    if (!modal) return;
-    const transferMethod = (modal.transferMethod || "").trim();
-    if (!transferMethod) return;
-
-    const depositVal = String(modal.depositRate ?? "").trim();
-    const withdrawVal = String(modal.withdrawRate ?? "").trim();
-    const changedDate = usesDateTime(method) ? nowDateTime() : todayIso();
-    const adminId = demoAdminId(method);
-
-    if (modal.mode === "edit") {
-      if (modal.kind === "deposit") {
-        if (!depositVal) return;
-        setDeposits((prev) =>
-          prev.map((row) =>
-            row.id === modal.id
-              ? {
-                  ...row,
-                  topupMethod: transferMethod,
-                  depositRate: formatRate(depositVal),
-                  changedDate,
-                  adminId,
-                }
-              : row
-          )
-        );
+  async function saveModal() {
+    if (!modal || !paymentOption) return;
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      if (modal.mode === "add") {
+        await createRates({
+          paymentOptionId: paymentOption.id,
+          walletId: Number(modal.walletId),
+          depositRate: modal.depositRate,
+          withdrawalRate: modal.withdrawRate,
+        });
+        setSuccess("Rates saved successfully.");
+      } else if (modal.kind === "deposit") {
+        await updateDepositRate({
+          depositRateId: modal.id,
+          paymentOptionId: paymentOption.id,
+          walletId: Number(modal.walletId),
+          topupMethodId: modal.topupMethodId,
+          rate: modal.depositRate,
+        });
+        setSuccess("Deposit rate updated.");
       } else {
-        if (!withdrawVal) return;
-        setWithdrawals((prev) =>
-          prev.map((row) =>
-            row.id === modal.id
-              ? {
-                  ...row,
-                  cashoutMethod: transferMethod,
-                  withdrawRate: formatRate(withdrawVal),
-                  changedDate,
-                  adminId,
-                }
-              : row
-          )
-        );
+        await updateWithdrawalRate({
+          withdrawalRateId: modal.id,
+          paymentOptionId: paymentOption.id,
+          walletId: Number(modal.walletId),
+          cashoutMethodId: modal.cashoutMethodId,
+          rate: modal.withdrawRate,
+        });
+        setSuccess("Withdrawal rate updated.");
       }
       setModal(null);
-      return;
+      await load();
+    } catch (err) {
+      setError(err.message || "Failed to save rate.");
+    } finally {
+      setBusy(false);
     }
-
-    if (!depositVal && !withdrawVal) return;
-
-    if (depositVal) {
-      setDeposits((prev) => [
-        {
-          id: nextId(prev),
-          adminId,
-          topupMethod: transferMethod,
-          depositRate: formatRate(depositVal),
-          changedDate,
-        },
-        ...prev,
-      ]);
-    }
-
-    if (withdrawVal) {
-      setWithdrawals((prev) => [
-        {
-          id: nextId(prev),
-          adminId,
-          cashoutMethod: transferMethod,
-          withdrawRate: formatRate(withdrawVal),
-          changedDate,
-        },
-        ...prev,
-      ]);
-    }
-
-    setModal(null);
   }
 
-  function savePointModal() {
-    if (!pointModal) return;
-    const paymentOption = (pointModal.paymentOption || "").trim();
-    const rateVal = String(pointModal.rate ?? "").trim();
-    if (!paymentOption || !rateVal) return;
-
-    const applicableDate = formatApplicableDate(pointModal.applicableDate);
-    const optionIndex = POINT_WITHDRAWAL_PAYMENT_OPTIONS.indexOf(paymentOption);
-    const paymentOptionId = optionIndex >= 0 ? optionIndex + 1 : 2;
-
-    if (pointModal.mode === "edit") {
-      setPointRates((prev) =>
-        prev.map((row) =>
-          row.id === pointModal.id
-            ? {
-                ...row,
-                paymentOption,
-                paymentOptionId,
-                rate: formatRate(rateVal),
-                applicableDate,
-              }
-            : row
-        )
-      );
+  async function savePointModal() {
+    if (!pointModal || !paymentOption) return;
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      if (pointModal.mode === "add") {
+        await addPointWithdrawalRate({
+          paymentOptionId: paymentOption.id,
+          rate: pointModal.rate,
+          applicableDate: pointModal.applicableDate,
+        });
+        setSuccess("Point withdrawal rate added.");
+      } else {
+        await updatePointWithdrawalRate({
+          pointWithdrawalRateId: pointModal.id,
+          paymentOptionId: paymentOption.id,
+          rate: pointModal.rate,
+          applicableDate: pointModal.applicableDate,
+        });
+        setSuccess("Point withdrawal rate updated.");
+      }
       setPointModal(null);
-      return;
+      await load();
+    } catch (err) {
+      setError(err.message || "Failed to save point withdrawal rate.");
+    } finally {
+      setBusy(false);
     }
-
-    setPointRates((prev) => [
-      {
-        id: nextId(prev),
-        paymentOption,
-        paymentOptionId,
-        rate: formatRate(rateVal),
-        applicableDate,
-      },
-      ...prev,
-    ]);
-    setPointModal(null);
   }
 
-  function removeDeposit(id) {
+  async function removeDeposit(row) {
     if (!window.confirm("Delete this deposit rate?")) return;
-    setDeposits((prev) => prev.filter((row) => row.id !== id));
+    setBusy(true);
+    setError("");
+    try {
+      await deleteRate({ rateId: row.id, rateType: "deposit" });
+      setSuccess("Deposit rate deleted.");
+      await load();
+    } catch (err) {
+      setError(err.message || "Failed to delete deposit rate.");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function removeWithdrawal(id) {
+  async function removeWithdrawal(row) {
     if (!window.confirm("Delete this withdrawal rate?")) return;
-    setWithdrawals((prev) => prev.filter((row) => row.id !== id));
+    setBusy(true);
+    setError("");
+    try {
+      await deleteRate({ rateId: row.id, rateType: "withdrawal" });
+      setSuccess("Withdrawal rate deleted.");
+      await load();
+    } catch (err) {
+      setError(err.message || "Failed to delete withdrawal rate.");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function removePoint(id) {
+  async function removePoint(row) {
     if (!window.confirm("Delete this point withdrawal rate?")) return;
-    setPointRates((prev) => prev.filter((row) => row.id !== id));
+    setBusy(true);
+    setError("");
+    try {
+      await deletePointWithdrawalRate(row.id);
+      setSuccess("Point withdrawal rate deleted.");
+      await load();
+    } catch (err) {
+      setError(err.message || "Failed to delete point withdrawal rate.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <section className="admin-card mt-5 flex items-center gap-2 p-5 text-slate-400">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading rates…
+      </section>
+    );
   }
 
   const isEdit = modal?.mode === "edit";
@@ -415,17 +331,23 @@ export default function RatesPanel({ method }) {
   const isPointEdit = pointModal?.mode === "edit";
 
   return (
-    <div>
+    <div className="mt-5">
+      {error ? <p className="mb-3 text-sm text-rose-400">{error}</p> : null}
+      {success ? <p className="mb-3 text-sm text-theme-green-action">{success}</p> : null}
+
       <div className="admin-fade-up flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold tracking-tight text-white">{titleForMethod(method)}</h1>
-        <button
-          type="button"
-          onClick={openAdd}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
-        >
-          <Plus className="h-4 w-4" />
-          Add Rate
-        </button>
+        <h2 className="text-2xl font-bold tracking-tight text-white">{titleForMethod(method)}</h2>
+        {canMutate ? (
+          <button
+            type="button"
+            onClick={openAdd}
+            disabled={busy || !wallets.length}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
+          >
+            <Plus className="h-4 w-4" />
+            Add Rate
+          </button>
+        ) : null}
       </div>
 
       <div className="mt-5 space-y-5">
@@ -433,9 +355,11 @@ export default function RatesPanel({ method }) {
           title="Deposit Rates"
           columns={["ID", "Admin ID", "Topup Method", "Deposit Rate", "Changed Date", "Action"]}
           rows={deposits}
-          emptyLabel="No deposit rates yet. Click Add Rate to create one."
+          emptyLabel="No deposit rates yet."
           onEdit={openEditDeposit}
           onDelete={removeDeposit}
+          canMutate={canMutate}
+          busy={busy}
           renderCells={(row) => (
             <>
               <td className="px-4 py-3 font-medium text-white">{row.id}</td>
@@ -451,9 +375,11 @@ export default function RatesPanel({ method }) {
           title="Withdrawal Rates"
           columns={["ID", "Admin ID", "Cashout Method", "Withdraw Rate", "Changed Date", "Action"]}
           rows={withdrawals}
-          emptyLabel="No withdrawal rates yet. Click Add Rate to create one."
+          emptyLabel="No withdrawal rates yet."
           onEdit={openEditWithdrawal}
           onDelete={removeWithdrawal}
+          canMutate={canMutate}
+          busy={busy}
           renderCells={(row) => (
             <>
               <td className="px-4 py-3 font-medium text-white">{row.id}</td>
@@ -466,57 +392,54 @@ export default function RatesPanel({ method }) {
         />
       </div>
 
-      {showPointSection ? (
-        <div className="mt-8">
-          <div className="admin-fade-up flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h1 className="text-2xl font-bold tracking-tight text-white">
-              {pointSectionTitle(method)}
-            </h1>
+      <div className="mt-8">
+        <div className="admin-fade-up flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-2xl font-bold tracking-tight text-white">{pointSectionTitle(method)}</h2>
+          {canMutate ? (
             <button
               type="button"
               onClick={openAddPoint}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
             >
               <Plus className="h-4 w-4" />
               Add Point Withdrawal Rate
             </button>
-          </div>
-
-          <div className="mt-5">
-            <RatesTable
-              columns={["ID", "Payment Option", "Rate", "Applicable Date", "Action"]}
-              rows={pointRates}
-              emptyLabel="No point withdrawal rates yet. Click Add Point Withdrawal Rate to create one."
-              onEdit={openEditPoint}
-              onDelete={removePoint}
-              renderCells={(row) => (
-                <>
-                  <td className="px-4 py-3 font-medium text-white">{row.id}</td>
-                  <td className="px-4 py-3">{row.paymentOption}</td>
-                  <td className="px-4 py-3 font-semibold text-white">{row.rate}</td>
-                  <td className="px-4 py-3">{row.applicableDate}</td>
-                </>
-              )}
-            />
-          </div>
+          ) : null}
         </div>
-      ) : null}
+
+        <div className="mt-5">
+          <RatesTable
+            columns={["ID", "Payment Option", "Rate", "Applicable Date", "Action"]}
+            rows={pointRates}
+            emptyLabel="No point withdrawal rates yet."
+            onEdit={openEditPoint}
+            onDelete={removePoint}
+            canMutate={canMutate}
+            busy={busy}
+            renderCells={(row) => (
+              <>
+                <td className="px-4 py-3 font-medium text-white">{row.id}</td>
+                <td className="px-4 py-3">{row.paymentOptionId ?? row.paymentOption}</td>
+                <td className="px-4 py-3 font-semibold text-white">{row.rate}</td>
+                <td className="px-4 py-3">{row.applicableDate}</td>
+              </>
+            )}
+          />
+        </div>
+      </div>
 
       {modal ? (
-        <div className="admin-modal-overlay" onClick={() => setModal(null)}>
+        <div className="admin-modal-overlay" onClick={() => !busy && setModal(null)}>
           <div
             className="admin-card w-full max-w-lg overflow-visible p-5 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-start justify-between gap-3">
               <h3 className="text-lg font-semibold text-white">
-                {modalTitleForMethod(method, modal.mode)}
+                {isEdit ? `Edit ${method} Rate` : `Add New ${method} Rate`}
               </h3>
-              <button
-                type="button"
-                onClick={() => setModal(null)}
-                className="text-slate-400 hover:text-white"
-              >
+              <button type="button" onClick={() => setModal(null)} className="text-slate-400 hover:text-white">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -529,22 +452,20 @@ export default function RatesPanel({ method }) {
             >
               <label className="block">
                 <span className="mb-1.5 block text-sm font-medium text-slate-300">
-                  Deposit / Withdraw Method
+                  {isEdit && modal.kind === "withdrawal" ? "Cashout Method" : "Deposit / Withdraw Method"}
                 </span>
                 <select
                   required
-                  value={modal.transferMethod}
-                  onChange={(e) => setModal((m) => ({ ...m, transferMethod: e.target.value }))}
+                  value={modal.walletId}
+                  onChange={(e) => setModal((m) => ({ ...m, walletId: e.target.value }))}
                   className={inputCls}
+                  disabled={busy}
                 >
-                  {RATE_METHOD_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
+                  {wallets.map((wallet) => (
+                    <option key={wallet.id} value={wallet.id}>
+                      {wallet.name}
                     </option>
                   ))}
-                  {!RATE_METHOD_OPTIONS.includes(modal.transferMethod) && modal.transferMethod ? (
-                    <option value={modal.transferMethod}>{modal.transferMethod}</option>
-                  ) : null}
                 </select>
               </label>
 
@@ -553,9 +474,7 @@ export default function RatesPanel({ method }) {
               >
                 {showDepositField ? (
                   <label className="block">
-                    <span className="mb-1.5 block text-sm font-medium text-slate-300">
-                      Deposit Rate
-                    </span>
+                    <span className="mb-1.5 block text-sm font-medium text-slate-300">Deposit Rate</span>
                     <input
                       type="number"
                       step="0.01"
@@ -564,15 +483,13 @@ export default function RatesPanel({ method }) {
                       value={modal.depositRate}
                       onChange={(e) => setModal((m) => ({ ...m, depositRate: e.target.value }))}
                       className={inputCls}
-                      placeholder="Enter deposit rate"
+                      disabled={busy}
                     />
                   </label>
                 ) : null}
                 {showWithdrawField ? (
                   <label className="block">
-                    <span className="mb-1.5 block text-sm font-medium text-slate-300">
-                      Withdrawal Rate
-                    </span>
+                    <span className="mb-1.5 block text-sm font-medium text-slate-300">Withdrawal Rate</span>
                     <input
                       type="number"
                       step="0.01"
@@ -581,21 +498,18 @@ export default function RatesPanel({ method }) {
                       value={modal.withdrawRate}
                       onChange={(e) => setModal((m) => ({ ...m, withdrawRate: e.target.value }))}
                       className={inputCls}
-                      placeholder="Enter withdrawal rate"
+                      disabled={busy}
                     />
                   </label>
                 ) : null}
               </div>
 
               <div className="flex justify-end gap-2 pt-1">
-                <button type="button" onClick={() => setModal(null)} className="admin-btn-secondary">
+                <button type="button" onClick={() => setModal(null)} className="admin-btn-secondary" disabled={busy}>
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
-                >
-                  {isEdit ? "Save" : "Add"}
+                <button type="submit" className="admin-btn-primary" disabled={busy}>
+                  {busy ? "Saving…" : isEdit ? "Save" : "Add"}
                 </button>
               </div>
             </form>
@@ -604,20 +518,16 @@ export default function RatesPanel({ method }) {
       ) : null}
 
       {pointModal ? (
-        <div className="admin-modal-overlay" onClick={() => setPointModal(null)}>
+        <div className="admin-modal-overlay" onClick={() => !busy && setPointModal(null)}>
           <div
             className="admin-card w-full max-w-lg overflow-visible p-5 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-start justify-between gap-3">
               <h3 className="text-lg font-semibold text-white">
-                {isPointEdit ? "Edit Point Withdrawal Rate" : "Add New Point Withdrawal Rate"}
+                {isPointEdit ? "Update Point Withdrawal Rate" : "Add New Point Withdrawal Rate"}
               </h3>
-              <button
-                type="button"
-                onClick={() => setPointModal(null)}
-                className="text-slate-400 hover:text-white"
-              >
+              <button type="button" onClick={() => setPointModal(null)} className="text-slate-400 hover:text-white">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -629,31 +539,17 @@ export default function RatesPanel({ method }) {
               className="space-y-4"
             >
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-slate-300">
-                  Payment Option
-                </span>
-                <select
-                  required
-                  value={pointModal.paymentOption}
-                  onChange={(e) => setPointModal((m) => ({ ...m, paymentOption: e.target.value }))}
-                  className={inputCls}
-                >
-                  {POINT_WITHDRAWAL_PAYMENT_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                  {!POINT_WITHDRAWAL_PAYMENT_OPTIONS.includes(pointModal.paymentOption) &&
-                  pointModal.paymentOption ? (
-                    <option value={pointModal.paymentOption}>{pointModal.paymentOption}</option>
-                  ) : null}
-                </select>
+                <span className="mb-1.5 block text-sm font-medium text-slate-300">Payment Option</span>
+                <input
+                  type="text"
+                  readOnly
+                  value={paymentOption?.name || method}
+                  className={`${inputCls} cursor-not-allowed opacity-80`}
+                />
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-slate-300">
-                  Point Withdrawal Rate
-                </span>
+                <span className="mb-1.5 block text-sm font-medium text-slate-300">Point Withdrawal Rate</span>
                 <input
                   type="number"
                   step="0.01"
@@ -662,38 +558,28 @@ export default function RatesPanel({ method }) {
                   value={pointModal.rate}
                   onChange={(e) => setPointModal((m) => ({ ...m, rate: e.target.value }))}
                   className={inputCls}
-                  placeholder="Enter point withdrawal rate"
+                  disabled={busy}
                 />
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-slate-300">
-                  Applicable Date
-                </span>
+                <span className="mb-1.5 block text-sm font-medium text-slate-300">Applicable Date</span>
                 <input
                   type="date"
                   required
                   value={dateInputValue(pointModal.applicableDate)}
-                  onChange={(e) =>
-                    setPointModal((m) => ({ ...m, applicableDate: e.target.value }))
-                  }
+                  onChange={(e) => setPointModal((m) => ({ ...m, applicableDate: e.target.value }))}
                   className={inputCls}
+                  disabled={busy}
                 />
               </label>
 
               <div className="flex justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setPointModal(null)}
-                  className="admin-btn-secondary"
-                >
+                <button type="button" onClick={() => setPointModal(null)} className="admin-btn-secondary" disabled={busy}>
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
-                >
-                  {isPointEdit ? "Save" : "Add"}
+                <button type="submit" className="admin-btn-primary" disabled={busy}>
+                  {busy ? "Saving…" : isPointEdit ? "Update" : "Add"}
                 </button>
               </div>
             </form>

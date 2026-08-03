@@ -1,23 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { inputCls } from "@/components/admin/queue-ui";
 import {
-  CASHOUT_WALLET_PAYMENT_OPTIONS,
-  CASHOUT_WALLETS,
-  CURRENCY_TYPES,
-  TOPUP_WALLET_PAYMENT_OPTIONS,
-  TOPUP_WALLET_PLATFORM_TYPES,
-  TOPUP_WALLETS,
-} from "@/lib/mock-data";
+  createCashoutWallet,
+  createTopupWallet,
+  deleteCashoutWallet,
+  deleteTopupWallet,
+  fetchCashoutWallet,
+  fetchCashoutWallets,
+  fetchTopupWallet,
+  fetchTopupWallets,
+  fetchWalletMeta,
+  mapWalletToRow,
+  SAMPLE_WALLET_LOGO,
+  toggleCashoutWalletStatus,
+  toggleTopupWalletStatus,
+  updateCashoutWallet,
+  updateTopupWallet,
+} from "@/lib/wallets";
+import { TOPUP_WALLET_PLATFORM_TYPES } from "@/lib/mock-data";
 
 const emptyForm = {
   name: "",
   logoName: "",
   logoUrl: null,
-  paymentMethods: [],
-  currency: "USDT",
+  logoFile: null,
+  paymentMethodIds: [],
+  currency: "USD",
   minLimit: "",
   maxLimit: "",
   platformType: "INT",
@@ -26,14 +37,6 @@ const emptyForm = {
   badgeColor: "#236B6B",
 };
 
-function nextId(rows, prefix) {
-  const max = rows.reduce((acc, row) => {
-    const n = Number(String(row.id).replace(/\D/g, ""));
-    return Number.isFinite(n) ? Math.max(acc, n) : acc;
-  }, 0);
-  return `${prefix}-${max + 1}`;
-}
-
 function formatLimit(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return String(value ?? "");
@@ -41,6 +44,14 @@ function formatLimit(value) {
 }
 
 function WalletBadge({ name, color, logoUrl }) {
+  const [useSample, setUseSample] = useState(!logoUrl);
+  const [sampleFailed, setSampleFailed] = useState(false);
+
+  useEffect(() => {
+    setUseSample(!logoUrl);
+    setSampleFailed(false);
+  }, [logoUrl]);
+
   const initials = String(name || "?")
     .split(/\s+/)
     .map((w) => w[0])
@@ -48,16 +59,12 @@ function WalletBadge({ name, color, logoUrl }) {
     .slice(0, 4)
     .toUpperCase();
 
+  const showInitials = useSample && sampleFailed;
+  const imageSrc = useSample ? SAMPLE_WALLET_LOGO : logoUrl;
+
   return (
     <div className="flex items-center gap-2.5">
-      {logoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={logoUrl}
-          alt=""
-          className="h-10 w-10 shrink-0 rounded-xl object-cover shadow-sm"
-        />
-      ) : (
+      {showInitials ? (
         <span
           className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white shadow-sm"
           style={{ background: color || "#236B6B" }}
@@ -65,13 +72,27 @@ function WalletBadge({ name, color, logoUrl }) {
         >
           {initials}
         </span>
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={imageSrc}
+          alt=""
+          className="h-10 w-10 shrink-0 rounded-xl bg-white/10 object-contain p-1.5 shadow-sm"
+          onError={() => {
+            if (useSample) {
+              setSampleFailed(true);
+            } else {
+              setUseSample(true);
+            }
+          }}
+        />
       )}
       <span className="text-base font-semibold text-white">{name}</span>
     </div>
   );
 }
 
-function ModalShell({ title, subtitle, onClose, children, onSave }) {
+function ModalShell({ title, subtitle, onClose, children, onSave, saving }) {
   return (
     <div className="admin-modal-overlay" onClick={onClose}>
       <div
@@ -96,14 +117,15 @@ function ModalShell({ title, subtitle, onClose, children, onSave }) {
         >
           {children}
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="admin-btn-secondary">
+            <button type="button" onClick={onClose} className="admin-btn-secondary" disabled={saving}>
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+              disabled={saving}
+              className="rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
             >
-              Save
+              {saving ? "Saving…" : "Save"}
             </button>
           </div>
         </form>
@@ -121,6 +143,11 @@ function FieldRow({ label, children }) {
   );
 }
 
+function isPaymentMethodSelected(selectedIds, paymentMethodId) {
+  const targetId = Number(paymentMethodId);
+  return selectedIds.some((id) => Number(id) === targetId);
+}
+
 function WalletSection({
   title,
   activateLabel,
@@ -129,110 +156,171 @@ function WalletSection({
   editTitle,
   addSubtitle,
   deleteConfirm,
-  idPrefix,
-  paymentOptions,
-  initialRows,
+  paymentOptionChoices,
+  currencyOptions,
+  platformTypes,
+  loadRows,
+  fetchWalletById,
+  onRefreshPaymentOptions,
+  createRow,
+  updateRow,
+  deleteRow,
+  toggleRowStatus,
   fallbackTerms,
 }) {
-  const [rows, setRows] = useState(initialRows);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
   const [termsModal, setTermsModal] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
 
-  const currencyOptions = CURRENCY_TYPES.filter((c) => c.active !== false).map((c) => c.code);
+  const reloadRows = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await loadRows();
+      setRows((data?.wallets || []).map(mapWalletToRow));
+    } catch (error) {
+      console.error(error);
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [loadRows]);
 
-  function openAdd() {
-    setModal({ mode: "add", ...emptyForm, paymentMethods: [] });
+  useEffect(() => {
+    reloadRows();
+  }, [reloadRows]);
+
+  async function openAdd() {
+    setModalLoading(true);
+    try {
+      await onRefreshPaymentOptions?.();
+      setModal({
+        mode: "add",
+        ...emptyForm,
+        currency: currencyOptions[0] || "USD",
+        paymentMethodIds: [],
+      });
+    } catch (error) {
+      window.alert(error?.message || "Could not load payment methods.");
+    } finally {
+      setModalLoading(false);
+    }
   }
 
-  function openEdit(row) {
-    setModal({
-      mode: "edit",
-      id: row.id,
-      name: row.name,
-      logoName: row.logoName || "",
-      logoUrl: row.logoUrl || null,
-      paymentMethods: Array.isArray(row.paymentMethods) ? [...row.paymentMethods] : [],
-      currency: row.currency || "USDT",
-      minLimit: row.minLimit === 0 || row.minLimit ? String(row.minLimit) : "",
-      maxLimit: row.maxLimit === 0 || row.maxLimit ? String(row.maxLimit) : "",
-      platformType: row.platformType || "INT",
-      terms: row.terms || "",
-      active: row.active,
-      badgeColor: row.badgeColor || "#236B6B",
-    });
+  async function openEdit(row) {
+    setModalLoading(true);
+    try {
+      await onRefreshPaymentOptions?.();
+      const data = await fetchWalletById(row.id);
+      const wallet = mapWalletToRow(data?.wallet || row);
+      setModal({
+        mode: "edit",
+        id: wallet.id,
+        name: wallet.name,
+        logoName: wallet.logoName || "",
+        logoUrl: wallet.logoUrl || null,
+        logoFile: null,
+        paymentMethodIds: Array.isArray(wallet.paymentMethodIds)
+          ? wallet.paymentMethodIds.map((id) => Number(id))
+          : [],
+        currency: wallet.currency || currencyOptions[0] || "USD",
+        minLimit: wallet.minLimit === 0 || wallet.minLimit ? String(wallet.minLimit) : "",
+        maxLimit: wallet.maxLimit === 0 || wallet.maxLimit ? String(wallet.maxLimit) : "",
+        platformType: wallet.platformType || "INT",
+        terms: wallet.terms || "",
+        active: wallet.active,
+        badgeColor: wallet.badgeColor || "#236B6B",
+      });
+    } catch (error) {
+      window.alert(error?.message || "Could not load wallet details.");
+    } finally {
+      setModalLoading(false);
+    }
   }
 
-  function toggleMethod(method) {
+  function toggleMethod(paymentMethodId) {
+    const normalizedId = Number(paymentMethodId);
     setModal((m) => {
       if (!m) return m;
-      const selected = m.paymentMethods.includes(method)
-        ? m.paymentMethods.filter((x) => x !== method)
-        : [...m.paymentMethods, method];
-      return { ...m, paymentMethods: selected };
+      const selected = isPaymentMethodSelected(m.paymentMethodIds, normalizedId)
+        ? m.paymentMethodIds.filter((id) => Number(id) !== normalizedId)
+        : [...m.paymentMethodIds, normalizedId];
+      return { ...m, paymentMethodIds: selected };
     });
   }
 
   function onLogoChange(e) {
     const file = e.target.files?.[0];
     if (!file) {
-      setModal((m) => (m ? { ...m, logoName: "", logoUrl: null } : m));
+      setModal((m) => (m ? { ...m, logoName: "", logoUrl: null, logoFile: null } : m));
       return;
     }
     const url = URL.createObjectURL(file);
-    setModal((m) => (m ? { ...m, logoName: file.name, logoUrl: url } : m));
+    setModal((m) => (m ? { ...m, logoName: file.name, logoUrl: url, logoFile: file } : m));
   }
 
-  function save() {
-    if (!modal) return;
+  async function save() {
+    if (!modal || saving) return;
     const {
       mode,
       id,
       name,
-      logoName,
-      logoUrl,
-      paymentMethods,
+      logoFile,
+      paymentMethodIds,
       minLimit,
       maxLimit,
       currency,
       platformType,
       terms,
-      active,
-      badgeColor,
     } = modal;
 
-    if (!name.trim() || !currency || paymentMethods.length === 0) return;
+    if (!name.trim() || !currency || paymentMethodIds.length === 0) return;
 
     const payload = {
       name: name.trim(),
-      logoName: logoName || null,
-      logoUrl: logoUrl || null,
-      paymentMethods: [...paymentMethods],
+      currency,
       minLimit: Number(minLimit) || 0,
       maxLimit: Number(maxLimit) || 0,
-      currency,
       platformType: platformType || "INT",
       terms: terms?.trim() || "",
-      active: Boolean(active),
-      badgeColor: badgeColor || "#236B6B",
+      paymentMethodIds: paymentMethodIds.map((id) => Number(id)),
     };
 
-    if (mode === "edit") {
-      setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...payload } : row)));
-    } else {
-      setRows((prev) => [...prev, { id: nextId(prev, idPrefix), ...payload }]);
+    setSaving(true);
+    try {
+      if (mode === "edit") {
+        await updateRow(id, payload, logoFile);
+      } else {
+        await createRow(payload, logoFile);
+      }
+      setModal(null);
+      await reloadRows();
+    } catch (error) {
+      window.alert(error?.message || "Could not save wallet.");
+    } finally {
+      setSaving(false);
     }
-    setModal(null);
   }
 
-  function toggleActive(id) {
-    setRows((prev) =>
-      prev.map((row) => (row.id === id ? { ...row, active: !row.active } : row))
-    );
+  async function toggleActive(id, currentActive) {
+    try {
+      await toggleRowStatus(id, !currentActive);
+      await reloadRows();
+    } catch (error) {
+      window.alert(error?.message || "Could not update wallet status.");
+    }
   }
 
-  function remove(id) {
+  async function remove(id) {
     if (!window.confirm(deleteConfirm)) return;
-    setRows((prev) => prev.filter((row) => row.id !== id));
+    try {
+      await deleteRow(id);
+      await reloadRows();
+    } catch (error) {
+      window.alert(error?.message || "Could not delete wallet.");
+    }
   }
 
   return (
@@ -261,7 +349,7 @@ function WalletSection({
               <WalletBadge name={row.name} color={row.badgeColor} logoUrl={row.logoUrl} />
               <button
                 type="button"
-                onClick={() => toggleActive(row.id)}
+                onClick={() => toggleActive(row.id, row.active)}
                 className={`inline-flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium transition ${
                   row.active
                     ? "text-theme-green-action"
@@ -324,16 +412,25 @@ function WalletSection({
         ))}
       </div>
 
-      {rows.length === 0 ? (
+      {!loading && rows.length === 0 ? (
         <div className="admin-card mt-5 p-8 text-center text-sm text-slate-400">{emptyMessage}</div>
       ) : null}
 
-      {modal ? (
+      {loading ? (
+        <div className="admin-card mt-5 p-8 text-center text-sm text-slate-400">Loading wallets…</div>
+      ) : null}
+
+      {modalLoading ? (
+        <div className="admin-card mt-5 p-8 text-center text-sm text-slate-400">Loading wallet form…</div>
+      ) : null}
+
+      {modal && !modalLoading ? (
         <ModalShell
           title={modal.mode === "edit" ? editTitle : addTitle}
           subtitle={modal.mode === "add" ? addSubtitle : undefined}
           onClose={() => setModal(null)}
           onSave={save}
+          saving={saving}
         >
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-slate-300">Wallet Name</span>
@@ -366,18 +463,18 @@ function WalletSection({
           <fieldset>
             <legend className="mb-2 text-sm font-medium text-slate-300">Payment Methods</legend>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {paymentOptions.map((method) => (
+              {paymentOptionChoices.map((option) => (
                 <label
-                  key={method}
+                  key={option.id}
                   className="flex cursor-pointer items-center gap-2.5 rounded-lg px-1 py-0.5 text-sm text-slate-300 hover:bg-white/5"
                 >
                   <input
                     type="checkbox"
-                    checked={modal.paymentMethods.includes(method)}
-                    onChange={() => toggleMethod(method)}
+                    checked={isPaymentMethodSelected(modal.paymentMethodIds, option.id)}
+                    onChange={() => toggleMethod(option.id)}
                     className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action"
                   />
-                  {method}
+                  {option.name}
                 </label>
               ))}
             </div>
@@ -436,7 +533,7 @@ function WalletSection({
               onChange={(e) => setModal((m) => ({ ...m, platformType: e.target.value }))}
               className={inputCls}
             >
-              {TOPUP_WALLET_PLATFORM_TYPES.map((type) => (
+              {platformTypes.map((type) => (
                 <option key={type} value={type}>
                   {type}
                 </option>
@@ -449,6 +546,7 @@ function WalletSection({
               Terms & Conditions
             </span>
             <textarea
+              required
               rows={4}
               value={modal.terms}
               onChange={(e) => setModal((m) => ({ ...m, terms: e.target.value }))}
@@ -497,6 +595,27 @@ function WalletSection({
 }
 
 export default function WalletsPanel() {
+  const [meta, setMeta] = useState({
+    paymentOptions: [],
+    currencyTypes: ["USD"],
+  });
+
+  const refreshPaymentOptions = useCallback(async () => {
+    const data = await fetchWalletMeta();
+    setMeta({
+      paymentOptions: Array.isArray(data.paymentOptions) ? data.paymentOptions : [],
+      currencyTypes:
+        Array.isArray(data.currencyTypes) && data.currencyTypes.length > 0
+          ? data.currencyTypes
+          : ["USD"],
+    });
+    return data;
+  }, []);
+
+  useEffect(() => {
+    refreshPaymentOptions().catch(console.error);
+  }, [refreshPaymentOptions]);
+
   return (
     <div className="mt-5 space-y-10">
       <WalletSection
@@ -506,9 +625,16 @@ export default function WalletsPanel() {
         addTitle="Add Wallet"
         editTitle="Edit Wallet"
         deleteConfirm="Delete this top-up wallet?"
-        idPrefix="TW"
-        paymentOptions={TOPUP_WALLET_PAYMENT_OPTIONS}
-        initialRows={TOPUP_WALLETS}
+        paymentOptionChoices={meta.paymentOptions}
+        currencyOptions={meta.currencyTypes}
+        platformTypes={TOPUP_WALLET_PLATFORM_TYPES}
+        loadRows={fetchTopupWallets}
+        fetchWalletById={fetchTopupWallet}
+        onRefreshPaymentOptions={refreshPaymentOptions}
+        createRow={createTopupWallet}
+        updateRow={updateTopupWallet}
+        deleteRow={deleteTopupWallet}
+        toggleRowStatus={toggleTopupWalletStatus}
         fallbackTerms="Standard top-up wallet terms apply. Limits and processing times may vary by payment method."
       />
 
@@ -520,9 +646,16 @@ export default function WalletsPanel() {
         editTitle="Edit Cashout Wallet"
         addSubtitle="Fill the below details to add a wallet."
         deleteConfirm="Delete this cash-out wallet?"
-        idPrefix="CW"
-        paymentOptions={CASHOUT_WALLET_PAYMENT_OPTIONS}
-        initialRows={CASHOUT_WALLETS}
+        paymentOptionChoices={meta.paymentOptions}
+        currencyOptions={meta.currencyTypes}
+        platformTypes={TOPUP_WALLET_PLATFORM_TYPES}
+        loadRows={fetchCashoutWallets}
+        fetchWalletById={fetchCashoutWallet}
+        onRefreshPaymentOptions={refreshPaymentOptions}
+        createRow={createCashoutWallet}
+        updateRow={updateCashoutWallet}
+        deleteRow={deleteCashoutWallet}
+        toggleRowStatus={toggleCashoutWalletStatus}
         fallbackTerms="Standard cash-out wallet terms apply. Limits and processing times may vary by payment method."
       />
     </div>

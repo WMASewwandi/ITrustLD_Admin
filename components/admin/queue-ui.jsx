@@ -24,12 +24,67 @@ export default function CopyCell({ value, sub }) {
       </div>
       <button
         type="button"
-        onClick={copy}
+        onClick={(e) => {
+          e.stopPropagation();
+          copy();
+        }}
         className="mt-0.5 shrink-0 rounded p-0.5 text-slate-500 transition hover:bg-white/10 hover:text-teal-300"
         title="Copy"
       >
         {copied ? <Check className="h-3 w-3 text-theme-green-action" /> : <Copy className="h-3 w-3" />}
       </button>
+    </div>
+  );
+}
+
+export function IdNameCell({ id, name }) {
+  return (
+    <div className="min-w-0 space-y-0.5">
+      <CopyCell value={id || "—"} />
+      {name ? <CopyCell value={name} /> : null}
+    </div>
+  );
+}
+
+export function PlatformIdCell({ platform, platformId, platformName, platformDetail, method }) {
+  const normalizedMethod = String(method || "").trim().toUpperCase();
+  const isBankLike = normalizedMethod === "BANK TRANSFER" || normalizedMethod === "CARD PAYMENT";
+  const lines = [];
+
+  if (isBankLike) {
+    if (platform && platform !== "—") lines.push(platform);
+    if (platformId && platformId !== "—") lines.push(platformId);
+    if (platformName) {
+      lines.push(platformName);
+    } else if (platformDetail) {
+      const separator = platformDetail.includes(" · ") ? " · " : platformDetail.includes(" - ") ? " - " : null;
+      if (separator) {
+        const parts = platformDetail.split(separator).map((part) => part.trim()).filter(Boolean);
+        const namePart = parts.find((part) => part !== platformId && part !== platform);
+        if (namePart) lines.push(namePart);
+      }
+    }
+  } else if (platformId && platformId !== "—") {
+    lines.push(platformId);
+  } else if (platformDetail && platformDetail !== "—") {
+    if (platformDetail.includes(" · ")) {
+      lines.push(...platformDetail.split(" · ").map((part) => part.trim()).filter(Boolean));
+    } else if (platformDetail.includes(" - ")) {
+      lines.push(...platformDetail.split(" - ").map((part) => part.trim()).filter(Boolean));
+    } else {
+      lines.push(platformDetail);
+    }
+  } else if (platform && platform !== "—") {
+    lines.push(platform);
+  }
+
+  if (lines.length === 0) lines.push("—");
+
+  return (
+    <div className="min-w-0 space-y-0.5">
+      {lines.map((line, index) => (
+        <CopyCell key={`${line}-${index}`} value={line} />
+      ))}
     </div>
   );
 }
