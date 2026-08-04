@@ -8,14 +8,15 @@ import { getAdminUser } from "@/lib/auth";
 import { downloadDepositsExport } from "@/lib/deposits";
 import { downloadWithdrawalsExport } from "@/lib/withdrawals";
 import {
+  DEFAULT_DASHBOARD_FILTER,
   DASHBOARD_FILTER_OPTIONS,
   fetchAdminDashboard,
-  fetchFilteredDepositsTotal,
-  fetchFilteredWithdrawalsTotal,
+  fetchDashboardPlatforms,
   formatDashboardLkr,
   formatDashboardUsd,
   formatPlatformDepositAmount,
   resolveDashboardDurationLabel,
+  resolveDashboardFilterLabel,
 } from "@/lib/dashboard";
 import { TOP_NAV } from "@/lib/mock-data";
 import { getFirstAllowedNavHref, resolveAdminLandingPath } from "@/lib/permissions";
@@ -26,7 +27,6 @@ import {
   DollarSign,
   HandCoins,
   Loader2,
-  MoreVertical,
 } from "lucide-react";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -159,7 +159,18 @@ function PercentChange({ value }) {
   );
 }
 
-function FilterMenu({ open, onClose, onSelect, customFrom, customTo, onCustomFrom, onCustomTo, onApplyCustom }) {
+function DashboardDateFilter({
+  open,
+  onToggle,
+  onClose,
+  activeFilter,
+  customFrom,
+  customTo,
+  onCustomFrom,
+  onCustomTo,
+  onSelectPreset,
+  onApplyCustom,
+}) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -173,71 +184,72 @@ function FilterMenu({ open, onClose, onSelect, customFrom, customTo, onCustomFro
     return () => document.removeEventListener("mousedown", handleClick);
   }, [open, onClose]);
 
-  if (!open) return null;
-
   return (
-    <div
-      ref={ref}
-      className="absolute right-0 top-full z-30 mt-2 w-52 rounded-xl border border-white/10 bg-[#1a1d2e] p-3 shadow-xl"
-    >
-      {DASHBOARD_FILTER_OPTIONS.map((option) => (
-        <button
-          key={option.id}
-          type="button"
-          className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/10"
-          onClick={() => onSelect(option.id)}
-        >
-          {option.label}
-        </button>
-      ))}
-      <hr className="my-2 border-white/10" />
-      <div className="space-y-2">
-        <label className="block text-xs text-slate-400">
-          From
-          <input
-            type="date"
-            value={customFrom}
-            onChange={(e) => onCustomFrom(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-white"
-          />
-        </label>
-        <label className="block text-xs text-slate-400">
-          To
-          <input
-            type="date"
-            value={customTo}
-            onChange={(e) => onCustomTo(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-white"
-          />
-        </label>
-        <button
-          type="button"
-          className="w-full rounded-lg bg-teal-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-teal-500"
-          onClick={onApplyCustom}
-        >
-          Apply
-        </button>
-      </div>
+    <div ref={ref} className="relative z-50 shrink-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-white/10"
+      >
+        <span className="text-slate-400">Period:</span>
+        <span>{resolveDashboardFilterLabel(activeFilter)}</span>
+        <ChevronDown className="h-4 w-4 text-slate-400" />
+      </button>
+      {open ? (
+        <div className="absolute right-0 top-full z-[200] mt-2 w-56 rounded-xl border border-white/10 bg-[#1a1d2e] p-3 shadow-2xl ring-1 ring-black/20">
+          <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Date range
+          </p>
+          {DASHBOARD_FILTER_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              className={`block w-full rounded-lg px-3 py-2 text-left text-sm transition hover:bg-white/10 ${
+                activeFilter === option.id ? "bg-teal-600/20 font-semibold text-teal-300" : "text-slate-200"
+              }`}
+              onClick={() => onSelectPreset(option.id)}
+            >
+              {option.label}
+            </button>
+          ))}
+          <hr className="my-2 border-white/10" />
+          <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Custom range
+          </p>
+          <div className="space-y-2">
+            <label className="block text-xs text-slate-400">
+              From
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(e) => onCustomFrom(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-white"
+              />
+            </label>
+            <label className="block text-xs text-slate-400">
+              To
+              <input
+                type="date"
+                value={customTo}
+                onChange={(e) => onCustomTo(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-white"
+              />
+            </label>
+            <button
+              type="button"
+              className="w-full rounded-lg bg-teal-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-teal-500"
+              onClick={onApplyCustom}
+            >
+              Apply custom range
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function StatCardMenu({
-  canFilter,
-  canExport,
-  filterOpen,
-  exportOpen,
-  onToggleFilter,
-  onToggleExport,
-  onCloseMenus,
-  onSelectFilter,
-  customFrom,
-  customTo,
-  onCustomFrom,
-  onCustomTo,
-  onApplyCustom,
-  onExport,
-}) {
+function StatCardMenu({ canExport, exportOpen, onToggleExport, onCloseMenus, onExport }) {
   const wrapRef = useRef(null);
 
   useEffect(() => {
@@ -250,61 +262,31 @@ function StatCardMenu({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [onCloseMenus]);
 
+  if (!canExport) return null;
+
   return (
     <div ref={wrapRef} className="relative flex shrink-0 items-center gap-1">
-      {canExport ? (
-        <div className="relative">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-teal-500"
-            onClick={onToggleExport}
-          >
-            Export
-            <ChevronDown className="h-3 w-3 opacity-90" />
-          </button>
-          {exportOpen ? (
-            <div className="absolute right-0 top-full z-30 mt-2 w-28 rounded-xl border border-white/10 bg-[#1a1d2e] p-2 shadow-xl">
-              <button
-                type="button"
-                className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/10"
-                onClick={onExport}
-              >
-                CSV
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-      {canFilter ? (
-        <div className="relative">
-          <button
-            type="button"
-            className="rounded-lg p-1.5 text-slate-500 transition hover:bg-white/10 hover:text-slate-200"
-            aria-label="Filter options"
-            onClick={onToggleFilter}
-          >
-            <MoreVertical className="h-4 w-4" />
-          </button>
-          <FilterMenu
-            open={filterOpen}
-            onClose={onCloseMenus}
-            onSelect={onSelectFilter}
-            customFrom={customFrom}
-            customTo={customTo}
-            onCustomFrom={onCustomFrom}
-            onCustomTo={onCustomTo}
-            onApplyCustom={onApplyCustom}
-          />
-        </div>
-      ) : (
+      <div className="relative">
         <button
           type="button"
-          className="rounded-lg p-1.5 text-slate-500 transition hover:bg-white/10 hover:text-slate-200"
-          aria-label="More options"
+          className="inline-flex items-center gap-1 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-teal-500"
+          onClick={onToggleExport}
         >
-          <MoreVertical className="h-4 w-4" />
+          Export
+          <ChevronDown className="h-3 w-3 opacity-90" />
         </button>
-      )}
+        {exportOpen ? (
+          <div className="absolute right-0 top-full z-30 mt-2 w-28 rounded-xl border border-white/10 bg-[#1a1d2e] p-2 shadow-xl">
+            <button
+              type="button"
+              className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/10"
+              onClick={onExport}
+            >
+              CSV
+            </button>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -320,22 +302,19 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
   const [data, setData] = useState(null);
 
-  const [depositFilter, setDepositFilter] = useState("currentyear");
-  const [withdrawalFilter, setWithdrawalFilter] = useState("currentyear");
+  const [depositFilter, setDepositFilter] = useState(DEFAULT_DASHBOARD_FILTER);
+  const [withdrawalFilter, setWithdrawalFilter] = useState(DEFAULT_DASHBOARD_FILTER);
+  const [globalFilter, setGlobalFilter] = useState(DEFAULT_DASHBOARD_FILTER);
+  const [globalCustomFrom, setGlobalCustomFrom] = useState("");
+  const [globalCustomTo, setGlobalCustomTo] = useState("");
+  const [globalFilterOpen, setGlobalFilterOpen] = useState(false);
   const [depositAmount, setDepositAmount] = useState(null);
   const [withdrawalAmount, setWithdrawalAmount] = useState(null);
   const [depositDuration, setDepositDuration] = useState("");
   const [withdrawalDuration, setWithdrawalDuration] = useState("");
 
-  const [depositFilterOpen, setDepositFilterOpen] = useState(false);
-  const [withdrawalFilterOpen, setWithdrawalFilterOpen] = useState(false);
   const [depositExportOpen, setDepositExportOpen] = useState(false);
   const [withdrawalExportOpen, setWithdrawalExportOpen] = useState(false);
-
-  const [depositCustomFrom, setDepositCustomFrom] = useState("");
-  const [depositCustomTo, setDepositCustomTo] = useState("");
-  const [withdrawalCustomFrom, setWithdrawalCustomFrom] = useState("");
-  const [withdrawalCustomTo, setWithdrawalCustomTo] = useState("");
 
   useEffect(() => {
     if (!canViewDashboard) {
@@ -347,64 +326,87 @@ export default function DashboardPage() {
     }
   }, [canViewDashboard, permissions, router]);
 
-  const loadDashboard = useCallback(async () => {
+  const loadRequestRef = useRef(0);
+
+  const loadDashboard = useCallback(async (filter, from, to) => {
+    const requestId = ++loadRequestRef.current;
     setLoading(true);
     setError("");
+    const resolvedFilter = filter || DEFAULT_DASHBOARD_FILTER;
+    const customFrom = resolvedFilter === "customdate" ? from : undefined;
+    const customTo = resolvedFilter === "customdate" ? to : undefined;
+    setGlobalFilter(resolvedFilter);
+
+    // Start platforms in parallel so cards/charts can paint without waiting on that scan.
+    const platformsPromise = fetchDashboardPlatforms({
+      filter: resolvedFilter,
+      from: customFrom,
+      to: customTo,
+    }).catch(() => null);
+
     try {
-      const response = await fetchAdminDashboard();
+      const response = await fetchAdminDashboard({
+        filter: resolvedFilter,
+        from: customFrom,
+        to: customTo,
+      });
+
+      if (requestId !== loadRequestRef.current) return;
+
+      // New API always returns periodLabel + filter; old process ignores query and omits them.
+      if (!response?.periodLabel || (response.filter && response.filter !== resolvedFilter)) {
+        throw new Error(
+          "Dashboard API did not apply the date filter. Restart ITrustLD_Backend on port 4000, then refresh.",
+        );
+      }
+
       setData(response);
-      setDepositAmount(response.totalCompletedDeposits);
-      setWithdrawalAmount(response.totalCompletedWithdrawals);
-      setDepositDuration(resolveDashboardDurationLabel("currentyear", response.year));
-      setWithdrawalDuration(resolveDashboardDurationLabel("currentyear", response.year));
-      setDepositFilter("currentyear");
-      setWithdrawalFilter("currentyear");
+      setDepositAmount(Number(response.totalCompletedDeposits) || 0);
+      setWithdrawalAmount(Number(response.totalCompletedWithdrawals) || 0);
+      const duration = resolveDashboardDurationLabel(
+        resolvedFilter,
+        response.year,
+        response.periodLabel,
+      );
+      setDepositDuration(duration);
+      setWithdrawalDuration(duration);
+      setDepositFilter(resolvedFilter);
+      setWithdrawalFilter(resolvedFilter);
+      setLoading(false);
+
+      const needsPlatforms =
+        response.platformsDeferred ||
+        !Array.isArray(response.platforms) ||
+        response.platforms.length === 0;
+      if (needsPlatforms) {
+        const platforms = await platformsPromise;
+        if (requestId !== loadRequestRef.current || !platforms) return;
+        setData((prev) => (prev ? { ...prev, platforms, platformsDeferred: false } : prev));
+      }
     } catch (err) {
+      if (requestId !== loadRequestRef.current) return;
       setError(err.message || "Failed to load dashboard.");
-    } finally {
       setLoading(false);
     }
   }, []);
 
+  const applyGlobalFilter = useCallback(
+    async (filter, from, to) => {
+      if (filter === "customdate") {
+        setGlobalCustomFrom(from || "");
+        setGlobalCustomTo(to || "");
+      }
+      setGlobalFilterOpen(false);
+      await loadDashboard(filter, from, to);
+    },
+    [loadDashboard],
+  );
+
   useEffect(() => {
     if (canViewDashboard) {
-      loadDashboard();
+      loadDashboard(DEFAULT_DASHBOARD_FILTER);
     }
   }, [canViewDashboard, loadDashboard]);
-
-  const applyDepositFilter = useCallback(
-    async (filter, from, to) => {
-      if (!canFilterDeposits || !data) return;
-      try {
-        const total = await fetchFilteredDepositsTotal({ filter, from, to });
-        setDepositAmount(total);
-        setDepositFilter(filter);
-        setDepositDuration(resolveDashboardDurationLabel(filter, data.year));
-      } catch (err) {
-        setError(err.message || "Failed to filter deposits.");
-      } finally {
-        setDepositFilterOpen(false);
-      }
-    },
-    [canFilterDeposits, data],
-  );
-
-  const applyWithdrawalFilter = useCallback(
-    async (filter, from, to) => {
-      if (!canFilterWithdrawals || !data) return;
-      try {
-        const total = await fetchFilteredWithdrawalsTotal({ filter, from, to });
-        setWithdrawalAmount(total);
-        setWithdrawalFilter(filter);
-        setWithdrawalDuration(resolveDashboardDurationLabel(filter, data.year));
-      } catch (err) {
-        setError(err.message || "Failed to filter withdrawals.");
-      } finally {
-        setWithdrawalFilterOpen(false);
-      }
-    },
-    [canFilterWithdrawals, data],
-  );
 
   if (!canViewDashboard) {
     return (
@@ -431,25 +433,61 @@ export default function DashboardPage() {
 
   const year = data?.year ?? new Date().getFullYear();
   const monthName = data?.monthName ?? MONTHS[new Date().getMonth()];
+  const periodLabel =
+    data?.periodLabel ||
+    resolveDashboardDurationLabel(globalFilter, year) ||
+    String(year);
+  const chartMode = data?.chartMode ?? (globalFilter === "last7days" || globalFilter === "today" || globalFilter === "yesterday" || globalFilter === "lastmonth" ? "daily" : "monthly");
+  const revenueLabels = data?.revenueLabels ?? MONTHS;
   const platforms = data?.platforms ?? [];
   const growth = data?.growth ?? {};
   const isLoading = loading && !data;
+
+  const revenueTitle =
+    chartMode === "daily" ? "Daily Revenue in ('000 USD)" : "Total Monthly Revenue in ('000 USD)";
+  const profitTitle = chartMode === "daily" ? "Daily Profit" : "Monthly Profit";
+  const dailyProfitTitle =
+    globalFilter === DEFAULT_DASHBOARD_FILTER ? "Daily Profit" : "Period Profit Trend";
+  const dailyProfitSubtitle =
+    globalFilter === DEFAULT_DASHBOARD_FILTER ? monthName : periodLabel;
+  const platformsTitle =
+    globalFilter === DEFAULT_DASHBOARD_FILTER ? "All Time Transactions" : `Transactions (${periodLabel})`;
 
   return (
     <div className="pb-10">
       <Breadcrumb items={[{ label: "Dashboard" }]} />
 
-      <div className="admin-fade-up mb-6 flex items-start justify-between gap-3">
+      <div className="admin-fade-up relative z-30 mb-6 flex items-start justify-between gap-3 overflow-visible">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-white">Dashboard</h1>
           <p className="mt-1 text-sm text-slate-400">Completed volumes, revenue and profit overview</p>
         </div>
-        {loading ? (
-          <span className="inline-flex items-center gap-2 text-xs text-slate-500">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Updating…
-          </span>
-        ) : null}
+        <div className="flex items-center gap-3">
+          {loading ? (
+            <span className="inline-flex items-center gap-2 text-xs text-slate-500">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Updating…
+            </span>
+          ) : null}
+          <DashboardDateFilter
+            open={globalFilterOpen}
+            onToggle={() => setGlobalFilterOpen((open) => !open)}
+            onClose={() => setGlobalFilterOpen(false)}
+            activeFilter={globalFilter}
+            customFrom={globalCustomFrom}
+            customTo={globalCustomTo}
+            onCustomFrom={setGlobalCustomFrom}
+            onCustomTo={setGlobalCustomTo}
+            onSelectPreset={(filter) => applyGlobalFilter(filter)}
+            onApplyCustom={() => {
+              if (!globalCustomFrom || !globalCustomTo) {
+                setError("Select both start and end dates for a custom range.");
+                return;
+              }
+              applyGlobalFilter("customdate", globalCustomFrom, globalCustomTo);
+            }}
+          />
+        </div>
       </div>
 
       {error ? (
@@ -458,7 +496,7 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="relative z-0 grid gap-4 lg:grid-cols-2">
         <article className="admin-card admin-fade-up p-5">
           <div className="admin-stat-glow -right-8 -top-10 bg-theme-green-action" />
           <div className="relative flex items-start justify-between gap-3">
@@ -479,36 +517,18 @@ export default function DashboardPage() {
               </div>
             </div>
             <StatCardMenu
-              canFilter={canFilterDeposits}
               canExport={canFilterDeposits}
-              filterOpen={depositFilterOpen}
               exportOpen={depositExportOpen}
-              onToggleFilter={() => {
-                setDepositExportOpen(false);
-                setDepositFilterOpen((open) => !open);
-              }}
-              onToggleExport={() => {
-                setDepositFilterOpen(false);
-                setDepositExportOpen((open) => !open);
-              }}
-              onCloseMenus={() => {
-                setDepositFilterOpen(false);
-                setDepositExportOpen(false);
-              }}
-              onSelectFilter={(filter) => applyDepositFilter(filter)}
-              customFrom={depositCustomFrom}
-              customTo={depositCustomTo}
-              onCustomFrom={setDepositCustomFrom}
-              onCustomTo={setDepositCustomTo}
-              onApplyCustom={() => applyDepositFilter("customdate", depositCustomFrom, depositCustomTo)}
+              onToggleExport={() => setDepositExportOpen((open) => !open)}
+              onCloseMenus={() => setDepositExportOpen(false)}
               onExport={async () => {
                 setDepositExportOpen(false);
                 try {
                   await downloadDepositsExport({
                     status: "Completed",
                     filter: depositFilter,
-                    fromDate: depositFilter === "customdate" ? depositCustomFrom : undefined,
-                    toDate: depositFilter === "customdate" ? depositCustomTo : undefined,
+                    fromDate: depositFilter === "customdate" ? globalCustomFrom : undefined,
+                    toDate: depositFilter === "customdate" ? globalCustomTo : undefined,
                   });
                 } catch (err) {
                   setError(err.message || "Export failed.");
@@ -538,38 +558,18 @@ export default function DashboardPage() {
               </div>
             </div>
             <StatCardMenu
-              canFilter={canFilterWithdrawals}
               canExport={canFilterWithdrawals}
-              filterOpen={withdrawalFilterOpen}
               exportOpen={withdrawalExportOpen}
-              onToggleFilter={() => {
-                setWithdrawalExportOpen(false);
-                setWithdrawalFilterOpen((open) => !open);
-              }}
-              onToggleExport={() => {
-                setWithdrawalFilterOpen(false);
-                setWithdrawalExportOpen((open) => !open);
-              }}
-              onCloseMenus={() => {
-                setWithdrawalFilterOpen(false);
-                setWithdrawalExportOpen(false);
-              }}
-              onSelectFilter={(filter) => applyWithdrawalFilter(filter)}
-              customFrom={withdrawalCustomFrom}
-              customTo={withdrawalCustomTo}
-              onCustomFrom={setWithdrawalCustomFrom}
-              onCustomTo={setWithdrawalCustomTo}
-              onApplyCustom={() =>
-                applyWithdrawalFilter("customdate", withdrawalCustomFrom, withdrawalCustomTo)
-              }
+              onToggleExport={() => setWithdrawalExportOpen((open) => !open)}
+              onCloseMenus={() => setWithdrawalExportOpen(false)}
               onExport={async () => {
                 setWithdrawalExportOpen(false);
                 try {
                   await downloadWithdrawalsExport({
                     status: "Completed",
                     filter: withdrawalFilter,
-                    fromDate: withdrawalFilter === "customdate" ? withdrawalCustomFrom : undefined,
-                    toDate: withdrawalFilter === "customdate" ? withdrawalCustomTo : undefined,
+                    fromDate: withdrawalFilter === "customdate" ? globalCustomFrom : undefined,
+                    toDate: withdrawalFilter === "customdate" ? globalCustomTo : undefined,
                   });
                 } catch (err) {
                   setError(err.message || "Export failed.");
@@ -580,24 +580,24 @@ export default function DashboardPage() {
         </article>
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-12">
+      <div className="relative z-0 mt-4 grid gap-4 xl:grid-cols-12">
         <section className="admin-card admin-fade-up p-5 xl:col-span-6">
           <div className="mb-2 flex items-start justify-between gap-2">
             <div>
-              <h2 className="text-sm font-semibold text-slate-100">Total Monthly Revenue in (&apos;000 USD)</h2>
-              <p className="mt-0.5 text-xs text-slate-500">{year}</p>
+              <h2 className="text-sm font-semibold text-slate-100">{revenueTitle}</h2>
+              <p className="mt-0.5 text-xs text-slate-500">{periodLabel}</p>
             </div>
           </div>
           {isLoading ? <Skeleton className="h-52 w-full" /> : (
-            <BarChart values={data?.monthlyRevenue ?? []} labels={MONTHS} />
+            <BarChart values={data?.monthlyRevenue ?? []} labels={revenueLabels} />
           )}
         </section>
 
         <section className="admin-card admin-fade-up admin-fade-up-delay-1 flex flex-col p-5 xl:col-span-3">
           <div className="mb-1 flex items-start justify-between gap-2">
             <div>
-              <h2 className="text-sm font-semibold text-slate-100">Monthly Profit</h2>
-              <p className="mt-0.5 text-xs text-slate-500">{year}</p>
+              <h2 className="text-sm font-semibold text-slate-100">{profitTitle}</h2>
+              <p className="mt-0.5 text-xs text-slate-500">{periodLabel}</p>
             </div>
           </div>
           <div className="mt-2 h-36 flex-1">
@@ -625,8 +625,8 @@ export default function DashboardPage() {
         <section className="admin-card admin-fade-up admin-fade-up-delay-2 flex flex-col p-5 xl:col-span-3">
           <div className="mb-1 flex items-start justify-between gap-2">
             <div>
-              <h2 className="text-sm font-semibold text-slate-100">Daily Profit</h2>
-              <p className="mt-0.5 text-xs text-slate-500">{monthName}</p>
+              <h2 className="text-sm font-semibold text-slate-100">{dailyProfitTitle}</h2>
+              <p className="mt-0.5 text-xs text-slate-500">{dailyProfitSubtitle}</p>
             </div>
           </div>
           <div className="mt-2 h-36 flex-1">
@@ -656,10 +656,10 @@ export default function DashboardPage() {
         </section>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <div className="relative z-0 mt-4 grid gap-4 lg:grid-cols-2">
         <section className="admin-card admin-fade-up p-5">
           <div className="mb-4 flex items-start justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-100">All Time Transactions</h2>
+            <h2 className="text-sm font-semibold text-slate-100">{platformsTitle}</h2>
           </div>
           <ul className="divide-y divide-white/10">
             {isLoading

@@ -31,9 +31,12 @@ const emptyForm = {
   currency: "USD",
   minLimit: "",
   maxLimit: "",
-  platformType: "INT",
+  platformTypes: ["INT"],
   terms: "",
   active: true,
+  allowForVoucher: false,
+  allowNavigateButton: false,
+  navigateUrl: "",
   badgeColor: "#236B6B",
 };
 
@@ -148,6 +151,11 @@ function isPaymentMethodSelected(selectedIds, paymentMethodId) {
   return selectedIds.some((id) => Number(id) === targetId);
 }
 
+function isPlatformTypeSelected(selectedTypes, platformType) {
+  const target = String(platformType || "").toLowerCase();
+  return (selectedTypes || []).some((type) => String(type).toLowerCase() === target);
+}
+
 function WalletSection({
   title,
   activateLabel,
@@ -167,6 +175,7 @@ function WalletSection({
   deleteRow,
   toggleRowStatus,
   fallbackTerms,
+  showVoucherFlag = false,
 }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -228,9 +237,15 @@ function WalletSection({
         currency: wallet.currency || currencyOptions[0] || "USD",
         minLimit: wallet.minLimit === 0 || wallet.minLimit ? String(wallet.minLimit) : "",
         maxLimit: wallet.maxLimit === 0 || wallet.maxLimit ? String(wallet.maxLimit) : "",
-        platformType: wallet.platformType || "INT",
+        platformTypes:
+          Array.isArray(wallet.platformTypes) && wallet.platformTypes.length
+            ? wallet.platformTypes
+            : ["INT"],
         terms: wallet.terms || "",
         active: wallet.active,
+        allowForVoucher: Boolean(wallet.allowForVoucher),
+        allowNavigateButton: Boolean(wallet.allowNavigateButton),
+        navigateUrl: wallet.navigateUrl || "",
         badgeColor: wallet.badgeColor || "#236B6B",
       });
     } catch (error) {
@@ -248,6 +263,17 @@ function WalletSection({
         ? m.paymentMethodIds.filter((id) => Number(id) !== normalizedId)
         : [...m.paymentMethodIds, normalizedId];
       return { ...m, paymentMethodIds: selected };
+    });
+  }
+
+  function togglePlatformType(platformType) {
+    setModal((m) => {
+      if (!m) return m;
+      const current = Array.isArray(m.platformTypes) ? m.platformTypes : [];
+      const selected = isPlatformTypeSelected(current, platformType)
+        ? current.filter((type) => String(type).toLowerCase() !== String(platformType).toLowerCase())
+        : [...current, platformType];
+      return { ...m, platformTypes: selected };
     });
   }
 
@@ -272,20 +298,33 @@ function WalletSection({
       minLimit,
       maxLimit,
       currency,
-      platformType,
+      platformTypes,
       terms,
+      allowForVoucher,
+      allowNavigateButton,
+      navigateUrl,
     } = modal;
 
-    if (!name.trim() || !currency || paymentMethodIds.length === 0) return;
+    const selectedPlatformTypes = Array.isArray(platformTypes) ? platformTypes : [];
+    if (!name.trim() || !currency || paymentMethodIds.length === 0 || selectedPlatformTypes.length === 0) {
+      return;
+    }
+    if (allowNavigateButton && !String(navigateUrl || "").trim()) {
+      window.alert("Navigate URL is required when the navigate button is enabled.");
+      return;
+    }
 
     const payload = {
       name: name.trim(),
       currency,
       minLimit: Number(minLimit) || 0,
       maxLimit: Number(maxLimit) || 0,
-      platformType: platformType || "INT",
+      platformTypes: selectedPlatformTypes,
       terms: terms?.trim() || "",
       paymentMethodIds: paymentMethodIds.map((id) => Number(id)),
+      allowNavigateButton: Boolean(allowNavigateButton),
+      navigateUrl: Boolean(allowNavigateButton) ? String(navigateUrl || "").trim() : "",
+      ...(showVoucherFlag ? { allowForVoucher: Boolean(allowForVoucher) } : {}),
     };
 
     setSaving(true);
@@ -379,6 +418,33 @@ function WalletSection({
               <FieldRow label="Minimum limit">{formatLimit(row.minLimit)}</FieldRow>
               <FieldRow label="Maximum limit">{formatLimit(row.maxLimit)}</FieldRow>
               <FieldRow label="Currency">{row.currency}</FieldRow>
+              <FieldRow label="Platform type">
+                {Array.isArray(row.platformTypes) && row.platformTypes.length
+                  ? row.platformTypes.join(", ")
+                  : row.platformType || "—"}
+              </FieldRow>
+              {showVoucherFlag ? (
+                <FieldRow label="Client bonus voucher">
+                  <span
+                    className={
+                      row.allowForVoucher
+                        ? "font-semibold text-theme-green-action"
+                        : "text-slate-400"
+                    }
+                  >
+                    {row.allowForVoucher ? "Allowed" : "Not allowed"}
+                  </span>
+                </FieldRow>
+              ) : null}
+              <FieldRow label="Navigate button">
+                {row.allowNavigateButton ? (
+                  <span className="break-all font-semibold text-theme-green-action">
+                    Enabled · {row.navigateUrl || "—"}
+                  </span>
+                ) : (
+                  <span className="text-slate-400">Disabled</span>
+                )}
+              </FieldRow>
               <FieldRow label="Terms & Conditions">
                 <button
                   type="button"
@@ -525,21 +591,28 @@ function WalletSection({
             </label>
           </div>
 
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-300">Platform Type</span>
-            <select
-              required
-              value={modal.platformType}
-              onChange={(e) => setModal((m) => ({ ...m, platformType: e.target.value }))}
-              className={inputCls}
-            >
+          <fieldset>
+            <legend className="mb-2 text-sm font-medium text-slate-300">Platform Type</legend>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {platformTypes.map((type) => (
-                <option key={type} value={type}>
+                <label
+                  key={type}
+                  className="flex cursor-pointer items-center gap-2.5 rounded-lg px-1 py-0.5 text-sm text-slate-300 hover:bg-white/5"
+                >
+                  <input
+                    type="checkbox"
+                    checked={isPlatformTypeSelected(modal.platformTypes, type)}
+                    onChange={() => togglePlatformType(type)}
+                    className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action"
+                  />
                   {type}
-                </option>
+                </label>
               ))}
-            </select>
-          </label>
+            </div>
+            {!modal.platformTypes?.length ? (
+              <p className="mt-2 text-xs text-theme-red-action">Select at least one platform type.</p>
+            ) : null}
+          </fieldset>
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-slate-300">
@@ -554,6 +627,67 @@ function WalletSection({
               placeholder="Enter terms and conditions"
             />
           </label>
+
+          {showVoucherFlag ? (
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-3 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={Boolean(modal.allowForVoucher)}
+                onChange={(e) =>
+                  setModal((m) => (m ? { ...m, allowForVoucher: e.target.checked } : m))
+                }
+                className="mt-0.5 h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action"
+              />
+              <span>
+                <span className="block font-medium text-white">Allow for client bonus voucher</span>
+                <span className="mt-0.5 block text-xs text-slate-500">
+                  When enabled, this wallet appears in the partner Claim Client Bonus topup method
+                  dropdown.
+                </span>
+              </span>
+            </label>
+          ) : null}
+
+          <div className="space-y-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-3">
+            <label className="flex cursor-pointer items-start gap-2.5 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={Boolean(modal.allowNavigateButton)}
+                onChange={(e) =>
+                  setModal((m) =>
+                    m
+                      ? {
+                          ...m,
+                          allowNavigateButton: e.target.checked,
+                          navigateUrl: e.target.checked ? m.navigateUrl : "",
+                        }
+                      : m,
+                  )
+                }
+                className="mt-0.5 h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action"
+              />
+              <span>
+                <span className="block font-medium text-white">Allow navigate button</span>
+                <span className="mt-0.5 block text-xs text-slate-500">
+                  When enabled, users can open the configured URL from this wallet.
+                </span>
+              </span>
+            </label>
+
+            {modal.allowNavigateButton ? (
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-slate-300">Navigate URL</span>
+                <input
+                  required
+                  type="url"
+                  value={modal.navigateUrl}
+                  onChange={(e) => setModal((m) => (m ? { ...m, navigateUrl: e.target.value } : m))}
+                  className={inputCls}
+                  placeholder="https://example.com/path"
+                />
+              </label>
+            ) : null}
+          </div>
         </ModalShell>
       ) : null}
 
@@ -598,6 +732,7 @@ export default function WalletsPanel() {
   const [meta, setMeta] = useState({
     paymentOptions: [],
     currencyTypes: ["USD"],
+    platformTypes: TOPUP_WALLET_PLATFORM_TYPES,
   });
 
   const refreshPaymentOptions = useCallback(async () => {
@@ -608,6 +743,10 @@ export default function WalletsPanel() {
         Array.isArray(data.currencyTypes) && data.currencyTypes.length > 0
           ? data.currencyTypes
           : ["USD"],
+      platformTypes:
+        Array.isArray(data.platformTypes) && data.platformTypes.length > 0
+          ? data.platformTypes
+          : TOPUP_WALLET_PLATFORM_TYPES,
     });
     return data;
   }, []);
@@ -627,7 +766,7 @@ export default function WalletsPanel() {
         deleteConfirm="Delete this top-up wallet?"
         paymentOptionChoices={meta.paymentOptions}
         currencyOptions={meta.currencyTypes}
-        platformTypes={TOPUP_WALLET_PLATFORM_TYPES}
+        platformTypes={meta.platformTypes}
         loadRows={fetchTopupWallets}
         fetchWalletById={fetchTopupWallet}
         onRefreshPaymentOptions={refreshPaymentOptions}
@@ -636,6 +775,7 @@ export default function WalletsPanel() {
         deleteRow={deleteTopupWallet}
         toggleRowStatus={toggleTopupWalletStatus}
         fallbackTerms="Standard top-up wallet terms apply. Limits and processing times may vary by payment method."
+        showVoucherFlag
       />
 
       <WalletSection
@@ -648,7 +788,7 @@ export default function WalletsPanel() {
         deleteConfirm="Delete this cash-out wallet?"
         paymentOptionChoices={meta.paymentOptions}
         currencyOptions={meta.currencyTypes}
-        platformTypes={TOPUP_WALLET_PLATFORM_TYPES}
+        platformTypes={meta.platformTypes}
         loadRows={fetchCashoutWallets}
         fetchWalletById={fetchCashoutWallet}
         onRefreshPaymentOptions={refreshPaymentOptions}
