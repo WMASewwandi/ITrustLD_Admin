@@ -96,14 +96,18 @@ export default function BannersPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [editId, setEditId] = useState(null);
   const [mediaFile, setMediaFile] = useState(null);
+  const [mediaFiles, setMediaFiles] = useState([]);
   const [mediaPreviewUrl, setMediaPreviewUrl] = useState("");
-  const [existingMediaUrl, setExistingMediaUrl] = useState("");
+  const [mediaPreviewUrls, setMediaPreviewUrls] = useState([]);
+  const [existingMediaUrls, setExistingMediaUrls] = useState([]);
   const [removeMedia, setRemoveMedia] = useState(false);
   const [flash, setFlash] = useState("");
   const [pageError, setPageError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  const isSlider = form.displayType === "Slider";
 
   const loadBanners = useCallback(async () => {
     setLoading(true);
@@ -125,42 +129,68 @@ export default function BannersPage() {
   useEffect(() => {
     return () => {
       if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl);
+      mediaPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [mediaPreviewUrl]);
+  }, [mediaPreviewUrl, mediaPreviewUrls]);
 
   function update(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
     setFlash("");
   }
 
+  function revokePreviewUrls(urls = mediaPreviewUrls) {
+    urls.forEach((url) => URL.revokeObjectURL(url));
+  }
+
   function resetForm() {
     setForm(EMPTY_FORM);
     setEditId(null);
     setMediaFile(null);
+    setMediaFiles([]);
     setRemoveMedia(false);
-    setExistingMediaUrl("");
+    setExistingMediaUrls([]);
     if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl);
+    revokePreviewUrls();
     setMediaPreviewUrl("");
+    setMediaPreviewUrls([]);
     setFlash("");
   }
 
   function handleMediaChange(e) {
-    const file = e.target.files?.[0];
+    const picked = Array.from(e.target.files || []);
     e.target.value = "";
-    if (!file) return;
-    if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl);
-    setMediaFile(file);
-    setRemoveMedia(false);
-    setMediaPreviewUrl(URL.createObjectURL(file));
+    if (!picked.length) return;
+
+    if (isSlider) {
+      if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl);
+      revokePreviewUrls();
+      setMediaFile(picked[0] ?? null);
+      setMediaPreviewUrl(picked[0] ? URL.createObjectURL(picked[0]) : "");
+      setMediaFiles(picked);
+      setMediaPreviewUrls(picked.map((file) => URL.createObjectURL(file)));
+      setRemoveMedia(false);
+    } else {
+      const file = picked[0];
+      if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl);
+      revokePreviewUrls();
+      setMediaFiles([]);
+      setMediaPreviewUrls([]);
+      setMediaFile(file);
+      setRemoveMedia(false);
+      setMediaPreviewUrl(URL.createObjectURL(file));
+    }
     setFlash("");
   }
 
   function clearMedia() {
     if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl);
+    revokePreviewUrls();
     setMediaFile(null);
+    setMediaFiles([]);
     setMediaPreviewUrl("");
+    setMediaPreviewUrls([]);
     setRemoveMedia(true);
-    setExistingMediaUrl("");
+    setExistingMediaUrls([]);
   }
 
   async function handleSubmit(e) {
@@ -170,11 +200,25 @@ export default function BannersPage() {
     setPageError("");
     try {
       const payload = { ...form, removeMedia };
+      const uploadFiles = isSlider
+        ? mediaFiles.length
+          ? mediaFiles
+          : mediaFile
+            ? [mediaFile]
+            : []
+        : mediaFile
+          ? [mediaFile]
+          : [];
+
       if (editId) {
-        await updatePromotionalBanner(editId, payload, mediaFile);
+        await updatePromotionalBanner(
+          editId,
+          payload,
+          uploadFiles.length ? uploadFiles : undefined,
+        );
         setFlash("updated");
       } else {
-        await createPromotionalBanner(payload, mediaFile);
+        await createPromotionalBanner(payload, uploadFiles.length ? uploadFiles : undefined);
         setFlash("saved");
       }
       resetForm();
@@ -202,10 +246,19 @@ export default function BannersPage() {
     });
     setEditId(banner.id);
     setMediaFile(null);
+    setMediaFiles([]);
     setRemoveMedia(false);
     if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl);
+    revokePreviewUrls();
     setMediaPreviewUrl("");
-    setExistingMediaUrl(banner.mediaUrl || "");
+    setMediaPreviewUrls([]);
+    const urls =
+      Array.isArray(banner.mediaUrls) && banner.mediaUrls.length
+        ? banner.mediaUrls.filter(Boolean)
+        : banner.mediaUrl
+          ? [banner.mediaUrl]
+          : [];
+    setExistingMediaUrls(urls);
     setFlash("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -228,7 +281,8 @@ export default function BannersPage() {
 
   const previewBanner = {
     ...form,
-    mediaPreviewUrl: mediaPreviewUrl || (!removeMedia ? existingMediaUrl : ""),
+    mediaPreviewUrl:
+      mediaPreviewUrl || (!removeMedia ? existingMediaUrls[0] || "" : ""),
   };
 
   return (
@@ -363,8 +417,41 @@ export default function BannersPage() {
             </label>
 
             <div className="block">
-              <FieldLabel>Media (Image / GIF / Video)</FieldLabel>
-              {mediaPreviewUrl || existingMediaUrl ? (
+              <FieldLabel>
+                Media (Image / GIF / Video)
+                {isSlider ? (
+                  <span className="ml-1 text-slate-500">
+                    {editId
+                      ? "— select multiple to replace all slides on this banner"
+                      : "— select multiple images (saved as one banner)"}
+                  </span>
+                ) : editId ? (
+                  <span className="ml-1 text-slate-500">— optional, replaces current media</span>
+                ) : null}
+              </FieldLabel>
+              {isSlider && mediaPreviewUrls.length > 0 ? (
+                <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {mediaPreviewUrls.map((url, index) => (
+                    <div key={url} className="overflow-hidden rounded-lg border border-white/10 bg-white/5">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt="" className="h-24 w-full object-cover" />
+                      <p className="px-2 py-1 text-[10px] text-slate-400">Slide {index + 1}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {isSlider && !mediaPreviewUrls.length && !removeMedia && existingMediaUrls.length > 0 ? (
+                <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {existingMediaUrls.map((url, index) => (
+                    <div key={url} className="overflow-hidden rounded-lg border border-white/10 bg-white/5">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt="" className="h-24 w-full object-cover" />
+                      <p className="px-2 py-1 text-[10px] text-slate-400">Slide {index + 1}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {!isSlider && (mediaPreviewUrl || (!removeMedia && existingMediaUrls[0])) ? (
                 <div className="mb-2 flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">
                   <span className="truncate">{mediaFile?.name || "Current media attached"}</span>
                   <button type="button" onClick={clearMedia} className="text-rose-300 hover:text-rose-200">
@@ -372,9 +459,22 @@ export default function BannersPage() {
                   </button>
                 </div>
               ) : null}
+              {isSlider && (mediaFiles.length > 0 || (!removeMedia && existingMediaUrls.length > 0)) ? (
+                <div className="mb-2 flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">
+                  <span>
+                    {mediaFiles.length > 0
+                      ? `${mediaFiles.length} new image${mediaFiles.length !== 1 ? "s" : ""} selected`
+                      : `${existingMediaUrls.length} current slide image${existingMediaUrls.length !== 1 ? "s" : ""}`}
+                  </span>
+                  <button type="button" onClick={clearMedia} className="text-rose-300 hover:text-rose-200">
+                    Remove all
+                  </button>
+                </div>
+              ) : null}
               <input
                 type="file"
                 accept="image/*,video/*,.gif"
+                multiple={isSlider}
                 onChange={handleMediaChange}
                 className={`${inputCls} file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-slate-300`}
               />
@@ -389,9 +489,7 @@ export default function BannersPage() {
               {editId ? "Update Banner" : "Save Banner"}
             </button>
             {flash ? (
-              <p className="text-center text-sm text-theme-green-action">
-                Banner {flash} successfully.
-              </p>
+              <p className="text-center text-sm text-theme-green-action">Banner {flash} successfully.</p>
             ) : null}
           </div>
         </form>
@@ -451,7 +549,11 @@ export default function BannersPage() {
                         />
                         <div>
                           <p className="font-medium text-white">{b.title}</p>
-                          <p className="text-[11px] text-slate-500">{b.mediaName || "No media"}</p>
+                          <p className="text-[11px] text-slate-500">
+                            {b.mediaCount > 1
+                              ? `${b.mediaCount} images`
+                              : b.mediaName || "No media"}
+                          </p>
                         </div>
                       </div>
                     </td>

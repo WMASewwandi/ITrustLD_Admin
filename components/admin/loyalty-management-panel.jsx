@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Mail, MessageSquare, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { inputCls } from "@/components/admin/queue-ui";
 import { sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
@@ -23,10 +24,30 @@ import {
 } from "@/lib/loyalty-management";
 
 const LEVEL_META = [
-  { key: "SILVER", label: "Silver Level", configKey: "silver_bonus" },
-  { key: "GOLD", label: "Gold Level", configKey: "gold_bonus" },
-  { key: "DIAMOND", label: "Diamond Level", configKey: "diamond_bonus" },
+  { key: "SILVER", label: "Silver Level", configKey: "silver_bonus", masterId: "SILVER-BONUS" },
+  { key: "GOLD", label: "Gold Level", configKey: "gold_bonus", masterId: "GOLD-BONUS" },
+  { key: "DIAMOND", label: "Diamond Level", configKey: "diamond_bonus", masterId: "DIAMOND-BONUS" },
+  { key: "VIP", label: "VIP Level", configKey: "vip_bonus", masterId: "VIP-BONUS" },
+  { key: "VVIP", label: "VVIP Level", configKey: "vvip_bonus", masterId: "VVIP-BONUS" },
 ];
+
+const AUDIENCE_OPTIONS = [
+  { label: "Normal Users", param: "normal", apiKey: "standard" },
+  { label: "Affiliate Users", param: "affiliate", apiKey: "affiliate" },
+];
+
+function resolveAudienceOption(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  if (
+    value === "affiliate" ||
+    value === "partner" ||
+    value === "affiliate users" ||
+    value === "affiliate partners"
+  ) {
+    return AUDIENCE_OPTIONS[1];
+  }
+  return AUDIENCE_OPTIONS[0];
+}
 
 function ActiveCheckbox({ checked, onChange, disabled, title }) {
   return (
@@ -127,7 +148,14 @@ function AmountModal({ open, title, fields, saving, onClose, onSave }) {
 }
 
 export default function LoyaltyManagementPanel() {
-  const [audience, setAudience] = useState("Normal Users");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const audienceOption = resolveAudienceOption(searchParams.get("audience"));
+  const audience = audienceOption.label;
+  const isAffiliate = audienceOption.param === "affiliate";
+  const audienceKey = audienceOption.apiKey;
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyKey, setBusyKey] = useState("");
@@ -145,8 +173,16 @@ export default function LoyaltyManagementPanel() {
   const [smsMessage, setSmsMessage] = useState("");
   const smsSectionRef = useRef(null);
 
-  const isAffiliate = audience === "Affiliate Partners";
-  const audienceKey = isAffiliate ? "partner" : "standard";
+  const setAudience = useCallback(
+    (nextParam) => {
+      const option = resolveAudienceOption(nextParam);
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", "management");
+      params.set("audience", option.param);
+      router.replace(`${pathname}?${params.toString()}`);
+    },
+    [pathname, router, searchParams],
+  );
 
   const reload = useCallback(
     async (silent = false) => {
@@ -172,6 +208,16 @@ export default function LoyaltyManagementPanel() {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  // Keep URL explicit so sidebar "Affiliate Users" / "Normal Users" stays highlighted.
+  useEffect(() => {
+    const current = String(searchParams.get("audience") || "").trim().toLowerCase();
+    if (current === audienceOption.param) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", "management");
+    params.set("audience", audienceOption.param);
+    router.replace(`${pathname}?${params.toString()}`);
+  }, [audienceOption.param, pathname, router, searchParams]);
 
   const topEarners = data?.top_earners || [];
   const pointRows = data?.point_collections || [];
@@ -447,7 +493,7 @@ export default function LoyaltyManagementPanel() {
           <h1 className="text-xl font-bold text-white sm:text-2xl">Loyalty Management</h1>
           <p className="mt-0.5 text-xs text-slate-400">
             {isAffiliate
-              ? "Affiliate partners · point collection · bonus · loyalty levels"
+              ? "Affiliate users · point collection · bonus · Silver / Gold / Diamond / VIP / VVIP levels"
               : "Point collection · bonus · user ranking · Normal Users"}
           </p>
         </div>
@@ -461,18 +507,18 @@ export default function LoyaltyManagementPanel() {
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
             Refresh
           </button>
-          {["Normal Users", "Affiliate Partners"].map((a) => (
+          {AUDIENCE_OPTIONS.map((option) => (
             <button
-              key={a}
+              key={option.param}
               type="button"
-              onClick={() => setAudience(a)}
+              onClick={() => setAudience(option.param)}
               className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
-                audience === a
+                audienceOption.param === option.param
                   ? "bg-gradient-to-r from-admin-teal to-admin-teal-deep text-white"
                   : "border border-white/10 text-slate-400 hover:text-white"
               }`}
             >
-              {a}
+              {option.label}
             </button>
           ))}
         </div>
@@ -565,12 +611,7 @@ export default function LoyaltyManagementPanel() {
             ? LEVEL_META.map((level) => {
                 const rows = data?.loyalty_levels?.[level.key] || [];
                 const config = configs[level.configKey];
-                const masterId =
-                  level.key === "SILVER"
-                    ? "SILVER-BONUS"
-                    : level.key === "GOLD"
-                      ? "GOLD-BONUS"
-                      : "DIAMOND-BONUS";
+                const masterId = level.masterId;
 
                 return (
                   <section key={level.key} className="admin-card overflow-visible p-0">
