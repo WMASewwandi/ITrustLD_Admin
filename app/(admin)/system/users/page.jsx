@@ -43,6 +43,7 @@ const EMPTY_CREATE_FORM = {
   password: "",
   role: "",
   shift: "-",
+  pending_show_count: "",
   is_active: true,
 };
 
@@ -89,6 +90,7 @@ export default function SystemUsersPage() {
         user.role_display_name,
         user.role,
         user.shift,
+        user.pending_show_count,
         user.is_active ? "active" : "inactive",
       ]
         .filter(Boolean)
@@ -113,6 +115,10 @@ export default function SystemUsersPage() {
       email: user.email,
       role: user.role || "",
       shift: user.shift || "-",
+      pending_show_count:
+        user.pending_show_count != null && user.pending_show_count !== ""
+          ? String(user.pending_show_count)
+          : "",
       is_active: user.is_active,
       password: "",
     });
@@ -128,6 +134,7 @@ export default function SystemUsersPage() {
         password: createForm.password,
         role: createForm.role,
         shift: createForm.shift,
+        pending_show_count: createForm.pending_show_count || null,
         is_active: createForm.is_active,
       });
       setUsers((prev) => [...prev, res.user].sort((a, b) => a.name.localeCompare(b.name)));
@@ -150,6 +157,7 @@ export default function SystemUsersPage() {
         email: editUser.email,
         role: editUser.role,
         shift: editUser.shift,
+        pending_show_count: editUser.pending_show_count || null,
         is_active: editUser.is_active,
         password: editUser.password || undefined,
       });
@@ -225,6 +233,11 @@ export default function SystemUsersPage() {
               </span>
               <div className="flex overflow-hidden rounded-xl border border-white/10 bg-admin-surface">
                 <input
+                  type="search"
+                  name="system-user-search"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                   placeholder="Search name, email, role, status…"
@@ -243,13 +256,14 @@ export default function SystemUsersPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-[960px] w-full text-left text-[13px]">
+          <table className="min-w-[1080px] w-full text-left text-[13px]">
             <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
               <tr>
                 <th className="px-3 py-3">User</th>
                 <th className="px-3 py-3">Email</th>
                 <th className="px-3 py-3">Role</th>
                 <th className="px-3 py-3">Shift</th>
+                <th className="px-3 py-3">Pending show</th>
                 <th className="px-3 py-3">Status</th>
                 <th className="px-3 py-3">Created On</th>
                 <th className="px-3 py-3 text-right">Action</th>
@@ -286,6 +300,9 @@ export default function SystemUsersPage() {
                     </span>
                   </td>
                   <td className="px-3 py-3 text-slate-400">{user.shift || "—"}</td>
+                  <td className="px-3 py-3 text-slate-400">
+                    {user.pending_show_count != null ? user.pending_show_count : "All"}
+                  </td>
                   <td className="px-3 py-3">
                     <StatusBadge active={user.is_active} />
                   </td>
@@ -311,7 +328,7 @@ export default function SystemUsersPage() {
               ))}
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-14 text-center text-slate-400">
+                  <td colSpan={8} className="px-4 py-14 text-center text-slate-400">
                     No results found
                   </td>
                 </tr>
@@ -341,10 +358,16 @@ export default function SystemUsersPage() {
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 space-y-4 overflow-auto px-5 py-4">
+            <form
+              className="min-h-0 flex-1 space-y-4 overflow-auto px-5 py-4"
+              autoComplete="off"
+              onSubmit={(e) => e.preventDefault()}
+            >
               <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Name
                 <input
+                  name="system-user-edit-name"
+                  autoComplete="off"
                   value={editUser.name}
                   onChange={(e) => setEditUser((u) => ({ ...u, name: e.target.value }))}
                   className={`mt-1 ${inputCls}`}
@@ -355,6 +378,8 @@ export default function SystemUsersPage() {
                 Email
                 <input
                   type="email"
+                  name="system-user-edit-email"
+                  autoComplete="off"
                   value={editUser.email}
                   onChange={(e) => setEditUser((u) => ({ ...u, email: e.target.value }))}
                   className={`mt-1 ${inputCls}`}
@@ -365,6 +390,8 @@ export default function SystemUsersPage() {
                 Password
                 <input
                   type="password"
+                  name="system-user-edit-password"
+                  autoComplete="new-password"
                   value={editUser.password}
                   onChange={(e) => setEditUser((u) => ({ ...u, password: e.target.value }))}
                   placeholder="Leave blank to keep current password"
@@ -402,6 +429,29 @@ export default function SystemUsersPage() {
                 </select>
               </label>
 
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Pending show count
+                <input
+                  type="number"
+                  min="1"
+                  max="1000"
+                  inputMode="numeric"
+                  placeholder="Optional — leave blank for all"
+                  value={editUser.pending_show_count}
+                  onChange={(e) =>
+                    setEditUser((u) => ({
+                      ...u,
+                      pending_show_count: e.target.value.replace(/[^\d]/g, ""),
+                    }))
+                  }
+                  className={`mt-1 ${inputCls}`}
+                />
+                <span className="mt-1 block text-[11px] font-normal normal-case tracking-normal text-slate-500">
+                  For deposit/withdrawal executives only. Caps how many pending rows load; total count
+                  stays unchanged. Blank = load all.
+                </span>
+              </label>
+
               <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
                 <div>
                   <span className="block text-sm font-medium text-slate-200">Account status</span>
@@ -418,7 +468,7 @@ export default function SystemUsersPage() {
                   className="h-4 w-4 rounded border-white/20"
                 />
               </label>
-            </div>
+            </form>
 
             <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4">
               <div className="flex justify-end gap-2">
@@ -465,10 +515,16 @@ export default function SystemUsersPage() {
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 space-y-4 overflow-auto px-5 py-4">
+            <form
+              className="min-h-0 flex-1 space-y-4 overflow-auto px-5 py-4"
+              autoComplete="off"
+              onSubmit={(e) => e.preventDefault()}
+            >
               <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Name
                 <input
+                  name="system-user-create-name"
+                  autoComplete="off"
                   value={createForm.name}
                   onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
                   className={`mt-1 ${inputCls}`}
@@ -479,6 +535,8 @@ export default function SystemUsersPage() {
                 Email
                 <input
                   type="email"
+                  name="system-user-create-email"
+                  autoComplete="off"
                   value={createForm.email}
                   onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
                   className={`mt-1 ${inputCls}`}
@@ -489,6 +547,8 @@ export default function SystemUsersPage() {
                 Password
                 <input
                   type="password"
+                  name="system-user-create-password"
+                  autoComplete="new-password"
                   value={createForm.password}
                   onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
                   placeholder="Minimum 6 characters"
@@ -526,6 +586,29 @@ export default function SystemUsersPage() {
                 </select>
               </label>
 
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Pending show count
+                <input
+                  type="number"
+                  min="1"
+                  max="1000"
+                  inputMode="numeric"
+                  placeholder="Optional — leave blank for all"
+                  value={createForm.pending_show_count}
+                  onChange={(e) =>
+                    setCreateForm((f) => ({
+                      ...f,
+                      pending_show_count: e.target.value.replace(/[^\d]/g, ""),
+                    }))
+                  }
+                  className={`mt-1 ${inputCls}`}
+                />
+                <span className="mt-1 block text-[11px] font-normal normal-case tracking-normal text-slate-500">
+                  For deposit/withdrawal executives only. Caps how many pending rows load; total count
+                  stays unchanged. Blank = load all.
+                </span>
+              </label>
+
               <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
                 <div>
                   <span className="block text-sm font-medium text-slate-200">Account status</span>
@@ -542,7 +625,7 @@ export default function SystemUsersPage() {
                   className="h-4 w-4 rounded border-white/20"
                 />
               </label>
-            </div>
+            </form>
 
             <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4">
               <div className="flex justify-end gap-2">

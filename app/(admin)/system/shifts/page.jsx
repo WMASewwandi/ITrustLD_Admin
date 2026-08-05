@@ -20,7 +20,8 @@ function shiftBadgeClass(shift) {
 }
 
 export default function ShiftManagementPage() {
-  const canView = useCan("system_user_manage_activity");
+  const canView = useCan("view_shift_schedule");
+  const canEdit = useCan("change_shift_schedule");
   const colomboNow = useMemo(() => getColomboDateParts(), []);
   const [year, setYear] = useState(colomboNow.year);
   const [month, setMonth] = useState(colomboNow.month);
@@ -83,13 +84,14 @@ export default function ShiftManagementPage() {
   }, [calendar, leadingBlanks]);
 
   function openEditDay(day) {
+    if (!canEdit || !day?.can_edit) return;
     setEditDay(day);
     setEditShift(day.active_shift === "B" ? "B" : "A");
     setError(null);
   }
 
   async function handleSaveShift() {
-    if (!editDay) return;
+    if (!editDay || !canEdit) return;
     setSaving(true);
     setError(null);
     try {
@@ -127,6 +129,11 @@ export default function ShiftManagementPage() {
             Active shift per business day (0:10 AM – 0:10 AM next day, Sri Lanka time). Shift A and
             Shift B alternate daily.
           </p>
+          {!canEdit ? (
+            <p className="mt-2 text-xs font-medium text-amber-300/90">
+              View only — you can see the schedule but cannot change active shifts.
+            </p>
+          ) : null}
         </div>
         <button
           type="button"
@@ -265,7 +272,7 @@ export default function ShiftManagementPage() {
                       >
                         Shift {cell.active_shift}
                       </span>
-                      {cell.can_edit ? (
+                      {canEdit && cell.can_edit ? (
                         <button
                           type="button"
                           onClick={() => openEditDay(cell)}
@@ -299,7 +306,7 @@ export default function ShiftManagementPage() {
         </span>
       </div>
 
-      {editDay ? (
+      {editDay && canEdit ? (
         <div className="admin-modal-overlay z-[86]" onClick={() => !saving && setEditDay(null)} role="presentation">
           <div
             className="admin-card w-full max-w-md p-5 shadow-2xl"

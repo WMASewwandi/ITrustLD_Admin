@@ -16,6 +16,7 @@ import {
 } from "@/lib/loyalty-voucher-claims";
 import { notifyAdminNavCountsRefresh } from "@/lib/notifications";
 import LoyaltyManagementPanel from "@/components/admin/loyalty-management-panel";
+import LoyaltyGiftPanel from "@/components/admin/loyalty-gift-panel";
 import { Check, RefreshCw, Search, X } from "lucide-react";
 
 const TABS = [
@@ -23,6 +24,7 @@ const TABS = [
   { id: "bonus", label: "Bonus Claims" },
   { id: "vouchers", label: "Voucher Claims" },
   { id: "management", label: "Loyalty Management" },
+  { id: "gifts", label: "Gift" },
 ];
 
 function DetailField({ label, children }) {
@@ -347,7 +349,7 @@ function LoyaltyContent() {
   useEffect(() => {
     const nextTab = params.get("tab") || "orders";
     setTab(nextTab);
-    setStatus(params.get("status") || (nextTab === "management" ? "All" : "Pending"));
+    setStatus(params.get("status") || (nextTab === "management" || nextTab === "gifts" ? "All" : "Pending"));
   }, [params]);
 
   const loadOrders = useCallback(async () => {
@@ -534,6 +536,7 @@ function LoyaltyContent() {
 
   const filtered = useMemo(() => {
     if (tab === "management") return [];
+    if (tab === "gifts") return [];
     if (tab === "orders" || tab === "bonus" || tab === "vouchers") return list;
     return list.filter((r) => {
       if (status !== "All" && r.status !== status && !(status === "Pending" && String(r.status).includes("Pending"))) {
@@ -576,6 +579,8 @@ function LoyaltyContent() {
               : status === "Rejected"
                 ? "Rejected Voucher Claims"
                 : "Voucher Claims"
+          : tab === "gifts"
+            ? "Gift Management"
           : "Loyalty Management";
 
   async function handleOrderStatusUpdate(id, nextStatus) {
@@ -799,7 +804,7 @@ function LoyaltyContent() {
             type="button"
             onClick={() => {
               setTab(t.id);
-              setStatus(t.id === "management" ? "All" : "Pending");
+              setStatus(t.id === "management" || t.id === "gifts" ? "All" : "Pending");
             }}
             className={`rounded-lg px-3.5 py-2.5 text-sm font-semibold transition ${
               tab === t.id
@@ -814,6 +819,8 @@ function LoyaltyContent() {
 
       {tab === "management" ? (
         <LoyaltyManagementPanel />
+      ) : tab === "gifts" ? (
+        <LoyaltyGiftPanel />
       ) : (
         <section className="admin-card overflow-visible p-0">
           <div className="border-b border-white/10 px-5 py-4">
