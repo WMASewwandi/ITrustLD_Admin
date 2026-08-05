@@ -6,7 +6,7 @@ import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectModal from "@/components/admin/reject-modal";
 import RejectReasonPanel from "@/components/admin/reject-reason-panel";
 import CopyCell, { FilterField, inputCls } from "@/components/admin/queue-ui";
-import { fetchCustomers, updateCustomerEmail, fetchCustomerKycDocuments, fetchKycDocumentBlob, approveCustomerKyc, rejectCustomerKyc, banCustomer, unbanCustomer, banMultipleCustomers, updateCustomerPartner, sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
+import { fetchCustomers, fetchCustomerKycDocuments, fetchKycDocumentBlob, approveCustomerKyc, rejectCustomerKyc, banCustomer, unbanCustomer, banMultipleCustomers, updateCustomerPartner, sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
 import { EmailSendModal, SmsSendModal } from "@/components/admin/customer-message-modals";
 import { notifyAdminNavCountsRefresh } from "@/lib/notifications";
 import { useCan } from "@/contexts/admin-permissions";
@@ -21,7 +21,6 @@ import {
   Loader2,
   Mail,
   MessageSquare,
-  Pencil,
   Search,
   X,
 } from "lucide-react";
@@ -136,69 +135,6 @@ function ConfirmModal({ open, title, message, confirmLabel = "Confirm", onClose,
             className="rounded-xl bg-admin-teal px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
           >
             {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EmailEditModal({ open, user, value, saving, error, onChange, onClose, onSave }) {
-  if (!open || !user) return null;
-
-  return (
-    <div
-      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-4"
-      onClick={onClose}
-    >
-      <div
-        className="admin-card w-full max-w-md rounded-t-2xl rounded-b-none p-5 shadow-2xl sm:rounded-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-3 flex justify-center sm:hidden">
-          <span className="h-1 w-10 rounded-full bg-white/20" />
-        </div>
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-semibold text-white">Edit email</h3>
-            <p className="mt-1 text-sm text-slate-400">
-              {user.name} · {user.accountId}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1 text-slate-500 hover:bg-white/10 hover:text-slate-200"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <label className="block">
-          <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-            Email address
-          </span>
-          <input
-            type="email"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder="customer@email.com"
-            className={inputCls}
-            autoFocus
-          />
-        </label>
-        {error ? <p className="mt-2 text-xs text-rose-300">{error}</p> : null}
-        <div className="mt-5 flex justify-end gap-2 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
-          <button type="button" onClick={onClose} className="admin-btn-secondary" disabled={saving}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={saving}
-            className="inline-flex items-center gap-2 rounded-xl bg-admin-teal px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Save email
           </button>
         </div>
       </div>
@@ -467,7 +403,6 @@ function UsersContent() {
   const router = useRouter();
   const params = useSearchParams();
   const filter = useMemo(() => resolveFilter(params), [params]);
-  const canEditEmail = useCan("change_customer_account_status");
   const canActOnKyc = useCan("change_customer_account_status");
   const canCommunicate = useCan("comunicatte_to_customer");
   const canBan = useCan("change_customer_account_status");
@@ -486,10 +421,6 @@ function UsersContent() {
   const [banOpen, setBanOpen] = useState(null);
   const [partnerConfirm, setPartnerConfirm] = useState(null);
   const [kycDocs, setKycDocs] = useState(null);
-  const [emailEdit, setEmailEdit] = useState(null);
-  const [emailEditDraft, setEmailEditDraft] = useState("");
-  const [emailEditError, setEmailEditError] = useState("");
-  const [emailSaving, setEmailSaving] = useState(false);
   const [unbanTarget, setUnbanTarget] = useState(null);
   const [bulkBanOpen, setBulkBanOpen] = useState(false);
   const [bulkBanning, setBulkBanning] = useState(false);
@@ -503,8 +434,6 @@ function UsersContent() {
   const [smsSending, setSmsSending] = useState(false);
   const [smsSendError, setSmsSendError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
-
-  const showEmailEdit = filter === "all" && canEditEmail;
 
   const loadCustomers = useCallback(async () => {
     setLoading(true);
@@ -563,42 +492,6 @@ function UsersContent() {
   function runSearch() {
     setApplied({ email, accountId, firstName, lastName });
     setPage(1);
-  }
-
-  function openEmailEdit(user) {
-    setEmailEdit(user);
-    setEmailEditDraft(user.email || "");
-    setEmailEditError("");
-  }
-
-  function closeEmailEdit() {
-    setEmailEdit(null);
-    setEmailEditDraft("");
-    setEmailEditError("");
-    setEmailSaving(false);
-  }
-
-  async function saveEmailEdit() {
-    const nextEmail = emailEditDraft.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
-      setEmailEditError("Enter a valid email address.");
-      return;
-    }
-
-    setEmailSaving(true);
-    setEmailEditError("");
-    try {
-      const res = await updateCustomerEmail(emailEdit.accountHolderId, nextEmail);
-      const updated = res.customer;
-      if (updated) {
-        setRows((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
-      }
-      closeEmailEdit();
-    } catch (err) {
-      setEmailEditError(err.message || "Failed to update email.");
-    } finally {
-      setEmailSaving(false);
-    }
   }
 
   function toggleAll(checked) {
@@ -961,21 +854,7 @@ function UsersContent() {
                   </td>
                   <td className="px-3 py-3 font-medium text-white">{u.name}</td>
                   <td className="px-3 py-3">
-                    <div className="flex items-start gap-1.5">
-                      <div className="min-w-0 flex-1">
-                        <CopyCell value={u.email} />
-                      </div>
-                      {showEmailEdit ? (
-                        <button
-                          type="button"
-                          onClick={() => openEmailEdit(u)}
-                          className="mt-0.5 shrink-0 rounded-lg border border-white/10 p-1.5 text-slate-500 transition hover:border-admin-teal/40 hover:text-white"
-                          title="Edit email"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                      ) : null}
-                    </div>
+                    <CopyCell value={u.email} />
                   </td>
                   <td className="px-3 py-3">{u.mobile}</td>
                   <td className="px-3 py-3">
@@ -1179,17 +1058,6 @@ function UsersContent() {
             setBanOpen(null);
           });
         }}
-      />
-
-      <EmailEditModal
-        open={!!emailEdit}
-        user={emailEdit}
-        value={emailEditDraft}
-        saving={emailSaving}
-        error={emailEditError}
-        onChange={setEmailEditDraft}
-        onClose={closeEmailEdit}
-        onSave={saveEmailEdit}
       />
 
       <KycDocsModal

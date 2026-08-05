@@ -9,7 +9,11 @@ const poppins = Poppins({
 
 export const metadata = {
   title: "iTrustLD Admin",
-  description: "iTrustLD Admin Portal"
+  description: "iTrustLD Admin Portal",
+  icons: {
+    icon: [{ url: "/assets/img/logos/favicon.svg", type: "image/svg+xml" }],
+    apple: "/assets/img/logos/favicon.svg"
+  }
 };
 
 export default function RootLayout({ children }) {
