@@ -15,7 +15,6 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  Eye,
   FileImage,
   FileText,
   Loader2,
@@ -850,13 +849,17 @@ function UsersContent() {
                     />
                   </td>
                   <td className="px-3 py-3">
-                    <CopyCell value={u.accountId} />
+                    <CopyCell value={u.accountId || "—"} />
                   </td>
-                  <td className="px-3 py-3 font-medium text-white">{u.name}</td>
                   <td className="px-3 py-3">
-                    <CopyCell value={u.email} />
+                    <CopyCell value={u.name || "—"} />
                   </td>
-                  <td className="px-3 py-3">{u.mobile}</td>
+                  <td className="px-3 py-3">
+                    <CopyCell value={u.email || "—"} />
+                  </td>
+                  <td className="px-3 py-3">
+                    <CopyCell value={u.mobile || "—"} />
+                  </td>
                   <td className="px-3 py-3">
                     <PartnerBadge
                       value={u.partner}
@@ -888,14 +891,6 @@ function UsersContent() {
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setKycDocs({ user: u, field: "nic" })}
-                        className="rounded-lg border border-white/10 p-1.5 text-slate-500 transition hover:border-admin-teal/40 hover:text-white"
-                        title="View profile"
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                      </button>
                       {!u.banned ? (
                         <button
                           type="button"

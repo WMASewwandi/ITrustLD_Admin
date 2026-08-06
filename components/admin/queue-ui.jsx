@@ -3,36 +3,43 @@
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
 
-export default function CopyCell({ value, sub }) {
+export function CopyButton({ value, title = "Copy", className = "" }) {
   const [copied, setCopied] = useState(false);
+  const text = value == null || value === "" ? "" : String(value);
 
-  async function copy() {
+  async function copy(e) {
+    e?.stopPropagation?.();
+    if (!text) return;
     try {
-      await navigator.clipboard.writeText(String(value));
+      await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 1200);
     } catch {
-      /* demo fallback */
+      /* clipboard unavailable */
     }
   }
 
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      disabled={!text}
+      className={`shrink-0 rounded p-0.5 text-slate-500 transition hover:bg-white/10 hover:text-teal-300 disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
+      title={title}
+    >
+      {copied ? <Check className="h-3 w-3 text-theme-green-action" /> : <Copy className="h-3 w-3" />}
+    </button>
+  );
+}
+
+export default function CopyCell({ value, sub }) {
   return (
     <div className="flex items-start gap-1.5">
       <div className="min-w-0">
         <p className="truncate font-medium text-slate-100">{value}</p>
         {sub ? <p className="truncate text-[11px] text-slate-500">{sub}</p> : null}
       </div>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          copy();
-        }}
-        className="mt-0.5 shrink-0 rounded p-0.5 text-slate-500 transition hover:bg-white/10 hover:text-teal-300"
-        title="Copy"
-      >
-        {copied ? <Check className="h-3 w-3 text-theme-green-action" /> : <Copy className="h-3 w-3" />}
-      </button>
+      <CopyButton value={value} className="mt-0.5" />
     </div>
   );
 }
