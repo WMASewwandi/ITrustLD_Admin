@@ -31,6 +31,7 @@ export default function ShiftManagementPage() {
   const [error, setError] = useState(null);
   const [editDay, setEditDay] = useState(null);
   const [editShift, setEditShift] = useState("A");
+  const [saveError, setSaveError] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const loadCalendar = useCallback(
@@ -87,19 +88,19 @@ export default function ShiftManagementPage() {
     if (!canEdit || !day?.can_edit) return;
     setEditDay(day);
     setEditShift(day.active_shift === "B" ? "B" : "A");
-    setError(null);
+    setSaveError(null);
   }
 
   async function handleSaveShift() {
     if (!editDay || !canEdit) return;
     setSaving(true);
-    setError(null);
+    setSaveError(null);
     try {
       await updateShiftSchedule({ shift_date: editDay.date, active_shift: editShift });
       setEditDay(null);
       await loadCalendar(true);
     } catch (err) {
-      setError(err.message || "Failed to update shift.");
+      setSaveError(err.message || "Failed to update shift.");
     } finally {
       setSaving(false);
     }
@@ -338,6 +339,9 @@ export default function ShiftManagementPage() {
                 </button>
               ))}
             </div>
+            {saveError ? (
+              <p className="mt-3 text-sm text-rose-300">{saveError}</p>
+            ) : null}
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
