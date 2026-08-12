@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import AdminMainNav from "@/components/admin/admin-main-nav";
 import AdminIdleTimeout from "@/components/admin/admin-idle-timeout";
 import { AdminPermissionsProvider } from "@/contexts/admin-permissions";
+import { AppDialogProvider } from "@/components/admin/app-dialog";
 import { fetchAdminMe, formatRoleLabel, getAdminUser, hasAdminSession, updateAdminUser } from "@/lib/auth";
 
 export default function AdminShell({ children }) {
@@ -67,6 +68,7 @@ export default function AdminShell({ children }) {
 
   return (
     <AdminPermissionsProvider permissions={permissions}>
+      <AppDialogProvider>
       <div className="admin-canvas relative h-dvh overflow-hidden text-slate-200">
       <div className="admin-grid-overlay pointer-events-none fixed inset-0 -z-10 opacity-50" aria-hidden />
 
@@ -92,6 +94,7 @@ export default function AdminShell({ children }) {
       </div>
       </div>
       <AdminIdleTimeout />
+      </AppDialogProvider>
     </AdminPermissionsProvider>
   );
 }

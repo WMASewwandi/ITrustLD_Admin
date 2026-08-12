@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Mail, MessageSquare, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { inputCls } from "@/components/admin/queue-ui";
+import { useAppDialog } from "@/components/admin/app-dialog";
 import { sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
 import {
   createBonus,
@@ -151,6 +152,7 @@ export default function LoyaltyManagementPanel() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { confirm } = useAppDialog();
   const audienceOption = resolveAudienceOption(searchParams.get("audience"));
   const audience = audienceOption.label;
   const isAffiliate = audienceOption.param === "affiliate";
@@ -279,17 +281,17 @@ export default function LoyaltyManagementPanel() {
   }
 
   async function handleDeletePoint(row) {
-    if (!window.confirm("Delete this point collection amount?")) return;
+    if (!(await confirm("Delete this point collection amount?", { title: "Delete", confirmLabel: "Delete" }))) return;
     await runAction(`delete-pc-${row.id}`, () => deletePointCollection({ id: row.id }));
   }
 
   async function handleDeleteBonus(row) {
-    if (!window.confirm("Delete this bonus amount?")) return;
+    if (!(await confirm("Delete this bonus amount?", { title: "Delete", confirmLabel: "Delete" }))) return;
     await runAction(`delete-bonus-${row.id}`, () => deleteBonus({ id: row.id }));
   }
 
   async function handleDeleteLevel(row) {
-    if (!window.confirm("Delete this loyalty level configuration?")) return;
+    if (!(await confirm("Delete this loyalty level configuration?", { title: "Delete", confirmLabel: "Delete" }))) return;
     await runAction(`delete-level-${row.id}`, () => deleteLoyaltyLevel({ id: row.id }));
   }
 

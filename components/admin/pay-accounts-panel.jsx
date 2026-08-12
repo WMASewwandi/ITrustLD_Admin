@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { inputCls } from "@/components/admin/queue-ui";
+import { useAppDialog } from "@/components/admin/app-dialog";
 import {
   createBankAccount,
   createBinanceAccount,
@@ -192,6 +193,7 @@ function EmailWalletSection({
 }
 
 export default function PayAccountsPanel() {
+  const { alert, confirm } = useAppDialog();
   const [banks, setBanks] = useState([]);
   const [skrill, setSkrill] = useState([]);
   const [neteller, setNeteller] = useState([]);
@@ -269,7 +271,7 @@ export default function PayAccountsPanel() {
       }
       setBankModal(null);
     } catch (error) {
-      window.alert(error?.message || "Could not save bank account.");
+      await alert(error?.message || "Could not save bank account.");
     } finally {
       setSaving(false);
     }
@@ -322,7 +324,7 @@ export default function PayAccountsPanel() {
       }
       config.setModal(null);
     } catch (error) {
-      window.alert(error?.message || `Could not save ${config.label} wallet.`);
+      await alert(error?.message || `Could not save ${config.label} wallet.`);
     } finally {
       setSaving(false);
     }
@@ -359,7 +361,7 @@ export default function PayAccountsPanel() {
       }
       setBinanceModal(null);
     } catch (error) {
-      window.alert(error?.message || "Could not save Binance wallet.");
+      await alert(error?.message || "Could not save Binance wallet.");
     } finally {
       setSaving(false);
     }
@@ -412,7 +414,7 @@ export default function PayAccountsPanel() {
       }
       config.setModal(null);
     } catch (error) {
-      window.alert(error?.message || `Could not save ${config.label} account.`);
+      await alert(error?.message || `Could not save ${config.label} account.`);
     } finally {
       setSaving(false);
     }
@@ -433,20 +435,20 @@ export default function PayAccountsPanel() {
       }
     } catch (error) {
       setRows((prev) => prev.map((item) => (item.id === row.id ? { ...item, active: row.active } : item)));
-      window.alert(error?.message || "Could not update account status.");
+      await alert(error?.message || "Could not update account status.");
     } finally {
       setTogglingId(null);
     }
   }
 
   async function handleDelete(accountType, row, setRows) {
-    if (!window.confirm("Delete this pay account?")) return;
+    if (!(await confirm("Delete this pay account?", { title: "Delete account", confirmLabel: "Delete" }))) return;
 
     try {
       await deletePayAccount(accountType, row.id);
       setRows((prev) => prev.filter((item) => item.id !== row.id));
     } catch (error) {
-      window.alert(error?.message || "Could not delete pay account.");
+      await alert(error?.message || "Could not delete pay account.");
     }
   }
 

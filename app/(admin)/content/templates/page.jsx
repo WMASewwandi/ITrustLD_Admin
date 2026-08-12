@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Copy, Eye, Loader2, Mail, MessageSquare, ToggleLeft, ToggleRight, Trash2 } from "lucide-react";
 import Breadcrumb from "@/components/admin/breadcrumb";
+import { useAppDialog } from "@/components/admin/app-dialog";
 import { inputCls } from "@/components/admin/queue-ui";
 import {
   createMessageTemplate,
@@ -47,6 +48,7 @@ function TypeBadge({ type }) {
 }
 
 export default function TemplatesPage() {
+  const { confirm } = useAppDialog();
   const [templates, setTemplates] = useState([]);
   const [placeholders, setPlaceholders] = useState(TEMPLATE_PLACEHOLDERS);
   const [systemKeys, setSystemKeys] = useState([]);
@@ -137,7 +139,7 @@ export default function TemplatesPage() {
   }
 
   async function handleDelete(id) {
-    if (!window.confirm("Delete this template?")) return;
+    if (!(await confirm("Delete this template?", { title: "Delete template", confirmLabel: "Delete" }))) return;
     setError("");
     try {
       await deleteMessageTemplate(id);

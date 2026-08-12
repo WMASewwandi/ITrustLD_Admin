@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { inputCls } from "@/components/admin/queue-ui";
+import { useAppDialog } from "@/components/admin/app-dialog";
 import {
   createCashoutWallet,
   createTopupWallet,
@@ -177,6 +178,7 @@ function WalletSection({
   fallbackTerms,
   showVoucherFlag = false,
 }) {
+  const { alert, confirm } = useAppDialog();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
@@ -212,7 +214,7 @@ function WalletSection({
         paymentMethodIds: [],
       });
     } catch (error) {
-      window.alert(error?.message || "Could not load payment methods.");
+      await alert(error?.message || "Could not load payment methods.");
     } finally {
       setModalLoading(false);
     }
@@ -249,7 +251,7 @@ function WalletSection({
         badgeColor: wallet.badgeColor || "#236B6B",
       });
     } catch (error) {
-      window.alert(error?.message || "Could not load wallet details.");
+      await alert(error?.message || "Could not load wallet details.");
     } finally {
       setModalLoading(false);
     }
@@ -310,7 +312,7 @@ function WalletSection({
       return;
     }
     if (allowNavigateButton && !String(navigateUrl || "").trim()) {
-      window.alert("Navigate URL is required when the navigate button is enabled.");
+      await alert("Navigate URL is required when the navigate button is enabled.");
       return;
     }
 
@@ -337,7 +339,7 @@ function WalletSection({
       setModal(null);
       await reloadRows();
     } catch (error) {
-      window.alert(error?.message || "Could not save wallet.");
+      await alert(error?.message || "Could not save wallet.");
     } finally {
       setSaving(false);
     }
@@ -348,17 +350,17 @@ function WalletSection({
       await toggleRowStatus(id, !currentActive);
       await reloadRows();
     } catch (error) {
-      window.alert(error?.message || "Could not update wallet status.");
+      await alert(error?.message || "Could not update wallet status.");
     }
   }
 
   async function remove(id) {
-    if (!window.confirm(deleteConfirm)) return;
+    if (!(await confirm(deleteConfirm, { title: "Delete wallet", confirmLabel: "Delete" }))) return;
     try {
       await deleteRow(id);
       await reloadRows();
     } catch (error) {
-      window.alert(error?.message || "Could not delete wallet.");
+      await alert(error?.message || "Could not delete wallet.");
     }
   }
 
