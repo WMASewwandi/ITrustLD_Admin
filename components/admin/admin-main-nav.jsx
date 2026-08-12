@@ -171,7 +171,7 @@ function NavInner({ user, roleLabel }) {
   return (
     <header className="admin-topbar z-40 border-b border-white/10 text-white" ref={wrapRef}>
       {/* Hide chrome while full-screen mobile menu is open (avoids duplicate nav) */}
-      <div className={mobile ? "hidden xl:block" : "block"}>
+      <div className={mobile ? "hidden nav:block" : "block"}>
       {/* Bookmarks strip — concept 4.7 */}
       <div className="flex items-stretch border-b border-white/8 bg-gradient-to-r from-white/[0.04] via-transparent to-white/[0.03]">
         <div className="flex shrink-0 items-center gap-2 border-r border-white/8 bg-white/[0.03] px-3 py-2 sm:px-4">
@@ -235,7 +235,7 @@ function NavInner({ user, roleLabel }) {
           <button
             type="button"
             onClick={() => setMobile((v) => !v)}
-            className="rounded-xl border border-white/15 bg-black/25 p-2.5 text-white xl:hidden"
+            className="rounded-xl border border-white/15 bg-black/25 p-2.5 text-white nav:hidden"
             aria-label="Open menu"
           >
             {mobile ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
@@ -251,7 +251,7 @@ function NavInner({ user, roleLabel }) {
         </div>
 
         {/* Horizontal top nav — centered between logo and controls */}
-        <nav className="hidden min-w-0 flex-1 justify-center xl:flex">
+        <nav className="hidden min-w-0 flex-1 justify-center nav:flex">
           <div className="flex items-center gap-0.5">
             {navItems.map((cat, catIndex) => {
               const active = categoryActive(pathname, search, cat);
@@ -479,7 +479,7 @@ function NavInner({ user, roleLabel }) {
 
       {/* Mobile / tablet — full-screen menu */}
       {mobile ? (
-        <div className="fixed inset-0 z-[55] flex h-dvh w-full flex-col bg-[#141625] xl:hidden">
+        <div className="fixed inset-0 z-[55] flex h-dvh w-full flex-col bg-[#141625] nav:hidden">
           <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-3 py-3">
             <button
               type="button"

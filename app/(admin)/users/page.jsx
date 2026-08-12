@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectModal from "@/components/admin/reject-modal";
@@ -433,17 +433,30 @@ function UsersContent() {
   const [smsSending, setSmsSending] = useState(false);
   const [smsSendError, setSmsSendError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
+  const skipSearchOnNextLoadRef = useRef(false);
+  const skipNextEffectLoadRef = useRef(false);
+  const loadCustomersRef = useRef(null);
 
-  const loadCustomers = useCallback(async () => {
+  const loadCustomers = useCallback(async (searchOverride = null) => {
     setLoading(true);
     setError(null);
     try {
+      let search = { email: "", accountId: "", firstName: "", lastName: "" };
+      if (searchOverride) {
+        skipSearchOnNextLoadRef.current = false;
+        search = searchOverride;
+      } else if (skipSearchOnNextLoadRef.current) {
+        skipSearchOnNextLoadRef.current = false;
+      } else {
+        search = applied;
+      }
+
       const res = await fetchCustomers({
         filter,
-        email: applied.email || undefined,
-        accountId: applied.accountId || undefined,
-        firstName: applied.firstName || undefined,
-        lastName: applied.lastName || undefined,
+        email: search.email || undefined,
+        accountId: search.accountId || undefined,
+        firstName: search.firstName || undefined,
+        lastName: search.lastName || undefined,
       });
       setRows(res.customers ?? []);
       setSelected([]);
@@ -455,11 +468,25 @@ function UsersContent() {
     }
   }, [filter, applied]);
 
+  loadCustomersRef.current = loadCustomers;
+
   useEffect(() => {
+    skipSearchOnNextLoadRef.current = true;
     setPage(1);
+    setSelected([]);
+    setQ("");
+    setEmail("");
+    setAccountId("");
+    setFirstName("");
+    setLastName("");
+    setApplied({ email: "", accountId: "", firstName: "", lastName: "" });
   }, [filter]);
 
   useEffect(() => {
+    if (skipNextEffectLoadRef.current) {
+      skipNextEffectLoadRef.current = false;
+      return;
+    }
     loadCustomers();
   }, [loadCustomers]);
 
@@ -479,18 +506,51 @@ function UsersContent() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const start = (page - 1) * perPage;
   const shown = filtered.slice(start, start + perPage);
+  const hasActiveSearch = Boolean(
+    applied.email || applied.accountId || applied.firstName || applied.lastName ||
+    email.trim() || accountId.trim() || firstName.trim() || lastName.trim()
+  );
 
   function changeFilter(nextFilter) {
-    const next = new URLSearchParams(params.toString());
-    next.set("filter", nextFilter);
-    router.push(`/users?${next.toString()}`);
+    if (!FILTER_VALUES.has(nextFilter) || nextFilter === filter) return;
+    skipSearchOnNextLoadRef.current = true;
+    setQ("");
+    setEmail("");
+    setAccountId("");
+    setFirstName("");
+    setLastName("");
+    setApplied({ email: "", accountId: "", firstName: "", lastName: "" });
     setPage(1);
     setSelected([]);
+    router.replace(`/users?filter=${encodeURIComponent(nextFilter)}`, { scroll: false });
   }
 
-  function runSearch() {
-    setApplied({ email, accountId, firstName, lastName });
+  function runSearch(event) {
+    event?.preventDefault?.();
+    const nextApplied = {
+      email: email.trim(),
+      accountId: accountId.trim(),
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+    };
     setPage(1);
+    setSelected([]);
+    skipNextEffectLoadRef.current = true;
+    setApplied(nextApplied);
+    loadCustomersRef.current?.(nextApplied);
+  }
+
+  function clearSearchFilters() {
+    const empty = { email: "", accountId: "", firstName: "", lastName: "" };
+    setEmail("");
+    setAccountId("");
+    setFirstName("");
+    setLastName("");
+    setPage(1);
+    setSelected([]);
+    skipNextEffectLoadRef.current = true;
+    setApplied(empty);
+    loadCustomersRef.current?.(empty);
   }
 
   function toggleAll(checked) {
@@ -682,29 +742,38 @@ function UsersContent() {
               <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                 Filter Pending Users
               </span>
-              <select
-                value={filter}
-                onChange={(e) => changeFilter(e.target.value)}
-                className={inputCls}
-              >
-                {FILTERS.map((f) => (
-                  <option key={f.value} value={f.value} className="bg-admin-surface">
-                    {f.label}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={filter}
+                  onChange={(e) => changeFilter(e.target.value)}
+                  className={inputCls}
+                >
+                  {FILTERS.map((f) => (
+                    <option key={f.value} value={f.value} className="bg-admin-surface">
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+                {loading && rows.length > 0 ? (
+                  <Loader2 className="pointer-events-none absolute right-8 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-slate-400" />
+                ) : null}
+              </div>
             </label>
           </div>
         </div>
 
-        <div className="border-b border-white/10 bg-white/5 px-5 py-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <form
+          onSubmit={runSearch}
+          className="border-b border-white/10 bg-white/5 px-5 py-4"
+        >
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
             <FilterField label="Email">
               <input
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Email"
                 className={inputCls}
+                autoComplete="off"
               />
             </FilterField>
             <FilterField label="Account Id">
@@ -713,6 +782,7 @@ function UsersContent() {
                 onChange={(e) => setAccountId(e.target.value)}
                 placeholder="Account Id"
                 className={inputCls}
+                autoComplete="off"
               />
             </FilterField>
             <FilterField label="First Name">
@@ -721,6 +791,7 @@ function UsersContent() {
                 onChange={(e) => setFirstName(e.target.value)}
                 placeholder="First Name"
                 className={inputCls}
+                autoComplete="off"
               />
             </FilterField>
             <FilterField label="Last Name">
@@ -729,20 +800,29 @@ function UsersContent() {
                 onChange={(e) => setLastName(e.target.value)}
                 placeholder="Last Name"
                 className={inputCls}
+                autoComplete="off"
               />
             </FilterField>
-            <div className="flex items-end">
+            <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-2">
               <button
-                type="button"
-                onClick={runSearch}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110"
+                type="submit"
+                className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 text-sm font-semibold text-white transition hover:brightness-110"
               >
                 <Search className="h-3.5 w-3.5" />
                 Search
               </button>
+              <button
+                type="button"
+                onClick={clearSearchFilters}
+                disabled={!hasActiveSearch}
+                className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <X className="h-3.5 w-3.5" />
+                Clear
+              </button>
             </div>
           </div>
-        </div>
+        </form>
 
         <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2">
@@ -809,13 +889,7 @@ function UsersContent() {
           </div>
         </div>
 
-        <div className="overflow-x-auto overflow-y-visible">
-          {loading ? (
-            <div className="flex items-center justify-center gap-2 px-4 py-14 text-slate-400">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Refreshing…
-            </div>
-          ) : (
+        <div className={`overflow-x-auto overflow-y-visible transition-opacity ${loading ? "opacity-60" : "opacity-100"}`}>
           <table className="min-w-[1100px] w-full text-left text-[13px]">
             <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
               <tr>
@@ -825,6 +899,7 @@ function UsersContent() {
                     checked={shown.length > 0 && selected.length === shown.length}
                     onChange={(e) => toggleAll(e.target.checked)}
                     className="rounded border-white/20"
+                    disabled={loading}
                   />
                 </th>
                 <th className="px-3 py-3">Account ID</th>
@@ -928,13 +1003,19 @@ function UsersContent() {
               {shown.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-4 py-14 text-center text-slate-400">
-                    No Results Found
+                    {loading ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading…
+                      </span>
+                    ) : (
+                      "No Results Found"
+                    )}
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
-          )}
         </div>
 
         <div className="flex flex-col gap-3 border-t border-white/10 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">

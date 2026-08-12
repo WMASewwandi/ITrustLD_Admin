@@ -6,6 +6,9 @@ module.exports = {
   ],
   theme: {
     extend: {
+      screens: {
+        nav: "1400px",
+      },
       colors: {
         "theme-green-action": "#0D9F1B",
         "theme-green-dark": "#14535B",
