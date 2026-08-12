@@ -35,7 +35,65 @@ function Skeleton({ className = "" }) {
   return <div className={`animate-pulse rounded-lg bg-white/10 ${className}`} />;
 }
 
+function PlatformWalletIcon({ platform }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  const logoUrl = platform?.logoUrl;
+  const showImage = Boolean(logoUrl) && !imgFailed;
+
+  useEffect(() => {
+    setImgFailed(false);
+  }, [logoUrl]);
+
+  if (showImage) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={logoUrl}
+        alt=""
+        className="h-10 w-10 shrink-0 rounded-full bg-white/10 object-contain p-1.5"
+        onError={() => setImgFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <span
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+      style={{ backgroundColor: platform?.bg || "#64748B" }}
+    >
+      {platform?.letter || "?"}
+    </span>
+  );
+}
+
+function PlatformWalletRows({ items }) {
+  if (!items.length) {
+    return <li className="py-4 text-center text-xs text-slate-500">No wallets</li>;
+  }
+
+  return items.map((platform) => (
+    <li key={platform.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+      <div className="flex min-w-0 items-center gap-3">
+        <PlatformWalletIcon platform={platform} />
+        <p className="truncate text-sm font-semibold text-slate-100">{platform.name}</p>
+      </div>
+      <p className="shrink-0 text-sm font-bold tabular-nums text-white">
+        {formatPlatformDepositAmount(platform, platform.amount)}
+      </p>
+    </li>
+  ));
+}
+
+function formatChartValue(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "0";
+  if (Math.abs(n) >= 1000) return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (Number.isInteger(n)) return String(n);
+  return n.toFixed(2);
+}
+
 function BarChart({ values, labels }) {
+  const [hover, setHover] = useState(null);
   const max = Math.max(...values, 0.05);
   const w = 480;
   const h = 200;
@@ -51,36 +109,70 @@ function BarChart({ values, labels }) {
   const ticks = [...new Set(Array.from({ length: 5 }, (_, i) => Number((i * tickStep).toFixed(2))))];
 
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="h-52 w-full" role="img" aria-label="Monthly revenue bar chart">
-      {ticks.map((t, tickIndex) => {
-        const y = padT + chartH - (t / max) * chartH;
-        return (
-          <g key={`tick-${tickIndex}-${t}`}>
-            <line x1={padL} y1={y} x2={w - padR} y2={y} stroke="#2a2d3d" strokeWidth="1" />
-            <text x={padL - 6} y={y + 3} textAnchor="end" className="fill-slate-500" fontSize="9">
-              {t.toFixed(1)}
-            </text>
-          </g>
-        );
-      })}
-      {values.map((v, i) => {
-        const barH = Math.max((v / max) * chartH, v > 0 ? 2 : 0);
-        const x = padL + i * (barW + barGap);
-        const y = padT + chartH - barH;
-        return (
-          <g key={`bar-${i}-${labels[i]}`}>
-            <rect x={x} y={y} width={barW} height={barH} rx="3" fill="#2dd4bf" opacity={v > max * 0.15 ? 1 : 0.45} />
-            <text x={x + barW / 2} y={h - 8} textAnchor="middle" className="fill-slate-500" fontSize="9">
-              {labels[i]}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
+    <div className="relative">
+      <svg viewBox={`0 0 ${w} ${h}`} className="h-52 w-full" role="img" aria-label="Monthly revenue bar chart">
+        {ticks.map((t, tickIndex) => {
+          const y = padT + chartH - (t / max) * chartH;
+          return (
+            <g key={`tick-${tickIndex}-${t}`}>
+              <line x1={padL} y1={y} x2={w - padR} y2={y} stroke="#2a2d3d" strokeWidth="1" />
+              <text x={padL - 6} y={y + 3} textAnchor="end" className="fill-slate-500" fontSize="9">
+                {t.toFixed(1)}
+              </text>
+            </g>
+          );
+        })}
+        {values.map((v, i) => {
+          const barH = Math.max((v / max) * chartH, v > 0 ? 2 : 0);
+          const x = padL + i * (barW + barGap);
+          const y = padT + chartH - barH;
+          const active = hover?.index === i;
+          return (
+            <g key={`bar-${i}-${labels[i]}`}>
+              <rect
+                x={x}
+                y={padT}
+                width={barW}
+                height={chartH}
+                fill="transparent"
+                className="cursor-pointer"
+                onMouseEnter={() => setHover({ index: i, value: v, x: x + barW / 2, y })}
+                onMouseLeave={() => setHover(null)}
+              />
+              <rect
+                x={x}
+                y={y}
+                width={barW}
+                height={barH}
+                rx="3"
+                fill="#2dd4bf"
+                opacity={active ? 1 : v > max * 0.15 ? 0.9 : 0.45}
+                className="pointer-events-none"
+              />
+              <text x={x + barW / 2} y={h - 8} textAnchor="middle" className="fill-slate-500" fontSize="9">
+                {labels[i]}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      {hover ? (
+        <div
+          className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full rounded-md border border-white/15 bg-[#0B1020] px-2.5 py-1.5 text-xs font-semibold text-white shadow-lg"
+          style={{
+            left: `${(hover.x / w) * 100}%`,
+            top: `${(Math.max(hover.y, 24) / h) * 100}%`,
+          }}
+        >
+          <span className="text-slate-400">{labels[hover.index]}:</span> {formatChartValue(hover.value)}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
-function DotLineChart({ points, color = "#22c55e", height = 140, showDots = true }) {
+function DotLineChart({ points, labels, color = "#22c55e", height = 140, showDots = true }) {
+  const [hover, setHover] = useState(null);
   const w = 320;
   const h = height;
   const padX = 10;
@@ -97,20 +189,59 @@ function DotLineChart({ points, color = "#22c55e", height = 140, showDots = true
   const line = coords.map(([x, y]) => `${x},${y}`).join(" ");
 
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="h-full w-full" preserveAspectRatio="none" aria-hidden>
-      <polyline
-        fill="none"
-        stroke={color}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        points={line}
-      />
-      {showDots &&
-        coords.map(([x, y], i) => (
-          <circle key={i} cx={x} cy={y} r="3.5" fill={color} stroke="#141625" strokeWidth="1.5" />
-        ))}
-    </svg>
+    <div className="relative h-full w-full">
+      <svg viewBox={`0 0 ${w} ${h}`} className="h-full w-full" preserveAspectRatio="none" aria-hidden>
+        <polyline
+          fill="none"
+          stroke={color}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          points={line}
+        />
+        {coords.map(([x, y], i) => {
+          const active = hover?.index === i;
+          return (
+            <g key={i}>
+              <circle
+                cx={x}
+                cy={y}
+                r="12"
+                fill="transparent"
+                className="cursor-pointer"
+                onMouseEnter={() => setHover({ index: i, value: safePoints[i], x, y })}
+                onMouseLeave={() => setHover(null)}
+              />
+              {showDots ? (
+                <circle
+                  cx={x}
+                  cy={y}
+                  r={active ? 5 : 3.5}
+                  fill={color}
+                  stroke="#141625"
+                  strokeWidth="1.5"
+                  className="pointer-events-none"
+                />
+              ) : null}
+            </g>
+          );
+        })}
+      </svg>
+      {hover ? (
+        <div
+          className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full rounded-md border border-white/15 bg-[#0B1020] px-2.5 py-1.5 text-xs font-semibold text-white shadow-lg"
+          style={{
+            left: `${(hover.x / w) * 100}%`,
+            top: `${(Math.max(hover.y, 18) / h) * 100}%`,
+          }}
+        >
+          {labels?.[hover.index] ? (
+            <span className="text-slate-400">{labels[hover.index]}: </span>
+          ) : null}
+          {formatChartValue(hover.value)}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -440,6 +571,8 @@ export default function DashboardPage() {
   const chartMode = data?.chartMode ?? (globalFilter === "last7days" || globalFilter === "today" || globalFilter === "yesterday" || globalFilter === "lastmonth" ? "daily" : "monthly");
   const revenueLabels = data?.revenueLabels ?? MONTHS;
   const platforms = data?.platforms ?? [];
+  const depositPlatforms = platforms.filter((p) => p.type !== "withdrawal");
+  const withdrawalPlatforms = platforms.filter((p) => p.type === "withdrawal");
   const growth = data?.growth ?? {};
   const isLoading = loading && !data;
 
@@ -604,7 +737,11 @@ export default function DashboardPage() {
             {isLoading ? (
               <Skeleton className="h-full w-full" />
             ) : (
-              <DotLineChart points={data?.monthlyProfit ?? []} color="#22c55e" />
+              <DotLineChart
+                points={data?.monthlyProfit ?? []}
+                labels={data?.profitChartLabels?.length ? data.profitChartLabels : MONTHS.slice(0, (data?.monthlyProfit ?? []).length || 12)}
+                color="#22c55e"
+              />
             )}
           </div>
           <div className="mt-3 flex items-end justify-between border-t border-white/10 pt-3">
@@ -635,8 +772,13 @@ export default function DashboardPage() {
             ) : (
               <DotLineChart
                 points={data?.dailyProfit ?? []}
+                labels={
+                  data?.dailyProfitLabels?.length
+                    ? data.dailyProfitLabels
+                    : (data?.dailyProfit ?? []).map((_, i) => `Day ${i + 1}`)
+                }
                 color="#ef4444"
-                showDots={(data?.dailyProfit ?? []).some((v) => v > 0)}
+                showDots={(data?.dailyProfit ?? []).some((v) => Number(v) !== 0)}
               />
             )}
           </div>
@@ -661,41 +803,40 @@ export default function DashboardPage() {
           <div className="mb-4 flex items-start justify-between gap-2">
             <h2 className="text-sm font-semibold text-slate-100">{platformsTitle}</h2>
           </div>
-          <ul className="divide-y divide-white/10">
-            {isLoading
-              ? Array.from({ length: 5 }).map((_, index) => (
-                  <li key={index} className="flex items-center justify-between gap-3 py-3.5">
-                    <div className="flex items-center gap-3">
-                      <Skeleton className="h-10 w-10 rounded-full" />
-                      <div className="space-y-2">
-                        <Skeleton className="h-4 w-24" />
-                        <Skeleton className="h-3 w-16" />
-                      </div>
-                    </div>
-                    <Skeleton className="h-4 w-20" />
-                  </li>
-                ))
-              : null}
-            {!isLoading && platforms.map((platform) => (
-              <li key={platform.id} className="flex items-center justify-between gap-3 py-3.5 first:pt-0 last:pb-0">
-                <div className="flex min-w-0 items-center gap-3">
-                  <span
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
-                    style={{ backgroundColor: platform.bg }}
-                  >
-                    {platform.letter}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-100">{platform.name}</p>
-                    <p className="text-xs text-slate-500">Deposits</p>
+          {isLoading ? (
+            <ul className="divide-y divide-white/10">
+              {Array.from({ length: 5 }).map((_, index) => (
+                <li key={index} className="flex items-center justify-between gap-3 py-3.5">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-10 w-10 rounded-full" />
+                    <Skeleton className="h-4 w-24" />
                   </div>
-                </div>
-                <p className="shrink-0 text-sm font-bold tabular-nums text-white">
-                  {formatPlatformDepositAmount(platform, platform.amount)}
-                </p>
-              </li>
-            ))}
-          </ul>
+                  <Skeleton className="h-4 w-20" />
+                </li>
+              ))}
+            </ul>
+          ) : platforms.length === 0 ? (
+            <p className="py-6 text-center text-sm text-slate-500">No active wallets to show.</p>
+          ) : (
+            <div className="space-y-5">
+              <div>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Deposits
+                </h3>
+                <ul className="divide-y divide-white/10">
+                  <PlatformWalletRows items={depositPlatforms} />
+                </ul>
+              </div>
+              <div className="border-t border-white/10 pt-4">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Withdrawals
+                </h3>
+                <ul className="divide-y divide-white/10">
+                  <PlatformWalletRows items={withdrawalPlatforms} />
+                </ul>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="admin-card admin-fade-up admin-fade-up-delay-1 p-5">

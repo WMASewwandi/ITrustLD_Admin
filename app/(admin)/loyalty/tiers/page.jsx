@@ -48,7 +48,7 @@ export default function LoyaltyTiersPage() {
         const benefits = [...(t.benefits || [])];
         benefits[benefitIndex] = value;
         return { ...t, benefits };
-      })
+      }),
     );
     setSaved(false);
   }
@@ -58,7 +58,7 @@ export default function LoyaltyTiersPage() {
       prev.map((t) => {
         if (t.id !== tierId) return t;
         return { ...t, benefits: [...(t.benefits || []), ""] };
-      })
+      }),
     );
     setExpandedId(tierId);
     setSaved(false);
@@ -72,28 +72,8 @@ export default function LoyaltyTiersPage() {
           ...t,
           benefits: (t.benefits || []).filter((_, i) => i !== benefitIndex),
         };
-      })
+      }),
     );
-    setSaved(false);
-  }
-
-  function addTier() {
-    const id = `tier-${Date.now()}`;
-    const next = {
-      id,
-      name: "New tier",
-      points: 0,
-      active: true,
-      isActive: true,
-      benefits: ["New benefit detail"],
-    };
-    setTiers((prev) => [...prev, next]);
-    setExpandedId(id);
-    setSaved(false);
-  }
-
-  function removeTier(id) {
-    setTiers((prev) => prev.filter((t) => t.id !== id));
     setSaved(false);
   }
 
@@ -103,7 +83,8 @@ export default function LoyaltyTiersPage() {
     try {
       const cleaned = tiers.map((t) => ({
         id: t.id,
-        name: String(t.name || "").trim() || "Untitled",
+        slug: t.slug || t.id,
+        name: t.name,
         points: Number(t.points) || 0,
         active: t.active !== false && t.isActive !== false,
         benefits: (t.benefits || []).map((b) => String(b).trim()).filter(Boolean),
@@ -135,29 +116,19 @@ export default function LoyaltyTiersPage() {
           </p>
           <h1 className="text-3xl font-bold tracking-tight text-white">Loyalty Tiers</h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-400">
-            Manage Normal → VVIP tiers and add multiple benefit details for each tier. Changes appear
-            in the user Loyalty Levels panel.
+            Fixed Normal → VVIP ladder (from mock). Edit and save benefit details per tier — benefits
+            are stored in the database and shown in the user Loyalty Levels panel.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={addTier}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
-          >
-            <Plus className="h-4 w-4" />
-            Add tier
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || loading}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Save tiers
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving || loading}
+          className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Save benefits
+        </button>
       </div>
 
       {pageError ? (
@@ -168,7 +139,7 @@ export default function LoyaltyTiersPage() {
 
       {saved ? (
         <p className="mb-4 rounded-xl border border-theme-green-action/30 bg-theme-green-action/10 px-4 py-2 text-sm text-theme-green-action">
-          Loyalty tiers and benefits saved.
+          Loyalty tier benefits saved.
         </p>
       ) : null}
 
@@ -189,25 +160,10 @@ export default function LoyaltyTiersPage() {
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-admin-teal/15 text-xs font-bold text-admin-teal">
                       {index + 1}
                     </span>
-                    <input
-                      value={tier.name}
-                      onChange={(e) => updateTier(tier.id, { name: e.target.value })}
-                      className={`${inputCls} max-w-[180px] font-semibold`}
-                      aria-label="Tier name"
-                    />
-                    <label className="flex items-center gap-2 text-xs text-slate-400">
-                      Points
-                      <input
-                        value={tier.points}
-                        onChange={(e) =>
-                          updateTier(tier.id, {
-                            points: Number(String(e.target.value).replace(/\D/g, "")) || 0,
-                          })
-                        }
-                        inputMode="numeric"
-                        className={`${inputCls} w-32`}
-                      />
-                    </label>
+                    <span className="min-w-[100px] text-base font-semibold text-white">{tier.name}</span>
+                    <span className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300">
+                      Points: <span className="font-semibold text-white">{Number(tier.points).toLocaleString()}</span>
+                    </span>
                     <label className="inline-flex items-center gap-2 text-sm text-slate-300">
                       <input
                         type="checkbox"
@@ -240,15 +196,6 @@ export default function LoyaltyTiersPage() {
                           Edit benefits <ChevronDown className="h-3.5 w-3.5" />
                         </>
                       )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeTier(tier.id)}
-                      disabled={tiers.length <= 1}
-                      className="rounded-lg bg-[#E11D48] p-2 text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
-                      title="Remove tier"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
