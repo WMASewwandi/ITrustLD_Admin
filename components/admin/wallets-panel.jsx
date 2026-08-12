@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, Eye, EyeOff, Pencil, Plus, X } from "lucide-react";
 import { inputCls } from "@/components/admin/queue-ui";
 import { useAppDialog } from "@/components/admin/app-dialog";
 import {
@@ -18,6 +18,8 @@ import {
   SAMPLE_WALLET_LOGO,
   toggleCashoutWalletStatus,
   toggleTopupWalletStatus,
+  unhideCashoutWallet,
+  unhideTopupWallet,
   updateCashoutWallet,
   updateTopupWallet,
 } from "@/lib/wallets";
@@ -38,6 +40,7 @@ const emptyForm = {
   allowForVoucher: false,
   allowNavigateButton: false,
   navigateUrl: "",
+  navigateButtonLabel: "",
   badgeColor: "#236B6B",
 };
 
@@ -138,11 +141,11 @@ function ModalShell({ title, subtitle, onClose, children, onSave, saving }) {
   );
 }
 
-function FieldRow({ label, children }) {
+function FieldRow({ label, children, disabled = false }) {
   return (
     <div className="grid grid-cols-[140px_1fr] items-start gap-x-3 gap-y-1 border-b border-white/10 py-2.5 last:border-b-0 sm:grid-cols-[160px_1fr]">
-      <dt className="text-sm font-medium text-slate-500">{label}</dt>
-      <dd className="text-sm font-medium text-white">{children}</dd>
+      <dt className={`text-sm font-medium ${disabled ? "text-slate-600" : "text-slate-500"}`}>{label}</dt>
+      <dd className={`text-sm font-medium ${disabled ? "text-slate-500" : "text-white"}`}>{children}</dd>
     </div>
   );
 }
@@ -164,7 +167,7 @@ function WalletSection({
   addTitle,
   editTitle,
   addSubtitle,
-  deleteConfirm,
+  hideConfirm,
   paymentOptionChoices,
   currencyOptions,
   platformTypes,
@@ -174,6 +177,7 @@ function WalletSection({
   createRow,
   updateRow,
   deleteRow,
+  unhideRow,
   toggleRowStatus,
   fallbackTerms,
   showVoucherFlag = false,
@@ -248,6 +252,7 @@ function WalletSection({
         allowForVoucher: Boolean(wallet.allowForVoucher),
         allowNavigateButton: Boolean(wallet.allowNavigateButton),
         navigateUrl: wallet.navigateUrl || "",
+        navigateButtonLabel: wallet.navigateButtonLabel || "",
         badgeColor: wallet.badgeColor || "#236B6B",
       });
     } catch (error) {
@@ -305,6 +310,7 @@ function WalletSection({
       allowForVoucher,
       allowNavigateButton,
       navigateUrl,
+      navigateButtonLabel,
     } = modal;
 
     const selectedPlatformTypes = Array.isArray(platformTypes) ? platformTypes : [];
@@ -315,9 +321,27 @@ function WalletSection({
       await alert("Navigate URL is required when the navigate button is enabled.");
       return;
     }
+    if (allowNavigateButton && !String(navigateButtonLabel || "").trim()) {
+      await alert("Button name is required when the navigate button is enabled.");
+      return;
+    }
+
+    const trimmedName = name.trim();
+    const nameTaken = rows.some(
+      (row) =>
+        !row.hidden &&
+        String(row.name || "").trim().toLowerCase() === trimmedName.toLowerCase() &&
+        (mode !== "edit" || Number(row.id) !== Number(id)),
+    );
+    if (nameTaken) {
+      await alert(
+        `A wallet named "${trimmedName}" already exists in ${title}. Use a different name.`,
+      );
+      return;
+    }
 
     const payload = {
-      name: name.trim(),
+      name: trimmedName,
       currency,
       minLimit: Number(minLimit) || 0,
       maxLimit: Number(maxLimit) || 0,
@@ -326,6 +350,9 @@ function WalletSection({
       paymentMethodIds: paymentMethodIds.map((id) => Number(id)),
       allowNavigateButton: Boolean(allowNavigateButton),
       navigateUrl: Boolean(allowNavigateButton) ? String(navigateUrl || "").trim() : "",
+      navigateButtonLabel: Boolean(allowNavigateButton)
+        ? String(navigateButtonLabel || "").trim()
+        : "",
       ...(showVoucherFlag ? { allowForVoucher: Boolean(allowForVoucher) } : {}),
     };
 
@@ -354,13 +381,30 @@ function WalletSection({
     }
   }
 
-  async function remove(id) {
-    if (!(await confirm(deleteConfirm, { title: "Delete wallet", confirmLabel: "Delete" }))) return;
+  async function hideWallet(id) {
+    if (!(await confirm(hideConfirm, { title: "Hide wallet", confirmLabel: "Hide" }))) return;
     try {
       await deleteRow(id);
       await reloadRows();
     } catch (error) {
-      await alert(error?.message || "Could not delete wallet.");
+      await alert(error?.message || "Could not hide wallet.");
+    }
+  }
+
+  async function restoreWallet(id) {
+    if (
+      !(await confirm("Show this wallet to users again?", {
+        title: "Unhide wallet",
+        confirmLabel: "Unhide",
+      }))
+    ) {
+      return;
+    }
+    try {
+      await unhideRow(id);
+      await reloadRows();
+    } catch (error) {
+      await alert(error?.message || "Could not unhide wallet.");
     }
   }
 
@@ -384,74 +428,105 @@ function WalletSection({
             key={row.id}
             className={`admin-card admin-fade-up overflow-visible p-0 ${
               i % 2 === 1 ? "admin-fade-up-delay-1" : ""
-            }`}
+            } ${row.hidden ? "border-white/5 bg-white/[0.02]" : ""}`}
           >
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
-              <WalletBadge name={row.name} color={row.badgeColor} logoUrl={row.logoUrl} />
+              <div className={`flex flex-wrap items-center gap-2 ${row.hidden ? "opacity-50 grayscale" : ""}`}>
+                <WalletBadge name={row.name} color={row.badgeColor} logoUrl={row.logoUrl} />
+                {row.hidden ? (
+                  <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Hidden
+                  </span>
+                ) : null}
+              </div>
               <button
                 type="button"
+                disabled={row.hidden}
                 onClick={() => toggleActive(row.id, row.active)}
                 className={`inline-flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium transition ${
-                  row.active
-                    ? "text-theme-green-action"
-                    : "text-slate-500 hover:text-slate-100"
+                  row.hidden
+                    ? "cursor-not-allowed text-slate-600"
+                    : row.active
+                      ? "text-theme-green-action"
+                      : "text-slate-500 hover:text-slate-100"
                 }`}
               >
                 <span
                   className={`inline-flex h-5 w-5 items-center justify-center rounded border ${
-                    row.active
+                    row.active && !row.hidden
                       ? "border-theme-green-action bg-theme-green-action text-white"
                       : "border-white/20 bg-admin-surface"
                   }`}
                 >
-                  {row.active ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
+                  {row.active && !row.hidden ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
                 </span>
                 {activateLabel}
               </button>
             </div>
 
-            <dl className="px-5 py-2">
-              <FieldRow label="Wallet Name">{row.name}</FieldRow>
-              <FieldRow label="Payment methods">
+            <dl className={`px-5 py-2 ${row.hidden ? "pointer-events-none" : ""}`}>
+              <FieldRow label="Wallet Name" disabled={row.hidden}>
+                {row.name}
+              </FieldRow>
+              <FieldRow label="Payment methods" disabled={row.hidden}>
                 {Array.isArray(row.paymentMethods)
                   ? row.paymentMethods.join(", ")
                   : row.paymentMethods}
               </FieldRow>
-              <FieldRow label="Minimum limit">{formatLimit(row.minLimit)}</FieldRow>
-              <FieldRow label="Maximum limit">{formatLimit(row.maxLimit)}</FieldRow>
-              <FieldRow label="Currency">{row.currency}</FieldRow>
-              <FieldRow label="Platform type">
+              <FieldRow label="Minimum limit" disabled={row.hidden}>
+                {formatLimit(row.minLimit)}
+              </FieldRow>
+              <FieldRow label="Maximum limit" disabled={row.hidden}>
+                {formatLimit(row.maxLimit)}
+              </FieldRow>
+              <FieldRow label="Currency" disabled={row.hidden}>
+                {row.currency}
+              </FieldRow>
+              <FieldRow label="Platform type" disabled={row.hidden}>
                 {Array.isArray(row.platformTypes) && row.platformTypes.length
                   ? row.platformTypes.join(", ")
                   : row.platformType || "—"}
               </FieldRow>
               {showVoucherFlag ? (
-                <FieldRow label="Client bonus voucher">
+                <FieldRow label="Client bonus voucher" disabled={row.hidden}>
                   <span
                     className={
-                      row.allowForVoucher
-                        ? "font-semibold text-theme-green-action"
-                        : "text-slate-400"
+                      row.hidden
+                        ? "text-slate-500"
+                        : row.allowForVoucher
+                          ? "font-semibold text-theme-green-action"
+                          : "text-slate-400"
                     }
                   >
                     {row.allowForVoucher ? "Allowed" : "Not allowed"}
                   </span>
                 </FieldRow>
               ) : null}
-              <FieldRow label="Navigate button">
+              <FieldRow label="Navigate button" disabled={row.hidden}>
                 {row.allowNavigateButton ? (
-                  <span className="break-all font-semibold text-theme-green-action">
-                    Enabled · {row.navigateUrl || "—"}
+                  <span
+                    className={
+                      row.hidden
+                        ? "break-all text-slate-500"
+                        : "break-all font-semibold text-theme-green-action"
+                    }
+                  >
+                    Enabled · {row.navigateButtonLabel || "—"} · {row.navigateUrl || "—"}
                   </span>
                 ) : (
-                  <span className="text-slate-400">Disabled</span>
+                  <span className="text-slate-500">Disabled</span>
                 )}
               </FieldRow>
-              <FieldRow label="Terms & Conditions">
+              <FieldRow label="Terms & Conditions" disabled={row.hidden}>
                 <button
                   type="button"
                   onClick={() => setTermsModal(row)}
-                  className="font-semibold text-admin-teal underline-offset-2 hover:text-admin-teal-deep hover:underline"
+                  className={`pointer-events-auto font-semibold underline-offset-2 ${
+                    row.hidden
+                      ? "cursor-default text-slate-500 no-underline"
+                      : "text-admin-teal hover:text-admin-teal-deep hover:underline"
+                  }`}
+                  disabled={row.hidden}
                 >
                   View terms and conditions
                 </button>
@@ -459,22 +534,35 @@ function WalletSection({
             </dl>
 
             <div className="flex flex-wrap gap-2 border-t border-white/10 px-5 py-3.5">
-              <button
-                type="button"
-                onClick={() => openEdit(row)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-theme-green-action px-3 py-1.5 text-sm font-semibold text-theme-green-action transition hover:bg-theme-green-action/10"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => remove(row.id)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#E11D48] px-3 py-1.5 text-sm font-semibold text-[#E11D48] transition hover:bg-[#E11D48]/10"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete
-              </button>
+              {!row.hidden ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => openEdit(row)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-theme-green-action px-3 py-1.5 text-sm font-semibold text-theme-green-action transition hover:bg-theme-green-action/10"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => hideWallet(row.id)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#E11D48] px-3 py-1.5 text-sm font-semibold text-[#E11D48] transition hover:bg-[#E11D48]/10"
+                  >
+                    <EyeOff className="h-3.5 w-3.5" />
+                    Hide
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => restoreWallet(row.id)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-theme-green-action px-3 py-1.5 text-sm font-semibold text-theme-green-action transition hover:bg-theme-green-action/10"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  Unhide
+                </button>
+              )}
             </div>
           </article>
         ))}
@@ -662,6 +750,7 @@ function WalletSection({
                           ...m,
                           allowNavigateButton: e.target.checked,
                           navigateUrl: e.target.checked ? m.navigateUrl : "",
+                          navigateButtonLabel: e.target.checked ? m.navigateButtonLabel || "" : "",
                         }
                       : m,
                   )
@@ -677,17 +766,33 @@ function WalletSection({
             </label>
 
             {modal.allowNavigateButton ? (
-              <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-slate-300">Navigate URL</span>
-                <input
-                  required
-                  type="url"
-                  value={modal.navigateUrl}
-                  onChange={(e) => setModal((m) => (m ? { ...m, navigateUrl: e.target.value } : m))}
-                  className={inputCls}
-                  placeholder="https://example.com/path"
-                />
-              </label>
+              <div className="space-y-3">
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium text-slate-300">Button name</span>
+                  <input
+                    required
+                    type="text"
+                    maxLength={40}
+                    value={modal.navigateButtonLabel || ""}
+                    onChange={(e) =>
+                      setModal((m) => (m ? { ...m, navigateButtonLabel: e.target.value } : m))
+                    }
+                    className={inputCls}
+                    placeholder="Enter button name"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium text-slate-300">Navigate URL</span>
+                  <input
+                    required
+                    type="url"
+                    value={modal.navigateUrl}
+                    onChange={(e) => setModal((m) => (m ? { ...m, navigateUrl: e.target.value } : m))}
+                    className={inputCls}
+                    placeholder="https://example.com/path"
+                  />
+                </label>
+              </div>
             ) : null}
           </div>
         </ModalShell>
@@ -765,7 +870,7 @@ export default function WalletsPanel() {
         emptyMessage="No top-up wallets yet. Click Add Wallet to create one."
         addTitle="Add Wallet"
         editTitle="Edit Wallet"
-        deleteConfirm="Delete this top-up wallet?"
+        hideConfirm="Hide this top-up wallet from users?"
         paymentOptionChoices={meta.paymentOptions}
         currencyOptions={meta.currencyTypes}
         platformTypes={meta.platformTypes}
@@ -775,6 +880,7 @@ export default function WalletsPanel() {
         createRow={createTopupWallet}
         updateRow={updateTopupWallet}
         deleteRow={deleteTopupWallet}
+        unhideRow={unhideTopupWallet}
         toggleRowStatus={toggleTopupWalletStatus}
         fallbackTerms="Standard top-up wallet terms apply. Limits and processing times may vary by payment method."
         showVoucherFlag
@@ -787,7 +893,7 @@ export default function WalletsPanel() {
         addTitle="Add Cashout Wallet"
         editTitle="Edit Cashout Wallet"
         addSubtitle="Fill the below details to add a wallet."
-        deleteConfirm="Delete this cash-out wallet?"
+        hideConfirm="Hide this cash-out wallet from users?"
         paymentOptionChoices={meta.paymentOptions}
         currencyOptions={meta.currencyTypes}
         platformTypes={meta.platformTypes}
@@ -797,6 +903,7 @@ export default function WalletsPanel() {
         createRow={createCashoutWallet}
         updateRow={updateCashoutWallet}
         deleteRow={deleteCashoutWallet}
+        unhideRow={unhideCashoutWallet}
         toggleRowStatus={toggleCashoutWalletStatus}
         fallbackTerms="Standard cash-out wallet terms apply. Limits and processing times may vary by payment method."
       />
