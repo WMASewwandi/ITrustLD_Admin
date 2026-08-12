@@ -232,7 +232,9 @@ function ProofSummaryFields({ proof }) {
     <dl className="grid gap-2 text-sm">
       <div className="rounded-lg bg-white/5 px-3 py-2">
         <dt className="text-slate-400">Platform</dt>
-        <dd className="font-medium text-white">{proof.platform || "—"}</dd>
+        <dd className="font-medium text-white">
+          <CopyCell value={proof.platform || "—"} />
+        </dd>
       </div>
       <div className="rounded-lg bg-white/5 px-3 py-2">
         <dt className="text-slate-400">Method</dt>
@@ -831,7 +833,7 @@ function TransactionsContent() {
       return;
     }
     setFilterError("");
-    setDepositsLoading(true);
+    if (!overrides.silent) setDepositsLoading(true);
     setDepositsError("");
     try {
       const queryParams = buildDepositQueryParams({
@@ -847,6 +849,7 @@ function TransactionsContent() {
         userAccount: overrides.userAccount ?? depositFilters.userAccount,
         advancedSearchIn: overrides.advancedSearchIn ?? depositFilters.advancedSearchIn,
       });
+      if (overrides.cacheBust) queryParams.cacheBust = overrides.cacheBust;
       const data = await fetchDeposits(queryParams);
       setDeposits(data.deposits || []);
       setDepositTotals(data.totals || { totalDepositAmount: 0, totalPaymentAmount: 0 });
@@ -873,7 +876,7 @@ function TransactionsContent() {
       return;
     }
     setFilterError("");
-    setWithdrawalsLoading(true);
+    if (!overrides.silent) setWithdrawalsLoading(true);
     setWithdrawalsError("");
     try {
       const queryParams = buildWithdrawalQueryParams({
@@ -889,6 +892,7 @@ function TransactionsContent() {
         userAccount: overrides.userAccount ?? withdrawalFilters.userAccount,
         advancedSearchIn: overrides.advancedSearchIn ?? withdrawalFilters.advancedSearchIn,
       });
+      if (overrides.cacheBust) queryParams.cacheBust = overrides.cacheBust;
       const data = await fetchWithdrawals(queryParams);
       setWithdrawals(data.withdrawals || []);
       setWithdrawalTotals(
@@ -1168,6 +1172,63 @@ function TransactionsContent() {
     if (event.target instanceof HTMLButtonElement) return;
     event.preventDefault();
     runTransactionSearch({ preventDefault: () => {}, fromAdvancedRow: true });
+  }
+
+  function clearAdvancedFilters() {
+    const nextDuration = "Today";
+    const cleared = {
+      duration: nextDuration,
+      from: "",
+      to: "",
+      txId: "",
+      platformId: "",
+      userAccount: "",
+    };
+    const searchOverrides = {
+      page: 1,
+      status,
+      keyword: q || undefined,
+      duration: nextDuration,
+      from: "",
+      to: "",
+      transactionId: "",
+      platformId: "",
+      userAccount: "",
+      advancedSearchIn,
+    };
+    const syncOverrides = {
+      page: 1,
+      status,
+      keyword: q,
+      duration: nextDuration,
+      from: "",
+      to: "",
+      txId: "",
+      platformId: "",
+      userAccount: "",
+      advancedSearchIn,
+    };
+
+    skipAutoLoadRef.current = true;
+    setFilterError("");
+    patchActiveFilters(cleared);
+    if (tab === "deposits") {
+      setDepositPage(1);
+      loadDeposits(searchOverrides).finally(() => {
+        skipAutoLoadRef.current = false;
+      });
+      skipUrlHydrationRef.current = true;
+      const qs = buildDepositUrlQuery(syncOverrides);
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      return;
+    }
+    setWithdrawalPage(1);
+    loadWithdrawals(searchOverrides).finally(() => {
+      skipAutoLoadRef.current = false;
+    });
+    skipUrlHydrationRef.current = true;
+    const qs = buildWithdrawalUrlQuery(syncOverrides);
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
 
   useEffect(() => {
@@ -1519,9 +1580,17 @@ function TransactionsContent() {
     setActionError("");
     try {
       if (tab === "deposits") {
-        await updateDepositStatus({ depositId: row.depositId, status: "Pending" });
+        await updateDepositStatus({
+          depositId: row.depositId,
+          transactionId: row.transactionId || row.id,
+          status: "Pending",
+        });
       } else {
-        await updateWithdrawalStatus({ withdrawalId: row.withdrawalId, status: "Pending" });
+        await updateWithdrawalStatus({
+          withdrawalId: row.withdrawalId,
+          transactionId: row.transactionId || row.id,
+          status: "Pending",
+        });
       }
       setPendingConfirmId(null);
       if (proof?.id === id) closeProof();
@@ -1752,10 +1821,25 @@ function TransactionsContent() {
     });
   }
 
-  function refresh() {
+  async function refresh() {
     setRefreshing(true);
-    const loader = tab === "deposits" ? loadDeposits() : loadWithdrawals();
-    loader.finally(() => setRefreshing(false));
+    setActionError("");
+    try {
+      const cacheBust = Date.now();
+      const loader =
+        tab === "deposits"
+          ? loadDepositsRef.current
+          : loadWithdrawalsRef.current;
+      if (!loader) {
+        throw new Error("Transaction list is not ready yet. Try again.");
+      }
+      await loader({ silent: true, cacheBust });
+      notifyAdminNavCountsRefresh();
+    } catch (err) {
+      setActionError(err.message || "Failed to refresh transactions.");
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   return (
@@ -1905,10 +1989,11 @@ function TransactionsContent() {
             <button
               type="button"
               onClick={refresh}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+              disabled={refreshing}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-white/20 disabled:opacity-60"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-              Refresh
+              {refreshing ? "Refreshing…" : "Refresh"}
             </button>
             {(tab === "deposits" || tab === "withdrawals") && resolvedDepositStatus === "Pending" ? (
               <>
@@ -2001,16 +2086,33 @@ function TransactionsContent() {
               <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                 Search
               </span>
-              <input
-                value={q}
-                onChange={(e) => {
-                  setQ(e.target.value);
-                  setDepositPage(1);
-                  setWithdrawalPage(1);
-                }}
-                placeholder="Search…"
-                className="w-full rounded-xl border border-white/10 bg-admin-surface px-4 py-2.5 text-sm text-white outline-none placeholder:text-slate-500"
-              />
+              <div className="relative">
+                <input
+                  value={q}
+                  onChange={(e) => {
+                    setQ(e.target.value);
+                    setDepositPage(1);
+                    setWithdrawalPage(1);
+                  }}
+                  placeholder="Search…"
+                  className="w-full rounded-xl border border-white/10 bg-admin-surface py-2.5 pl-4 pr-10 text-sm text-white outline-none placeholder:text-slate-500"
+                />
+                {q.trim() ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQ("");
+                      setDepositPage(1);
+                      setWithdrawalPage(1);
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 transition hover:bg-white/10 hover:text-white"
+                    aria-label="Clear search"
+                    title="Clear search"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </div>
               {status === "Pending" ? (
                 <p className="mt-1.5 text-[11px] text-slate-500">
                   Keyword search filters pending {tab === "deposits" ? "deposits" : "withdrawals"} only. Use
@@ -2105,6 +2207,17 @@ function TransactionsContent() {
                 <Search className="h-4 w-4" />
                 Search
               </button>
+              {status === "Completed" || status === "Rejected" ? (
+                <button
+                  type="button"
+                  onClick={clearAdvancedFilters}
+                  disabled={!advancedFiltersActive}
+                  className="inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+                >
+                  <X className="h-4 w-4" />
+                  Clear
+                </button>
+              ) : null}
             </div>
           </div>
         </form>
@@ -2113,12 +2226,11 @@ function TransactionsContent() {
         {listError ? (
           <div className="border-b border-white/10 px-5 py-3 text-sm text-rose-400">{listError}</div>
         ) : null}
-        {listLoading ? (
-          <div className="px-5 py-10 text-center text-sm text-slate-400">
-            Loading {tab === "deposits" ? "deposits" : "withdrawals"}…
-          </div>
-        ) : (
-        <div className="overflow-x-auto">
+        <div
+          className={`overflow-x-auto transition-opacity ${
+            listLoading ? "opacity-60" : "opacity-100"
+          }`}
+        >
           {tab === "withdrawals" ? (
             <table className="min-w-[1280px] w-full text-left text-[13px]">
               <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
@@ -2250,7 +2362,9 @@ function TransactionsContent() {
                 {shown.length === 0 ? (
                   <tr>
                     <td colSpan={resolvedDepositStatus === "Rejected" ? 15 : 14} className="px-4 py-14 text-center text-slate-400">
-                      No Results Found
+                      {listLoading
+                        ? `Loading ${tab === "deposits" ? "deposits" : "withdrawals"}…`
+                        : "No Results Found"}
                     </td>
                   </tr>
                 ) : null}
@@ -2311,7 +2425,9 @@ function TransactionsContent() {
                     <td className="px-3 py-3">
                       <CopyCell value={r.clientPay || r.amount} />
                     </td>
-                    <td className="px-3 py-3 font-medium text-white">{r.platform || "—"}</td>
+                    <td className="px-3 py-3">
+                      <CopyCell value={r.platform || "—"} />
+                    </td>
                     <td className="px-3 py-3">
                       <CopyCell value={r.deposited || r.amount} />
                     </td>
@@ -2372,7 +2488,9 @@ function TransactionsContent() {
                 {shown.length === 0 ? (
                   <tr>
                     <td colSpan={resolvedDepositStatus === "Rejected" ? 14 : 13} className="px-4 py-14 text-center text-slate-400">
-                      No Results Found
+                      {listLoading
+                        ? `Loading ${tab === "deposits" ? "deposits" : "withdrawals"}…`
+                        : "No Results Found"}
                     </td>
                   </tr>
                 ) : null}
@@ -2380,7 +2498,6 @@ function TransactionsContent() {
             </table>
           )}
         </div>
-        )}
 
         {/* Progressive disclosure — concept 3.3 */}
         {activePagination.total_pages > 1 ? (

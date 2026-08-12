@@ -457,12 +457,12 @@ export default function DashboardPage() {
     <div className="pb-10">
       <Breadcrumb items={[{ label: "Dashboard" }]} />
 
-      <div className="admin-fade-up relative z-30 mb-6 flex items-start justify-between gap-3 overflow-visible">
+      <div className="admin-fade-up relative z-30 mb-6 flex flex-col gap-3 overflow-visible sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-white">Dashboard</h1>
           <p className="mt-1 text-sm text-slate-400">Completed volumes, revenue and profit overview</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 self-start sm:self-auto">
           {loading ? (
             <span className="inline-flex items-center gap-2 text-xs text-slate-500">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />

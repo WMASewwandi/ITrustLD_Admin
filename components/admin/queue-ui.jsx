@@ -2,20 +2,26 @@
 
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
+import { copyTextToClipboard, normalizeCopyText } from "@/lib/clipboard";
 
 export function CopyButton({ value, title = "Copy", className = "" }) {
   const [copied, setCopied] = useState(false);
-  const text = value == null || value === "" ? "" : String(value);
+  const [failed, setFailed] = useState(false);
+  const text = normalizeCopyText(value);
 
   async function copy(e) {
+    e?.preventDefault?.();
     e?.stopPropagation?.();
     if (!text) return;
     try {
-      await navigator.clipboard.writeText(text);
+      await copyTextToClipboard(text);
+      setFailed(false);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
+      window.setTimeout(() => setCopied(false), 1200);
     } catch {
-      /* clipboard unavailable */
+      setCopied(false);
+      setFailed(true);
+      window.setTimeout(() => setFailed(false), 1600);
     }
   }
 
@@ -25,9 +31,14 @@ export function CopyButton({ value, title = "Copy", className = "" }) {
       onClick={copy}
       disabled={!text}
       className={`shrink-0 rounded p-0.5 text-slate-500 transition hover:bg-white/10 hover:text-teal-300 disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
-      title={title}
+      title={failed ? "Copy failed — try HTTPS or select text manually" : copied ? "Copied" : title}
+      aria-label={failed ? "Copy failed" : copied ? "Copied" : title}
     >
-      {copied ? <Check className="h-3 w-3 text-theme-green-action" /> : <Copy className="h-3 w-3" />}
+      {copied ? (
+        <Check className="h-3 w-3 text-theme-green-action" />
+      ) : (
+        <Copy className={`h-3 w-3 ${failed ? "text-rose-400" : ""}`} />
+      )}
     </button>
   );
 }
