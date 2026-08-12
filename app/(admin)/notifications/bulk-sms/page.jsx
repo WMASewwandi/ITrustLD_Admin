@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Clock, Loader2, Send, Users, XCircle } from "lucide-react";
 import Breadcrumb from "@/components/admin/breadcrumb";
+import { useAppDialog } from "@/components/admin/app-dialog";
 import { inputCls } from "@/components/admin/queue-ui";
 import {
   cancelBulkSmsCampaign,
@@ -61,6 +62,7 @@ function ProgressBar({ sent, total }) {
 }
 
 export default function BulkSmsPage() {
+  const { confirm } = useAppDialog();
   const [queue, setQueue] = useState([]);
   const [stats, setStats] = useState({ queued: 0, sending: 0, sent: 0 });
   const [smsTemplates, setSmsTemplates] = useState([]);
@@ -143,7 +145,7 @@ export default function BulkSmsPage() {
   }
 
   async function handleCancel(id) {
-    if (!window.confirm("Cancel this bulk SMS campaign?")) return;
+    if (!(await confirm("Cancel this bulk SMS campaign?", { title: "Cancel campaign", confirmLabel: "Cancel campaign" }))) return;
     setError("");
     try {
       await cancelBulkSmsCampaign(id);

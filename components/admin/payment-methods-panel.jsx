@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CreditCard, ChevronLeft, ChevronRight, Loader2, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { inputCls } from "@/components/admin/queue-ui";
+import { useAppDialog } from "@/components/admin/app-dialog";
 import {
   createPaymentMethod,
   deletePaymentMethod,
@@ -66,6 +67,7 @@ function ActionButtons({ onEdit, onDelete, disabled }) {
 }
 
 export default function PaymentMethodsPanel() {
+  const { alert, confirm } = useAppDialog();
   const [rows, setRows] = useState([]);
   const [currencyOptions, setCurrencyOptions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -188,7 +190,7 @@ export default function PaymentMethodsPanel() {
       }
       setModal(null);
     } catch (error) {
-      window.alert(error?.message || "Could not save payment method.");
+      await alert(error?.message || "Could not save payment method.");
     } finally {
       setSaving(false);
     }
@@ -217,7 +219,7 @@ export default function PaymentMethodsPanel() {
       setRows((prev) =>
         prev.map((item) => (item.id === row.id ? { ...item, active: row.active } : item)),
       );
-      window.alert(error?.message || "Could not update payment method status.");
+      await alert(error?.message || "Could not update payment method status.");
     } finally {
       setTogglingId(null);
     }
@@ -236,20 +238,20 @@ export default function PaymentMethodsPanel() {
         await reloadPaymentMethods(true);
       }
     } catch (error) {
-      window.alert(error?.message || "Could not update payment method priority.");
+      await alert(error?.message || "Could not update payment method priority.");
     } finally {
       setTogglingId(null);
     }
   }
 
   async function remove(id) {
-    if (!window.confirm("Delete this payment method?")) return;
+    if (!(await confirm("Delete this payment method?", { title: "Delete payment method", confirmLabel: "Delete" }))) return;
 
     try {
       await deletePaymentMethod(id);
       setRows((prev) => prev.filter((row) => row.id !== id));
     } catch (error) {
-      window.alert(error?.message || "Could not delete payment method.");
+      await alert(error?.message || "Could not delete payment method.");
     }
   }
 

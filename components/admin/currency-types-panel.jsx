@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { inputCls } from "@/components/admin/queue-ui";
+import { useAppDialog } from "@/components/admin/app-dialog";
 import {
   createCurrencyType,
   deleteCurrencyType,
@@ -97,6 +98,7 @@ function ModalShell({ title, onClose, children, onSave, saving }) {
 }
 
 export default function CurrencyTypesPanel() {
+  const { alert, confirm } = useAppDialog();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -170,7 +172,7 @@ export default function CurrencyTypesPanel() {
       }
       setModal(null);
     } catch (error) {
-      window.alert(error?.message || "Could not save currency type.");
+      await alert(error?.message || "Could not save currency type.");
     } finally {
       setSaving(false);
     }
@@ -198,20 +200,20 @@ export default function CurrencyTypesPanel() {
       setRows((prev) =>
         prev.map((item) => (item.id === row.id ? { ...item, active: row.active } : item)),
       );
-      window.alert(error?.message || "Could not update currency type status.");
+      await alert(error?.message || "Could not update currency type status.");
     } finally {
       setTogglingId(null);
     }
   }
 
   async function remove(id) {
-    if (!window.confirm("Delete this currency type?")) return;
+    if (!(await confirm("Delete this currency type?", { title: "Delete currency type", confirmLabel: "Delete" }))) return;
 
     try {
       await deleteCurrencyType(id);
       setRows((prev) => prev.filter((row) => row.id !== id));
     } catch (error) {
-      window.alert(error?.message || "Could not delete currency type.");
+      await alert(error?.message || "Could not delete currency type.");
     }
   }
 

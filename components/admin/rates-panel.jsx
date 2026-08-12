@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { inputCls } from "@/components/admin/queue-ui";
 import { useCan } from "@/contexts/admin-permissions";
+import { useAppDialog } from "@/components/admin/app-dialog";
 import {
   addPointWithdrawalRate,
   createRates,
@@ -109,6 +110,7 @@ function RatesTable({ title, columns, rows, emptyLabel, renderCells, onEdit, onD
 
 export default function RatesPanel({ method }) {
   const canMutate = useCan("change_currency_configs");
+  const { confirm } = useAppDialog();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -272,7 +274,7 @@ export default function RatesPanel({ method }) {
   }
 
   async function removeDeposit(row) {
-    if (!window.confirm("Delete this deposit rate?")) return;
+    if (!(await confirm("Delete this deposit rate?", { title: "Delete rate", confirmLabel: "Delete" }))) return;
     setBusy(true);
     setError("");
     try {
@@ -287,7 +289,7 @@ export default function RatesPanel({ method }) {
   }
 
   async function removeWithdrawal(row) {
-    if (!window.confirm("Delete this withdrawal rate?")) return;
+    if (!(await confirm("Delete this withdrawal rate?", { title: "Delete rate", confirmLabel: "Delete" }))) return;
     setBusy(true);
     setError("");
     try {
@@ -302,7 +304,7 @@ export default function RatesPanel({ method }) {
   }
 
   async function removePoint(row) {
-    if (!window.confirm("Delete this point withdrawal rate?")) return;
+    if (!(await confirm("Delete this point withdrawal rate?", { title: "Delete rate", confirmLabel: "Delete" }))) return;
     setBusy(true);
     setError("");
     try {
