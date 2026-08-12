@@ -739,7 +739,7 @@ export default function DashboardPage() {
             ) : (
               <DotLineChart
                 points={data?.monthlyProfit ?? []}
-                labels={MONTHS.slice(0, (data?.monthlyProfit ?? []).length || 12)}
+                labels={data?.profitChartLabels?.length ? data.profitChartLabels : MONTHS.slice(0, (data?.monthlyProfit ?? []).length || 12)}
                 color="#22c55e"
               />
             )}
@@ -772,9 +772,13 @@ export default function DashboardPage() {
             ) : (
               <DotLineChart
                 points={data?.dailyProfit ?? []}
-                labels={(data?.dailyProfit ?? []).map((_, i) => `Day ${i + 1}`)}
+                labels={
+                  data?.dailyProfitLabels?.length
+                    ? data.dailyProfitLabels
+                    : (data?.dailyProfit ?? []).map((_, i) => `Day ${i + 1}`)
+                }
                 color="#ef4444"
-                showDots={(data?.dailyProfit ?? []).some((v) => v > 0)}
+                showDots={(data?.dailyProfit ?? []).some((v) => Number(v) !== 0)}
               />
             )}
           </div>
