@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
-import CopyCell, { FilterField, inputCls } from "@/components/admin/queue-ui";
+import CopyCell, { FilterField, FormError, inputCls } from "@/components/admin/queue-ui";
 import { useCan } from "@/contexts/admin-permissions";
 import {
   fetchHelpTickets,
@@ -83,6 +83,7 @@ export default function HelpTicketsPage() {
   async function handleViewTicket(row) {
     setViewBusy(true);
     setActionMessage("");
+    setPageError("");
     setReplySubject(buildReplySubject(row.subject));
     setReplyMessage("");
     setSelected(row);
@@ -94,7 +95,7 @@ export default function HelpTicketsPage() {
         notifyAdminNavCountsRefresh();
       }
     } catch (err) {
-      setActionMessage(err.message || "Could not mark ticket as read.");
+      setPageError(err.message || "Could not mark ticket as read.");
     } finally {
       setViewBusy(false);
     }
@@ -104,6 +105,7 @@ export default function HelpTicketsPage() {
     if (!selected) return;
     setReplyBusy(true);
     setActionMessage("");
+    setPageError("");
     try {
       const data = await replyToHelpTicket(selected.id, {
         subject: replySubject.trim(),
@@ -113,7 +115,7 @@ export default function HelpTicketsPage() {
       setActionMessage(data.message || "Reply sent successfully.");
       notifyAdminNavCountsRefresh();
     } catch (err) {
-      setActionMessage(err.message || "Failed to send reply.");
+      setPageError(err.message || "Failed to send reply.");
     } finally {
       setReplyBusy(false);
     }
@@ -128,6 +130,7 @@ export default function HelpTicketsPage() {
   async function confirmMarkAllRead() {
     setMarkAllBusy(true);
     setActionMessage("");
+    setPageError("");
     try {
       const data = await markAllHelpTicketsRead();
       setRows((prev) => prev.map((row) => ({ ...row, isRead: true })));
@@ -136,7 +139,7 @@ export default function HelpTicketsPage() {
       await loadTickets(pagination.page);
       setMarkAllConfirmOpen(false);
     } catch (err) {
-      setActionMessage(err.message || "Failed to mark all tickets as read.");
+      setPageError(err.message || "Failed to mark all tickets as read.");
     } finally {
       setMarkAllBusy(false);
     }
@@ -223,7 +226,7 @@ export default function HelpTicketsPage() {
           </div>
         </div>
 
-        {pageError ? (
+        {pageError && !selected && !markAllConfirmOpen ? (
           <div className="border-b border-white/10 px-5 py-3 text-sm text-rose-300">{pageError}</div>
         ) : null}
         {actionMessage ? (
@@ -417,6 +420,7 @@ export default function HelpTicketsPage() {
                     className={`${inputCls} min-h-[120px] resize-y`}
                   />
                 </div>
+                <FormError message={pageError} />
                 {canReply ? (
                 <button
                   type="button"
@@ -445,8 +449,12 @@ export default function HelpTicketsPage() {
         confirmLabel="Mark all as read"
         confirmClassName="bg-admin-teal"
         busy={markAllBusy}
+        error={pageError}
         onCancel={() => {
-          if (!markAllBusy) setMarkAllConfirmOpen(false);
+          if (!markAllBusy) {
+            setMarkAllConfirmOpen(false);
+            setPageError("");
+          }
         }}
         onConfirm={confirmMarkAllRead}
       />

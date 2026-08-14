@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
-import CopyCell, { FilterField, inputCls } from "@/components/admin/queue-ui";
+import CopyCell, { FilterField, FormError, inputCls } from "@/components/admin/queue-ui";
 import { useCan } from "@/contexts/admin-permissions";
 import {
   addScammer,
@@ -97,6 +97,7 @@ export default function ScammersPage() {
     if (!form.platformId.trim()) return;
     setBusy(true);
     setActionMessage("");
+    setPageError("");
     try {
       await addScammer({
         platform_id: form.platformId.trim(),
@@ -112,7 +113,7 @@ export default function ScammersPage() {
       setActionMessage("Scammer added successfully.");
       await loadScammers(1);
     } catch (err) {
-      setActionMessage(err.message || "Failed to add scammer.");
+      setPageError(err.message || "Failed to add scammer.");
     } finally {
       setBusy(false);
     }
@@ -122,13 +123,14 @@ export default function ScammersPage() {
     if (!deleteConfirm) return;
     setBusy(true);
     setActionMessage("");
+    setPageError("");
     try {
       await deleteScammer(deleteConfirm.id);
       setDeleteConfirm(null);
       setActionMessage("Scammer removed successfully.");
       await loadScammers(pagination.page);
     } catch (err) {
-      setActionMessage(err.message || "Failed to delete scammer.");
+      setPageError(err.message || "Failed to delete scammer.");
     } finally {
       setBusy(false);
     }
@@ -194,7 +196,7 @@ export default function ScammersPage() {
           </div>
         </div>
 
-        {pageError ? (
+        {pageError && !addOpen && !deleteConfirm ? (
           <div className="border-b border-white/10 px-5 py-3 text-sm text-rose-300">{pageError}</div>
         ) : null}
         {actionMessage ? (
@@ -375,6 +377,7 @@ export default function ScammersPage() {
                 />
               </FilterField>
             </div>
+            <FormError message={pageError} className="mt-4" />
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
@@ -407,7 +410,11 @@ export default function ScammersPage() {
         confirmLabel="Delete"
         confirmClassName="bg-[#E11D48]"
         busy={busy}
-        onCancel={() => setDeleteConfirm(null)}
+        error={pageError}
+        onCancel={() => {
+          setDeleteConfirm(null);
+          setPageError("");
+        }}
         onConfirm={confirmDeleteScammer}
       />
     </div>

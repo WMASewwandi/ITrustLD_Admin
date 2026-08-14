@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectModal from "@/components/admin/reject-modal";
 import RejectReasonPanel from "@/components/admin/reject-reason-panel";
-import CopyCell, { FilterField, inputCls } from "@/components/admin/queue-ui";
+import CopyCell, { FilterField, FormError, inputCls } from "@/components/admin/queue-ui";
 import { fetchCustomers, fetchCustomerKycDocuments, fetchKycDocumentBlob, approveCustomerKyc, rejectCustomerKyc, banCustomer, unbanCustomer, banMultipleCustomers, updateCustomerPartner, sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
 import { EmailSendModal, SmsSendModal } from "@/components/admin/customer-message-modals";
 import { notifyAdminNavCountsRefresh } from "@/lib/notifications";
@@ -37,6 +37,32 @@ const FILTERS = [
 ];
 
 const FILTER_VALUES = new Set(FILTERS.map((f) => f.value));
+
+const EMPTY_SEARCH = {
+  email: "",
+  accountId: "",
+  firstName: "",
+  lastName: "",
+  isPartner: "",
+  userType: "",
+  loyaltyTier: "",
+};
+
+const USER_TYPE_FILTERS = [
+  { value: "", label: "All" },
+  { value: "normal", label: "Normal" },
+  { value: "affluent", label: "Affluent" },
+];
+
+const LOYALTY_TIER_FILTERS = [
+  { value: "", label: "All" },
+  { value: "normal", label: "Normal" },
+  { value: "silver", label: "Silver" },
+  { value: "gold", label: "Gold" },
+  { value: "diamond", label: "Diamond" },
+  { value: "vip", label: "VIP" },
+  { value: "vvip", label: "VVIP" },
+];
 
 function resolveFilter(searchParams) {
   const value = searchParams.get("filter") || "pending";
@@ -97,7 +123,7 @@ function PartnerBadge({ value, onClick, disabled }) {
   );
 }
 
-function ConfirmModal({ open, title, message, confirmLabel = "Confirm", onClose, onConfirm }) {
+function ConfirmModal({ open, title, message, confirmLabel = "Confirm", onClose, onConfirm, error = "", busy = false }) {
   if (!open) return null;
   return (
     <div
@@ -124,16 +150,18 @@ function ConfirmModal({ open, title, message, confirmLabel = "Confirm", onClose,
             <X className="h-4 w-4" />
           </button>
         </div>
+        <FormError message={error} className="mb-4" />
         <div className="mt-5 flex justify-end gap-2 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
-          <button type="button" onClick={onClose} className="admin-btn-secondary">
+          <button type="button" onClick={onClose} className="admin-btn-secondary" disabled={busy}>
             Cancel
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="rounded-xl bg-admin-teal px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+            disabled={busy}
+            className="rounded-xl bg-admin-teal px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-50"
           >
-            {confirmLabel}
+            {busy ? "Please wait…" : confirmLabel}
           </button>
         </div>
       </div>
@@ -192,7 +220,7 @@ function KycDocsModal({ open, user, field, canActOnKyc, onClose, onApprove, onRe
   }, [open, user?.accountHolderId, field]);
 
   useEffect(() => {
-    if (!open || !active?.filename) {
+    if (!open || !active?.filename || active?.missing) {
       setPreviewUrl("");
       return;
     }
@@ -216,7 +244,7 @@ function KycDocsModal({ open, user, field, canActOnKyc, onClose, onApprove, onRe
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [open, active?.filename]);
+  }, [open, active?.filename, active?.missing]);
 
   if (!open || !user) return null;
 
@@ -249,9 +277,9 @@ function KycDocsModal({ open, user, field, canActOnKyc, onClose, onApprove, onRe
               Loading documents…
             </div>
           ) : docs.length === 0 ? (
-            <div className="flex h-40 flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 text-sm text-slate-400">
+            <div className="flex h-40 flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 px-6 text-center text-sm text-slate-400">
               <FileText className="mb-2 h-8 w-8 opacity-50" />
-              No documents uploaded
+              {error ? error : "No documents uploaded"}
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-[1fr_200px]">
@@ -263,7 +291,17 @@ function KycDocsModal({ open, user, field, canActOnKyc, onClose, onApprove, onRe
                   </p>
                 </div>
                 <div className="flex min-h-[240px] items-center justify-center bg-gradient-to-b from-white/[0.04] to-transparent p-4">
-                  {previewUrl ? (
+                  {active?.missing ? (
+                    <div className="flex w-full max-w-xs flex-col items-center rounded-lg border border-amber-300/30 bg-amber-50 p-6 text-center text-amber-950 shadow-lg">
+                      <FileImage className="mb-2 h-10 w-10 text-amber-500" />
+                      <p className="text-sm font-bold">File not on this server</p>
+                      <p className="mt-1 text-xs text-amber-800">{active?.name}</p>
+                      <p className="mt-3 text-[11px] leading-relaxed text-amber-800">
+                        This record points to an image that is not in local storage. Older files use paths like
+                        upload/... and live on S3 or the original server, not this machine.
+                      </p>
+                    </div>
+                  ) : previewUrl ? (
                     <img
                       src={previewUrl}
                       alt={active?.kind || "Document preview"}
@@ -314,7 +352,7 @@ function KycDocsModal({ open, user, field, canActOnKyc, onClose, onApprove, onRe
               </div>
             </div>
           )}
-          {error ? <p className="mt-3 text-sm text-rose-300">{error}</p> : null}
+          {error && docs.length > 0 ? <p className="mt-3 text-sm text-rose-300">{error}</p> : null}
         </div>
 
         <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4">
@@ -379,17 +417,19 @@ function KycDocsModal({ open, user, field, canActOnKyc, onClose, onApprove, onRe
               className="mt-3"
               onCancel={() => setRejectOpen(false)}
               onConfirm={async (reason) => {
-                setRejectOpen(false);
                 setActing(true);
                 setError("");
                 try {
                   await onReject?.(reason);
+                  setRejectOpen(false);
                 } catch (err) {
                   setError(err.message || "Failed to reject.");
                 } finally {
                   setActing(false);
                 }
               }}
+              error={error}
+              busy={acting}
             />
           ) : null}
         </div>
@@ -410,7 +450,10 @@ function UsersContent() {
   const [accountId, setAccountId] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [applied, setApplied] = useState({ email: "", accountId: "", firstName: "", lastName: "" });
+  const [isPartner, setIsPartner] = useState("");
+  const [userType, setUserType] = useState("");
+  const [loyaltyTier, setLoyaltyTier] = useState("");
+  const [applied, setApplied] = useState(EMPTY_SEARCH);
   const [perPage, setPerPage] = useState(10);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState([]);
@@ -422,6 +465,7 @@ function UsersContent() {
   const [kycDocs, setKycDocs] = useState(null);
   const [unbanTarget, setUnbanTarget] = useState(null);
   const [bulkBanOpen, setBulkBanOpen] = useState(false);
+  const [bulkBanReason, setBulkBanReason] = useState("");
   const [bulkBanning, setBulkBanning] = useState(false);
   const [emailModal, setEmailModal] = useState(null);
   const [emailCompose, setEmailCompose] = useState({ receivers: "", subject: "", body: "", attachment: null, templateId: null });
@@ -441,7 +485,7 @@ function UsersContent() {
     setLoading(true);
     setError(null);
     try {
-      let search = { email: "", accountId: "", firstName: "", lastName: "" };
+      let search = { ...EMPTY_SEARCH };
       if (searchOverride) {
         skipSearchOnNextLoadRef.current = false;
         search = searchOverride;
@@ -457,6 +501,9 @@ function UsersContent() {
         accountId: search.accountId || undefined,
         firstName: search.firstName || undefined,
         lastName: search.lastName || undefined,
+        isPartner: search.isPartner || undefined,
+        userType: search.userType || undefined,
+        loyaltyTier: search.loyaltyTier || undefined,
       });
       setRows(res.customers ?? []);
       setSelected([]);
@@ -479,7 +526,10 @@ function UsersContent() {
     setAccountId("");
     setFirstName("");
     setLastName("");
-    setApplied({ email: "", accountId: "", firstName: "", lastName: "" });
+    setIsPartner("");
+    setUserType("");
+    setLoyaltyTier("");
+    setApplied(EMPTY_SEARCH);
   }, [filter]);
 
   useEffect(() => {
@@ -496,7 +546,7 @@ function UsersContent() {
     if (!q.trim()) return rows;
     const s = q.toLowerCase();
     return rows.filter((u) =>
-      [u.id, u.accountId, u.name, u.firstName, u.lastName, u.email, u.mobile]
+      [u.id, u.accountId, u.name, u.firstName, u.lastName, u.email, u.mobile, u.partner, u.userType, u.loyaltyTier]
         .join(" ")
         .toLowerCase()
         .includes(s)
@@ -508,7 +558,9 @@ function UsersContent() {
   const shown = filtered.slice(start, start + perPage);
   const hasActiveSearch = Boolean(
     applied.email || applied.accountId || applied.firstName || applied.lastName ||
-    email.trim() || accountId.trim() || firstName.trim() || lastName.trim()
+    applied.isPartner || applied.userType || applied.loyaltyTier ||
+    email.trim() || accountId.trim() || firstName.trim() || lastName.trim() ||
+    isPartner || userType || loyaltyTier
   );
 
   function changeFilter(nextFilter) {
@@ -519,7 +571,10 @@ function UsersContent() {
     setAccountId("");
     setFirstName("");
     setLastName("");
-    setApplied({ email: "", accountId: "", firstName: "", lastName: "" });
+    setIsPartner("");
+    setUserType("");
+    setLoyaltyTier("");
+    setApplied(EMPTY_SEARCH);
     setPage(1);
     setSelected([]);
     router.replace(`/users?filter=${encodeURIComponent(nextFilter)}`, { scroll: false });
@@ -532,6 +587,9 @@ function UsersContent() {
       accountId: accountId.trim(),
       firstName: firstName.trim(),
       lastName: lastName.trim(),
+      isPartner,
+      userType,
+      loyaltyTier,
     };
     setPage(1);
     setSelected([]);
@@ -541,11 +599,14 @@ function UsersContent() {
   }
 
   function clearSearchFilters() {
-    const empty = { email: "", accountId: "", firstName: "", lastName: "" };
+    const empty = { ...EMPTY_SEARCH };
     setEmail("");
     setAccountId("");
     setFirstName("");
     setLastName("");
+    setIsPartner("");
+    setUserType("");
+    setLoyaltyTier("");
     setPage(1);
     setSelected([]);
     skipNextEffectLoadRef.current = true;
@@ -601,18 +662,24 @@ function UsersContent() {
       .filter((row) => selected.includes(row.id))
       .map((row) => row.accountHolderId);
     if (!accountHolderIds.length) return;
+    const reason = bulkBanReason.trim();
+    if (!reason) {
+      setError("A reason for ban is required.");
+      return;
+    }
 
     setBulkBanning(true);
+    setError("");
     try {
-      const res = await banMultipleCustomers(accountHolderIds);
+      const res = await banMultipleCustomers(accountHolderIds, reason);
       const updatedById = new Map((res.customers || []).map((customer) => [customer.id, customer]));
       setRows((prev) => prev.map((row) => updatedById.get(row.id) || row));
       setSelected([]);
       setBulkBanOpen(false);
+      setBulkBanReason("");
       setActionMessage(res.message || "Customers banned.");
     } catch (err) {
       setError(err.message || "Failed to ban selected customers.");
-      setBulkBanOpen(false);
     } finally {
       setBulkBanning(false);
     }
@@ -696,12 +763,17 @@ function UsersContent() {
     if (!partnerConfirm) return;
     const user = rows.find((row) => row.id === partnerConfirm.id);
     if (!user) return;
-    const res = await updateCustomerPartner(
-      user.accountHolderId,
-      partnerConfirm.next === "Yes"
-    );
-    updateCustomerRow(res.customer);
-    setPartnerConfirm(null);
+    setError("");
+    try {
+      const res = await updateCustomerPartner(
+        user.accountHolderId,
+        partnerConfirm.next === "Yes"
+      );
+      updateCustomerRow(res.customer);
+      setPartnerConfirm(null);
+    } catch (err) {
+      setError(err.message || "Failed to update partner status.");
+    }
   }
 
   if (loading && rows.length === 0) {
@@ -723,7 +795,7 @@ function UsersContent() {
         </div>
       ) : null}
 
-      {error ? (
+      {error && !unbanTarget && !bulkBanOpen && !partnerConfirm && !banOpen ? (
         <div className="admin-card mb-4 border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
           {error}
         </div>
@@ -766,8 +838,8 @@ function UsersContent() {
           onSubmit={runSearch}
           className="border-b border-white/10 bg-white/5 px-5 py-4"
         >
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-            <FilterField label="Email">
+          <div className="flex min-w-0 flex-nowrap items-end gap-2 overflow-x-auto">
+            <FilterField label="Email" className="min-w-[9rem] flex-1">
               <input
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -776,7 +848,7 @@ function UsersContent() {
                 autoComplete="off"
               />
             </FilterField>
-            <FilterField label="Account Id">
+            <FilterField label="Account Id" className="min-w-[8rem] flex-1">
               <input
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
@@ -785,7 +857,7 @@ function UsersContent() {
                 autoComplete="off"
               />
             </FilterField>
-            <FilterField label="First Name">
+            <FilterField label="First Name" className="min-w-[8rem] flex-1">
               <input
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
@@ -794,7 +866,7 @@ function UsersContent() {
                 autoComplete="off"
               />
             </FilterField>
-            <FilterField label="Last Name">
+            <FilterField label="Last Name" className="min-w-[8rem] flex-1">
               <input
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
@@ -803,10 +875,39 @@ function UsersContent() {
                 autoComplete="off"
               />
             </FilterField>
-            <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-2">
+            <FilterField label="Is Partner" className="w-auto shrink-0">
+              <div className="flex h-10 items-center">
+                <input
+                  type="checkbox"
+                  checked={isPartner === "yes"}
+                  onChange={(e) => setIsPartner(e.target.checked ? "yes" : "")}
+                  className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action"
+                  title="Show partner users only"
+                />
+              </div>
+            </FilterField>
+            <FilterField label="User Type" className="w-[8.5rem] shrink-0">
+              <select value={userType} onChange={(e) => setUserType(e.target.value)} className={inputCls}>
+                {USER_TYPE_FILTERS.map((option) => (
+                  <option key={option.value || "all"} value={option.value} className="bg-admin-surface">
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </FilterField>
+            <FilterField label="Loyalty Tier" className="w-[8.5rem] shrink-0">
+              <select value={loyaltyTier} onChange={(e) => setLoyaltyTier(e.target.value)} className={inputCls}>
+                {LOYALTY_TIER_FILTERS.map((option) => (
+                  <option key={option.value || "all"} value={option.value} className="bg-admin-surface">
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </FilterField>
+            <div className="flex shrink-0 items-end gap-2">
               <button
                 type="submit"
-                className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 text-sm font-semibold text-white transition hover:brightness-110"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 text-sm font-semibold text-white transition hover:brightness-110"
               >
                 <Search className="h-3.5 w-3.5" />
                 Search
@@ -815,7 +916,7 @@ function UsersContent() {
                 type="button"
                 onClick={clearSearchFilters}
                 disabled={!hasActiveSearch}
-                className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <X className="h-3.5 w-3.5" />
                 Clear
@@ -847,7 +948,10 @@ function UsersContent() {
             {selected.length > 0 && canBan ? (
               <button
                 type="button"
-                onClick={() => setBulkBanOpen(true)}
+                onClick={() => {
+                  setError(null);
+                  setBulkBanOpen(true);
+                }}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20"
               >
                 <Ban className="h-3.5 w-3.5" />
@@ -890,7 +994,7 @@ function UsersContent() {
         </div>
 
         <div className={`overflow-x-auto overflow-y-visible transition-opacity ${loading ? "opacity-60" : "opacity-100"}`}>
-          <table className="min-w-[1100px] w-full text-left text-[13px]">
+                      <table className="min-w-[1280px] w-full text-left text-[13px]">
             <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
               <tr>
                 <th className="px-3 py-3">
@@ -907,6 +1011,9 @@ function UsersContent() {
                 <th className="px-3 py-3">Email</th>
                 <th className="px-3 py-3">Mobile No.</th>
                 <th className="px-3 py-3">Is Partner</th>
+                <th className="px-3 py-3">User Type</th>
+                <th className="px-3 py-3">Loyalty Tier</th>
+                {filter === "banned" ? <th className="px-3 py-3">Reason for Banning</th> : null}
                 <th className="px-3 py-3">NIC</th>
                 <th className="px-3 py-3">Address</th>
                 <th className="px-3 py-3">Action</th>
@@ -950,6 +1057,27 @@ function UsersContent() {
                       }}
                     />
                   </td>
+                  <td className="px-3 py-3">
+                    <span
+                      className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-semibold ${
+                        u.userType === "Affluent" || isPartnerValue(u.partner)
+                          ? "border-theme-green-action/40 bg-theme-green-action/10 text-theme-green-action"
+                          : "border-white/15 bg-white/5 text-slate-300"
+                      }`}
+                    >
+                      {u.userType || (isPartnerValue(u.partner) ? "Affluent" : "Normal")}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className="inline-flex rounded-md border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-white">
+                      {u.loyaltyTier || "Normal"}
+                    </span>
+                  </td>
+                  {filter === "banned" ? (
+                    <td className="max-w-[240px] px-3 py-3">
+                      <CopyCell value={u.banReason || "—"} />
+                    </td>
+                  ) : null}
                   <td className="px-3 py-3">
                     <KycBadge
                       value={u.nic}
@@ -1065,23 +1193,60 @@ function UsersContent() {
         title="Unban customer"
         message={unbanTarget ? `Restore access for ${unbanTarget.name}?` : ""}
         confirmLabel="Unban"
-        onClose={() => setUnbanTarget(null)}
+        error={unbanTarget ? error : ""}
+        onClose={() => {
+          setUnbanTarget(null);
+          setError(null);
+        }}
         onConfirm={() => {
           handleUnbanCustomer(unbanTarget).catch((err) => {
             setError(err.message || "Failed to unban customer.");
-            setUnbanTarget(null);
           });
         }}
       />
 
-      <ConfirmModal
-        open={bulkBanOpen}
-        title="Ban selected customers"
-        message={`Ban ${selected.length} selected customer(s)? This does not require a reason for bulk actions.`}
-        confirmLabel={bulkBanning ? "Banning…" : "Ban selected"}
-        onClose={() => setBulkBanOpen(false)}
-        onConfirm={handleBulkBan}
-      />
+      {bulkBanOpen ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-4"
+          onClick={() => !bulkBanning && setBulkBanOpen(false)}
+        >
+          <div
+            className="admin-card w-full max-w-md rounded-t-2xl p-5 shadow-2xl sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-white">Ban selected customers</h3>
+            <p className="mt-1 text-sm text-slate-400">
+              Ban {selected.length} selected customer(s). A reason is required.
+            </p>
+            <textarea
+              value={bulkBanReason}
+              onChange={(e) => setBulkBanReason(e.target.value)}
+              rows={4}
+              placeholder="Reason for ban"
+              className={`${inputCls} mt-4 resize-y`}
+            />
+            <FormError message={error} className="mt-3" />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={bulkBanning}
+                onClick={() => setBulkBanOpen(false)}
+                className="admin-btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={bulkBanning || !bulkBanReason.trim()}
+                onClick={handleBulkBan}
+                className="rounded-xl bg-admin-danger px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {bulkBanning ? "Banning…" : "Confirm Ban"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <EmailSendModal
         open={!!emailModal}
@@ -1120,18 +1285,25 @@ function UsersContent() {
             : ""
         }
         confirmLabel={`Set to ${partnerConfirm?.next || "Yes"}`}
-        onClose={() => setPartnerConfirm(null)}
+        error={partnerConfirm ? error : ""}
+        onClose={() => {
+          setPartnerConfirm(null);
+          setError(null);
+        }}
         onConfirm={handlePartnerChange}
       />
 
       <RejectModal
         open={!!banOpen}
         title="Ban customer"
-        onClose={() => setBanOpen(null)}
+        error={banOpen ? error : ""}
+        onClose={() => {
+          setBanOpen(null);
+          setError(null);
+        }}
         onConfirm={(reason) => {
           handleBanCustomer(banOpen, reason).catch((err) => {
             setError(err.message || "Failed to ban customer.");
-            setBanOpen(null);
           });
         }}
       />

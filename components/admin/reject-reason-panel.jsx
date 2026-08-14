@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AlertTriangle, X } from "lucide-react";
+import { FormError } from "@/components/admin/queue-ui";
 
 export const REJECT_REASONS = [
   "Payment slip unclear",
@@ -18,6 +19,8 @@ function RejectReasonForm({
   confirmLabel = "Confirm reject",
   cancelLabel = "Cancel",
   compact = false,
+  error = "",
+  busy = false,
 }) {
   const [reason, setReason] = useState(REJECT_REASONS[0]);
   const [custom, setCustom] = useState("");
@@ -60,14 +63,15 @@ function RejectReasonForm({
           aria-label="Custom rejection message"
         />
       ) : null}
+      <FormError message={error} className={compact ? "mt-3" : "mt-4"} />
       <div className={`flex justify-end gap-2 ${compact ? "mt-3" : "mt-5"}`}>
-        <button type="button" onClick={onCancel} className="admin-btn-secondary px-4 py-2 text-sm">
+        <button type="button" onClick={onCancel} className="admin-btn-secondary px-4 py-2 text-sm" disabled={busy}>
           {cancelLabel}
         </button>
         <button
           type="button"
           onClick={submit}
-          disabled={reason === "Custom" && !custom.trim()}
+          disabled={busy || (reason === "Custom" && !custom.trim())}
           className="inline-flex items-center gap-1.5 rounded-xl bg-admin-danger px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-40"
         >
           <AlertTriangle className="h-4 w-4" />
@@ -89,6 +93,8 @@ export default function RejectReasonPanel({
   open = false,
   title = "Reject deposit?",
   subtitle,
+  error = "",
+  busy = false,
 }) {
   if (variant === "modal") {
     if (!open) return null;
@@ -130,6 +136,8 @@ export default function RejectReasonPanel({
               onCancel={onCancel}
               confirmLabel={confirmLabel}
               cancelLabel={cancelLabel}
+              error={error}
+              busy={busy}
             />
           </div>
         </div>
@@ -148,6 +156,8 @@ export default function RejectReasonPanel({
         confirmLabel={confirmLabel}
         cancelLabel={cancelLabel}
         compact
+        error={error}
+        busy={busy}
       />
     </div>
   );

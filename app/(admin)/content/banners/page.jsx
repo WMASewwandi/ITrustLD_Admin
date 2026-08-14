@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Eye, Loader2, Pencil, Trash2, X } from "lucide-react";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
-import { inputCls } from "@/components/admin/queue-ui";
+import { FormError, inputCls } from "@/components/admin/queue-ui";
 import {
   createPromotionalBanner,
   deletePromotionalBanner,
@@ -296,7 +296,7 @@ export default function BannersPage() {
         </p>
       </div>
 
-      {pageError ? (
+      {pageError && !deleteConfirm ? (
         <div className="admin-card mb-4 px-5 py-3 text-sm text-rose-300">{pageError}</div>
       ) : null}
 
@@ -480,6 +480,7 @@ export default function BannersPage() {
               />
             </div>
 
+            <FormError message={!deleteConfirm ? pageError : ""} />
             <button
               type="submit"
               disabled={saving}
@@ -612,8 +613,12 @@ export default function BannersPage() {
         confirmLabel="Delete"
         confirmClassName="bg-[#E11D48]"
         busy={saving}
+        error={pageError}
         onCancel={() => {
-          if (!saving) setDeleteConfirm(null);
+          if (!saving) {
+            setDeleteConfirm(null);
+            setPageError("");
+          }
         }}
         onConfirm={confirmDelete}
       />
