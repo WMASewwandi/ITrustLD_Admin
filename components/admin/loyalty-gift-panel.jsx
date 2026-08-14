@@ -18,9 +18,10 @@ import {
   updateGift,
   updateGiftState,
 } from "@/lib/loyalty-gifts";
-import { notifyAdminNavCountsRefresh } from "@/lib/notifications";
+import { useAppDialog } from "@/components/admin/app-dialog";
 
 const LEVEL_OPTIONS = [
+  { key: "NORMAL", label: "Normal" },
   { key: "SILVER", label: "Silver" },
   { key: "GOLD", label: "Gold" },
   { key: "DIAMOND", label: "Diamond" },
@@ -61,11 +62,17 @@ function ActiveCheckbox({ checked, onChange, disabled, title }) {
   );
 }
 
-function GiftFormModal({ open, title, initial, saving, onClose, onSave }) {
+function FieldHelp({ message }) {
+  if (!message) return null;
+  return <p className="mt-1 text-[11px] text-rose-400">{message}</p>;
+}
+
+function GiftFormModal({ open, title, initial, saving, saveError, onClose, onSave }) {
   const [giftTitle, setGiftTitle] = useState("");
   const [description, setDescription] = useState("");
   const [audienceType, setAudienceType] = useState("normal");
   const [levels, setLevels] = useState([]);
+  const [errors, setErrors] = useState({});
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -78,12 +85,24 @@ function GiftFormModal({ open, title, initial, saving, onClose, onSave }) {
     setDescription(initial?.description || "");
     setAudienceType(initial?.audience_type || initial?.audience || "normal");
     setLevels(initial?.allowed_levels || []);
+    setErrors({});
   }, [open, initial]);
 
   if (!open || !mounted) return null;
 
   function toggleLevel(key) {
     setLevels((prev) => (prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]));
+    setErrors((prev) => ({ ...prev, levels: "" }));
+  }
+
+  function validateAndSave() {
+    const nextErrors = {};
+    if (!giftTitle.trim()) nextErrors.title = "Gift title is required.";
+    if (!audienceType) nextErrors.audienceType = "Select a customer type.";
+    if (!levels.length) nextErrors.levels = "Select at least one allowed level.";
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) return;
+    onSave({ title: giftTitle, description, audienceType, allowedLevels: levels });
   }
 
   return createPortal(
@@ -104,10 +123,14 @@ function GiftFormModal({ open, title, initial, saving, onClose, onSave }) {
             <span className="mb-1 block text-xs text-slate-400">Gift Title</span>
             <input
               value={giftTitle}
-              onChange={(e) => setGiftTitle(e.target.value)}
-              className={inputCls}
+              onChange={(e) => {
+                setGiftTitle(e.target.value);
+                setErrors((prev) => ({ ...prev, title: "" }));
+              }}
+              className={`${inputCls} ${errors.title ? "border-rose-500/60" : ""}`}
               placeholder="e.g. Gold Tier Welcome Hamper"
             />
+            <FieldHelp message={errors.title} />
           </label>
 
           <label className="block text-sm text-slate-300">
@@ -130,11 +153,16 @@ function GiftFormModal({ open, title, initial, saving, onClose, onSave }) {
                   <button
                     key={option.key}
                     type="button"
-                    onClick={() => setAudienceType(option.key)}
+                    onClick={() => {
+                      setAudienceType(option.key);
+                      setErrors((prev) => ({ ...prev, audienceType: "" }));
+                    }}
                     className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
                       active
                         ? "border-theme-green-action/50 bg-theme-green-action/20 text-theme-green-action"
-                        : "border-white/10 text-slate-400 hover:text-white"
+                        : errors.audienceType
+                          ? "border-rose-500/40 text-slate-400 hover:text-white"
+                          : "border-white/10 text-slate-400 hover:text-white"
                     }`}
                   >
                     {option.label}
@@ -142,6 +170,7 @@ function GiftFormModal({ open, title, initial, saving, onClose, onSave }) {
                 );
               })}
             </div>
+            <FieldHelp message={errors.audienceType} />
           </div>
 
           <div>
@@ -157,7 +186,9 @@ function GiftFormModal({ open, title, initial, saving, onClose, onSave }) {
                     className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
                       active
                         ? "border-theme-green-action/50 bg-theme-green-action/20 text-theme-green-action"
-                        : "border-white/10 text-slate-400 hover:text-white"
+                        : errors.levels
+                          ? "border-rose-500/40 text-slate-400 hover:text-white"
+                          : "border-white/10 text-slate-400 hover:text-white"
                     }`}
                   >
                     {level.label}
@@ -165,7 +196,9 @@ function GiftFormModal({ open, title, initial, saving, onClose, onSave }) {
                 );
               })}
             </div>
+            <FieldHelp message={errors.levels} />
           </div>
+          <FieldHelp message={saveError} />
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
@@ -179,7 +212,7 @@ function GiftFormModal({ open, title, initial, saving, onClose, onSave }) {
           <button
             type="button"
             disabled={saving}
-            onClick={() => onSave({ title: giftTitle, description, audienceType, allowedLevels: levels })}
+            onClick={validateAndSave}
             className="inline-flex items-center gap-2 rounded-xl bg-theme-green-action px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -196,6 +229,7 @@ export default function LoyaltyGiftPanel() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { alert } = useAppDialog();
   const audienceFilter = useMemo(
     () => resolveAudienceFilter(searchParams.get("audience")),
     [searchParams],
@@ -212,6 +246,7 @@ export default function LoyaltyGiftPanel() {
   const [claimsError, setClaimsError] = useState("");
   const [busy, setBusy] = useState(false);
   const [giftModal, setGiftModal] = useState(null);
+  const [giftSaveError, setGiftSaveError] = useState("");
   const [approveId, setApproveId] = useState(null);
   const [rejectId, setRejectId] = useState(null);
   const [deliverId, setDeliverId] = useState(null);
@@ -237,11 +272,12 @@ export default function LoyaltyGiftPanel() {
       setGifts(data.gifts || []);
     } catch (err) {
       setError(err.message || "Failed to load gifts.");
+      await alert(err.message || "Failed to load gifts.", { title: "Notice", tone: "danger" });
       setGifts([]);
     } finally {
       setLoading(false);
     }
-  }, [audienceFilter.apiKey]);
+  }, [alert, audienceFilter.apiKey]);
 
   const loadClaims = useCallback(async () => {
     setClaimsLoading(true);
@@ -251,11 +287,12 @@ export default function LoyaltyGiftPanel() {
       setClaims(data.claims || []);
     } catch (err) {
       setClaimsError(err.message || "Failed to load gift claims.");
+      await alert(err.message || "Failed to load gift claims.", { title: "Notice", tone: "danger" });
       setClaims([]);
     } finally {
       setClaimsLoading(false);
     }
-  }, [claimStatus]);
+  }, [alert, claimStatus]);
 
   useEffect(() => {
     loadGifts();
@@ -275,28 +312,15 @@ export default function LoyaltyGiftPanel() {
       notifyAdminNavCountsRefresh();
     } catch (err) {
       setError(err.message || "Action failed.");
+      await alert(err.message || "Action failed.", { title: "Notice", tone: "danger" });
     } finally {
       setBusy(false);
     }
   }
 
   async function handleSaveGift(values) {
-    if (!values.title?.trim()) {
-      setError("Gift title is required.");
-      return;
-    }
-    if (!values.allowedLevels?.length) {
-      setError("Select at least one allowed level.");
-      return;
-    }
-
-    if (!values.audienceType) {
-      setError("Select a customer type.");
-      return;
-    }
-
     setBusy(true);
-    setError("");
+    setGiftSaveError("");
     try {
       if (giftModal?.mode === "edit") {
         await updateGift({
@@ -317,7 +341,7 @@ export default function LoyaltyGiftPanel() {
       setGiftModal(null);
       await loadGifts();
     } catch (err) {
-      setError(err.message || "Failed to save gift.");
+      setGiftSaveError(err.message || "Failed to save gift.");
     } finally {
       setBusy(false);
     }
@@ -325,6 +349,7 @@ export default function LoyaltyGiftPanel() {
 
   async function handleApprove(claimId) {
     setBusy(true);
+    setClaimsError("");
     try {
       await approveGiftClaim({ claimId });
       setApproveId(null);
@@ -339,6 +364,7 @@ export default function LoyaltyGiftPanel() {
 
   async function handleReject(claimId, reason) {
     setBusy(true);
+    setClaimsError("");
     try {
       await rejectGiftClaim({ claimId, rejectionReason: reason });
       setRejectId(null);
@@ -353,6 +379,7 @@ export default function LoyaltyGiftPanel() {
 
   async function handleDeliver(claimId) {
     setBusy(true);
+    setClaimsError("");
     try {
       await deliverGiftClaim({ claimId });
       setDeliverId(null);
@@ -416,15 +443,16 @@ export default function LoyaltyGiftPanel() {
           </div>
         </div>
 
-        {error ? <p className="px-5 pt-3 text-xs text-rose-400">{error}</p> : null}
-
         {section === "catalog" ? (
           <div className="p-5">
             <div className="mb-4 flex items-center justify-between">
               <p className="text-sm text-slate-400">{gifts.length} gifts configured</p>
               <button
                 type="button"
-                onClick={() => setGiftModal({ mode: "create" })}
+                onClick={() => {
+                  setGiftSaveError("");
+                  setGiftModal({ mode: "create" });
+                }}
                 className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2 text-sm font-semibold text-white"
               >
                 <Plus className="h-4 w-4" />
@@ -489,7 +517,10 @@ export default function LoyaltyGiftPanel() {
                             <button
                               type="button"
                               disabled={busy}
-                              onClick={() => setGiftModal({ mode: "edit", record: gift })}
+                              onClick={() => {
+                                setGiftSaveError("");
+                                setGiftModal({ mode: "edit", record: gift });
+                              }}
                               className="rounded-lg bg-theme-green-action/90 p-1.5 text-white disabled:opacity-60"
                             >
                               <Pencil className="h-3.5 w-3.5" />
@@ -543,8 +574,6 @@ export default function LoyaltyGiftPanel() {
                 ))}
               </div>
             </div>
-
-            {claimsError ? <p className="mb-3 text-xs text-rose-400">{claimsError}</p> : null}
 
             {claimsLoading ? (
               <p className="py-10 text-center text-slate-400">Loading gift claims…</p>
@@ -648,7 +677,11 @@ export default function LoyaltyGiftPanel() {
         title={giftModal?.mode === "edit" ? "Edit Gift" : "Create Gift"}
         initial={giftModal?.record}
         saving={busy}
-        onClose={() => setGiftModal(null)}
+        saveError={giftSaveError}
+        onClose={() => {
+          setGiftSaveError("");
+          setGiftModal(null);
+        }}
         onSave={handleSaveGift}
       />
 
@@ -659,7 +692,11 @@ export default function LoyaltyGiftPanel() {
         confirmLabel="Approve"
         confirmClassName="bg-theme-green-action"
         busy={busy}
-        onCancel={() => setApproveId(null)}
+        error={claimsError}
+        onCancel={() => {
+          setApproveId(null);
+          setClaimsError("");
+        }}
         onConfirm={() => handleApprove(approveId)}
       />
 
@@ -670,14 +707,23 @@ export default function LoyaltyGiftPanel() {
         confirmLabel="Confirm"
         confirmClassName="bg-[#D1900F]"
         busy={busy}
-        onCancel={() => setDeliverId(null)}
+        error={claimsError}
+        onCancel={() => {
+          setDeliverId(null);
+          setClaimsError("");
+        }}
         onConfirm={() => handleDeliver(deliverId)}
       />
 
       <RejectModal
         open={Boolean(rejectId)}
         title="Reject gift claim"
-        onClose={() => setRejectId(null)}
+        error={claimsError}
+        busy={busy}
+        onClose={() => {
+          setRejectId(null);
+          setClaimsError("");
+        }}
         onConfirm={(reason) => handleReject(rejectId, reason)}
       />
 

@@ -116,8 +116,8 @@ export default function LoyaltyTiersPage() {
           </p>
           <h1 className="text-3xl font-bold tracking-tight text-white">Loyalty Tiers</h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-400">
-            Fixed Normal → VVIP ladder (from mock). Edit and save benefit details per tier — benefits
-            are stored in the database and shown in the user Loyalty Levels panel.
+            Fixed Normal → VVIP ladder. Edit point thresholds and benefit details per tier. Thresholds
+            apply to membership ranking; existing users keep current behaviour until points are saved.
           </p>
         </div>
         <button
@@ -127,7 +127,7 @@ export default function LoyaltyTiersPage() {
           className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Save benefits
+          Save tiers
         </button>
       </div>
 
@@ -139,7 +139,7 @@ export default function LoyaltyTiersPage() {
 
       {saved ? (
         <p className="mb-4 rounded-xl border border-theme-green-action/30 bg-theme-green-action/10 px-4 py-2 text-sm text-theme-green-action">
-          Loyalty tier benefits saved.
+          Loyalty tier thresholds and benefits saved.
         </p>
       ) : null}
 
@@ -162,7 +162,15 @@ export default function LoyaltyTiersPage() {
                     </span>
                     <span className="min-w-[100px] text-base font-semibold text-white">{tier.name}</span>
                     <span className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300">
-                      Points: <span className="font-semibold text-white">{Number(tier.points).toLocaleString()}</span>
+                      Points:{" "}
+                      <input
+                        type="number"
+                        min="0"
+                        step="1000"
+                        value={Number(tier.points) || 0}
+                        onChange={(e) => updateTier(tier.id, { points: e.target.value })}
+                        className="ml-1 w-24 rounded-md border border-white/10 bg-transparent px-1 py-0.5 text-xs font-semibold text-white outline-none focus:border-admin-teal/50"
+                      />
                     </span>
                     <label className="inline-flex items-center gap-2 text-sm text-slate-300">
                       <input

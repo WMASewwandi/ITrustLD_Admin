@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Breadcrumb from "@/components/admin/breadcrumb";
-import CopyCell, { inputCls } from "@/components/admin/queue-ui";
+import CopyCell, { FormError, inputCls } from "@/components/admin/queue-ui";
 import { createSystemUser, fetchSystemUsers, updateSystemUser } from "@/lib/system-users";
 import { useCan } from "@/contexts/admin-permissions";
 import {
@@ -37,6 +37,116 @@ function StatusBadge({ active }) {
 
 const SHIFT_OPTIONS = ["-", "Shift A", "Shift B"];
 
+const DEPOSIT_STATUS_OPTIONS = ["Pending", "Completed", "Rejected"];
+const WITHDRAWAL_STATUS_OPTIONS = ["Pending", "Pending Authorization", "Completed", "Rejected"];
+
+function canUpdateWithdrawals(permissions = []) {
+  return (
+    permissions.includes("status_update_withdrawal_data") ||
+    permissions.includes("authorize_withdrawal_data")
+  );
+}
+
+function rolePermissions(roles, roleName) {
+  return roles.find((role) => role.name === roleName)?.permissions || [];
+}
+
+function statusesForForm(saved, allOptions, enabled) {
+  if (!enabled) return [];
+  if (saved == null) return [...allOptions];
+  return saved.filter((status) => allOptions.includes(status));
+}
+
+function statusScopeForRole(roles, roleName, current = {}) {
+  const permissions = rolePermissions(roles, roleName);
+  const canDeposit = permissions.includes("status_update_deposit_data");
+  const canWithdrawal = canUpdateWithdrawals(permissions);
+  return {
+    allowed_deposit_statuses: canDeposit
+      ? current.allowed_deposit_statuses?.length
+        ? current.allowed_deposit_statuses.filter((status) => DEPOSIT_STATUS_OPTIONS.includes(status))
+        : [...DEPOSIT_STATUS_OPTIONS]
+      : [],
+    allowed_withdrawal_statuses: canWithdrawal
+      ? current.allowed_withdrawal_statuses?.length
+        ? current.allowed_withdrawal_statuses.filter((status) =>
+            WITHDRAWAL_STATUS_OPTIONS.includes(status),
+          )
+        : [...WITHDRAWAL_STATUS_OPTIONS]
+      : [],
+  };
+}
+
+function toggleStatus(list, status) {
+  const current = Array.isArray(list) ? list : [];
+  return current.includes(status) ? current.filter((item) => item !== status) : [...current, status];
+}
+
+function StatusScopeFields({
+  roles,
+  roleName,
+  depositStatuses,
+  withdrawalStatuses,
+  onDepositChange,
+  onWithdrawalChange,
+}) {
+  const permissions = rolePermissions(roles, roleName);
+  const showDeposit = permissions.includes("status_update_deposit_data");
+  const showWithdrawal = canUpdateWithdrawals(permissions);
+  if (!showDeposit && !showWithdrawal) return null;
+
+  return (
+    <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Status update access</p>
+        <p className="mt-1 text-[11px] font-normal normal-case tracking-normal text-slate-500">
+          This role can update transaction status. Choose which current statuses this user may edit.
+        </p>
+      </div>
+      {showDeposit ? (
+        <fieldset>
+          <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Deposits this user can update
+          </legend>
+          <div className="flex flex-wrap gap-3">
+            {DEPOSIT_STATUS_OPTIONS.map((status) => (
+              <label key={status} className="inline-flex items-center gap-2 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={depositStatuses.includes(status)}
+                  onChange={() => onDepositChange(toggleStatus(depositStatuses, status))}
+                  className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action"
+                />
+                {status}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
+      {showWithdrawal ? (
+        <fieldset>
+          <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Withdrawals this user can update
+          </legend>
+          <div className="flex flex-wrap gap-3">
+            {WITHDRAWAL_STATUS_OPTIONS.map((status) => (
+              <label key={status} className="inline-flex items-center gap-2 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={withdrawalStatuses.includes(status)}
+                  onChange={() => onWithdrawalChange(toggleStatus(withdrawalStatuses, status))}
+                  className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action"
+                />
+                {status}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
+    </div>
+  );
+}
+
 const EMPTY_CREATE_FORM = {
   name: "",
   email: "",
@@ -44,6 +154,8 @@ const EMPTY_CREATE_FORM = {
   role: "",
   shift: "-",
   pending_show_count: "",
+  allowed_deposit_statuses: [],
+  allowed_withdrawal_statuses: [],
   is_active: true,
 };
 
@@ -101,14 +213,17 @@ export default function SystemUsersPage() {
   }, [users, q]);
 
   function openCreate() {
+    const role = assignableRoles[0]?.name || "";
     setCreateForm({
       ...EMPTY_CREATE_FORM,
-      role: assignableRoles[0]?.name || "",
+      role,
+      ...statusScopeForRole(assignableRoles, role),
     });
     setShowCreate(true);
   }
 
   function openEdit(user) {
+    const permissions = rolePermissions(assignableRoles, user.role);
     setEditUser({
       id: user.id,
       name: user.name,
@@ -119,12 +234,31 @@ export default function SystemUsersPage() {
         user.pending_show_count != null && user.pending_show_count !== ""
           ? String(user.pending_show_count)
           : "",
+      allowed_deposit_statuses: statusesForForm(
+        user.allowed_deposit_statuses,
+        DEPOSIT_STATUS_OPTIONS,
+        permissions.includes("status_update_deposit_data"),
+      ),
+      allowed_withdrawal_statuses: statusesForForm(
+        user.allowed_withdrawal_statuses,
+        WITHDRAWAL_STATUS_OPTIONS,
+        permissions.includes("status_update_withdrawal_data"),
+      ),
       is_active: user.is_active,
       password: "",
     });
   }
 
   async function handleCreate() {
+    const permissions = rolePermissions(assignableRoles, createForm.role);
+    if (permissions.includes("status_update_deposit_data") && !createForm.allowed_deposit_statuses?.length) {
+      setError("Select at least one deposit status this user can update.");
+      return;
+    }
+    if (permissions.includes("status_update_withdrawal_data") && !createForm.allowed_withdrawal_statuses?.length) {
+      setError("Select at least one withdrawal status this user can update.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -135,6 +269,8 @@ export default function SystemUsersPage() {
         role: createForm.role,
         shift: createForm.shift,
         pending_show_count: createForm.pending_show_count || null,
+        allowed_deposit_statuses: createForm.allowed_deposit_statuses,
+        allowed_withdrawal_statuses: createForm.allowed_withdrawal_statuses,
         is_active: createForm.is_active,
       });
       setUsers((prev) => [...prev, res.user].sort((a, b) => a.name.localeCompare(b.name)));
@@ -149,6 +285,15 @@ export default function SystemUsersPage() {
 
   async function handleSave() {
     if (!editUser) return;
+    const permissions = rolePermissions(assignableRoles, editUser.role);
+    if (permissions.includes("status_update_deposit_data") && !editUser.allowed_deposit_statuses?.length) {
+      setError("Select at least one deposit status this user can update.");
+      return;
+    }
+    if (permissions.includes("status_update_withdrawal_data") && !editUser.allowed_withdrawal_statuses?.length) {
+      setError("Select at least one withdrawal status this user can update.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -158,6 +303,8 @@ export default function SystemUsersPage() {
         role: editUser.role,
         shift: editUser.shift,
         pending_show_count: editUser.pending_show_count || null,
+        allowed_deposit_statuses: editUser.allowed_deposit_statuses,
+        allowed_withdrawal_statuses: editUser.allowed_withdrawal_statuses,
         is_active: editUser.is_active,
         password: editUser.password || undefined,
       });
@@ -188,7 +335,7 @@ export default function SystemUsersPage() {
         ]}
       />
 
-      {error ? (
+      {error && !editUser && !showCreate ? (
         <div className="admin-fade-up mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {error}
         </div>
@@ -403,7 +550,14 @@ export default function SystemUsersPage() {
                 Role
                 <select
                   value={editUser.role}
-                  onChange={(e) => setEditUser((u) => ({ ...u, role: e.target.value }))}
+                  onChange={(e) => {
+                    const nextRole = e.target.value;
+                    setEditUser((u) => ({
+                      ...u,
+                      role: nextRole,
+                      ...statusScopeForRole(assignableRoles, nextRole, u),
+                    }));
+                  }}
                   className={`mt-1 ${inputCls}`}
                 >
                   {assignableRoles.map((role) => (
@@ -413,6 +567,19 @@ export default function SystemUsersPage() {
                   ))}
                 </select>
               </label>
+
+              <StatusScopeFields
+                roles={assignableRoles}
+                roleName={editUser.role}
+                depositStatuses={editUser.allowed_deposit_statuses || []}
+                withdrawalStatuses={editUser.allowed_withdrawal_statuses || []}
+                onDepositChange={(next) =>
+                  setEditUser((u) => ({ ...u, allowed_deposit_statuses: next }))
+                }
+                onWithdrawalChange={(next) =>
+                  setEditUser((u) => ({ ...u, allowed_withdrawal_statuses: next }))
+                }
+              />
 
               <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Shift
@@ -471,6 +638,7 @@ export default function SystemUsersPage() {
             </form>
 
             <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4">
+              <FormError message={error} className="mb-3" />
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
@@ -560,7 +728,14 @@ export default function SystemUsersPage() {
                 Role
                 <select
                   value={createForm.role}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value }))}
+                  onChange={(e) => {
+                    const nextRole = e.target.value;
+                    setCreateForm((f) => ({
+                      ...f,
+                      role: nextRole,
+                      ...statusScopeForRole(assignableRoles, nextRole, f),
+                    }));
+                  }}
                   className={`mt-1 ${inputCls}`}
                 >
                   {assignableRoles.map((role) => (
@@ -570,6 +745,19 @@ export default function SystemUsersPage() {
                   ))}
                 </select>
               </label>
+
+              <StatusScopeFields
+                roles={assignableRoles}
+                roleName={createForm.role}
+                depositStatuses={createForm.allowed_deposit_statuses || []}
+                withdrawalStatuses={createForm.allowed_withdrawal_statuses || []}
+                onDepositChange={(next) =>
+                  setCreateForm((f) => ({ ...f, allowed_deposit_statuses: next }))
+                }
+                onWithdrawalChange={(next) =>
+                  setCreateForm((f) => ({ ...f, allowed_withdrawal_statuses: next }))
+                }
+              />
 
               <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Shift
@@ -628,6 +816,7 @@ export default function SystemUsersPage() {
             </form>
 
             <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4">
+              <FormError message={error} className="mb-3" />
               <div className="flex justify-end gap-2">
                 <button
                   type="button"

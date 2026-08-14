@@ -1,5 +1,7 @@
 "use client";
 
+import { FormError } from "@/components/admin/queue-ui";
+
 export default function DepositStatusConfirmModal({
   open,
   title,
@@ -7,6 +9,7 @@ export default function DepositStatusConfirmModal({
   confirmLabel = "Yes",
   confirmClassName = "bg-theme-green-action",
   busy = false,
+  error = "",
   onCancel,
   onConfirm,
 }) {
@@ -22,6 +25,7 @@ export default function DepositStatusConfirmModal({
       >
         <h3 className="text-lg font-semibold text-white">{title}</h3>
         {message ? <p className="mt-2 text-sm text-slate-400">{message}</p> : null}
+        <FormError message={error} className="mt-3" />
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" onClick={onCancel} className="admin-btn-secondary px-4 py-2 text-sm" disabled={busy}>
             Cancel

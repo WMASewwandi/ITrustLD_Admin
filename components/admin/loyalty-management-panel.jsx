@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Mail, MessageSquare, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
-import { inputCls } from "@/components/admin/queue-ui";
+import { FilterField, inputCls } from "@/components/admin/queue-ui";
 import { useAppDialog } from "@/components/admin/app-dialog";
 import { sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
 import {
@@ -36,6 +36,71 @@ const AUDIENCE_OPTIONS = [
   { label: "Normal Users", param: "normal", apiKey: "standard" },
   { label: "Affiliate Users", param: "affiliate", apiKey: "affiliate" },
 ];
+
+const POINT_COLLECTION_TIER_OPTIONS = [
+  { value: "NORMAL", label: "Normal" },
+  { value: "SILVER", label: "Silver" },
+  { value: "GOLD", label: "Gold" },
+  { value: "DIAMOND", label: "Diamond" },
+  { value: "VIP", label: "VIP" },
+  { value: "VVIP", label: "VVIP" },
+];
+
+const DEFAULT_TIER_OPTIONS = [
+  { slug: "normal", name: "Normal", color: "#64969A" },
+  { slug: "silver", name: "Silver", color: "#8A9399" },
+  { slug: "gold", name: "Gold", color: "#B8860B" },
+  { slug: "diamond", name: "Diamond", color: "#3D8FA8" },
+  { slug: "vip", name: "VIP", color: "#C48A12" },
+  { slug: "vvip", name: "VVIP", color: "#0D9F1B" },
+];
+
+function usedTiersFromRows(rows) {
+  const set = new Set();
+  for (const row of rows || []) {
+    const tier = String(row.membership_tier || "").trim().toUpperCase();
+    if (tier) set.add(tier);
+  }
+  return set;
+}
+
+function membershipTierSelectOptions(usedSet, currentValue) {
+  return POINT_COLLECTION_TIER_OPTIONS.map((option) => {
+    const isCurrent = option.value === String(currentValue || "").toUpperCase();
+    const alreadyAdded = usedSet.has(option.value) && !isCurrent;
+    return {
+      ...option,
+      disabled: alreadyAdded,
+      label: alreadyAdded ? `${option.label} (already added)` : option.label,
+    };
+  });
+}
+
+function resolveTierSlug(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  if (!value || value === "all") return "all";
+  const match = DEFAULT_TIER_OPTIONS.find((tier) => tier.slug === value);
+  return match ? match.slug : "all";
+}
+
+function TierBadge({ tier }) {
+  if (!tier?.name) {
+    return <span className="text-slate-500">—</span>;
+  }
+  const color = tier.color || "#64969A";
+  return (
+    <span
+      className="inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+      style={{
+        color,
+        backgroundColor: `${color}22`,
+        border: `1px solid ${color}55`,
+      }}
+    >
+      {tier.name}
+    </span>
+  );
+}
 
 function resolveAudienceOption(raw) {
   const value = String(raw || "").trim().toLowerCase();
@@ -88,7 +153,7 @@ function ActionButtons({ onEdit, onDelete, disabled }) {
   );
 }
 
-function AmountModal({ open, title, fields, saving, onClose, onSave }) {
+function AmountModal({ open, title, fields, saving, error = "", onClose, onSave }) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -113,17 +178,41 @@ function AmountModal({ open, title, fields, saving, onClose, onSave }) {
           {fields.map((field) => (
             <label key={field.name} className="block text-sm text-slate-300">
               <span className="mb-1 block text-xs text-slate-400">{field.label}</span>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={field.value}
-                onChange={(e) => field.onChange(e.target.value)}
-                className={inputCls}
-              />
+              {field.type === "select" ? (
+                <select
+                  value={field.value}
+                  onChange={(e) => field.onChange(e.target.value)}
+                  className={inputCls}
+                >
+                  {field.options.map((option) => (
+                    <option
+                      key={option.value}
+                      value={option.value}
+                      disabled={Boolean(option.disabled)}
+                      className="bg-admin-surface disabled:text-slate-500"
+                    >
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={field.value}
+                  onChange={(e) => field.onChange(e.target.value)}
+                  className={inputCls}
+                />
+              )}
             </label>
           ))}
         </div>
+        {error ? (
+          <div className="mt-4 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+            {error}
+          </div>
+        ) : null}
         <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
@@ -157,6 +246,7 @@ export default function LoyaltyManagementPanel() {
   const audience = audienceOption.label;
   const isAffiliate = audienceOption.param === "affiliate";
   const audienceKey = audienceOption.apiKey;
+  const selectedTier = resolveTierSlug(searchParams.get("tier"));
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -178,12 +268,27 @@ export default function LoyaltyManagementPanel() {
   const setAudience = useCallback(
     (nextParam) => {
       const option = resolveAudienceOption(nextParam);
+      if (option.param === audienceOption.param) return;
       const params = new URLSearchParams(searchParams.toString());
       params.set("tab", "management");
       params.set("audience", option.param);
+      params.delete("tier");
       router.replace(`${pathname}?${params.toString()}`);
     },
-    [pathname, router, searchParams],
+    [audienceOption.param, pathname, router, searchParams],
+  );
+
+  const setTier = useCallback(
+    (nextTier) => {
+      const slug = resolveTierSlug(nextTier);
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", "management");
+      params.set("audience", audienceOption.param);
+      if (slug === "all") params.delete("tier");
+      else params.set("tier", slug);
+      router.replace(`${pathname}?${params.toString()}`);
+    },
+    [audienceOption.param, pathname, router, searchParams],
   );
 
   const reload = useCallback(
@@ -192,7 +297,7 @@ export default function LoyaltyManagementPanel() {
       else setRefreshing(true);
       setError("");
       try {
-        const response = await fetchLoyaltyManagementConfigs(audienceKey);
+        const response = await fetchLoyaltyManagementConfigs(audienceKey, selectedTier);
         setData(response);
         setSelectedEmails({});
         setRankSelectAll(false);
@@ -204,7 +309,7 @@ export default function LoyaltyManagementPanel() {
         setRefreshing(false);
       }
     },
-    [audienceKey],
+    [audienceKey, selectedTier],
   );
 
   useEffect(() => {
@@ -218,6 +323,7 @@ export default function LoyaltyManagementPanel() {
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", "management");
     params.set("audience", audienceOption.param);
+    params.delete("tier");
     router.replace(`${pathname}?${params.toString()}`);
   }, [audienceOption.param, pathname, router, searchParams]);
 
@@ -225,6 +331,23 @@ export default function LoyaltyManagementPanel() {
   const pointRows = data?.point_collections || [];
   const bonusRows = data?.bonuses || [];
   const configs = data?.configs || {};
+  const usedPointTiers = useMemo(() => usedTiersFromRows(pointRows), [pointRows]);
+  const availablePointTiers = POINT_COLLECTION_TIER_OPTIONS.filter(
+    (option) => !usedPointTiers.has(option.value),
+  );
+  const nextPointTier = availablePointTiers[0]?.value || "NORMAL";
+  const allPointTiersUsed = availablePointTiers.length === 0;
+  const usedBonusTiers = useMemo(() => usedTiersFromRows(bonusRows), [bonusRows]);
+  const availableBonusTiers = POINT_COLLECTION_TIER_OPTIONS.filter(
+    (option) => !usedBonusTiers.has(option.value),
+  );
+  const nextBonusTier = availableBonusTiers[0]?.value || "NORMAL";
+  const allBonusTiersUsed = availableBonusTiers.length === 0;
+  const tierOptions = data?.membership_tiers?.length ? data.membership_tiers : DEFAULT_TIER_OPTIONS;
+  const selectedTierLabel =
+    selectedTier === "all"
+      ? "All Tiers"
+      : tierOptions.find((tier) => tier.slug === selectedTier)?.name || "All Tiers";
 
   const selectedEmailList = useMemo(
     () =>
@@ -303,19 +426,39 @@ export default function LoyaltyManagementPanel() {
       if (modal.type === "add-point") {
         const amount = Number(modal.calAmount);
         if (!Number.isInteger(amount) || amount < 0) throw new Error("Enter a valid cal amount.");
-        await createPointCollection({ calAmount: amount, isAffiliate: isAffiliate });
+        if (!modal.membershipTier) throw new Error("Select a membership tier.");
+        await createPointCollection({
+          calAmount: amount,
+          isAffiliate: isAffiliate,
+          membershipTier: modal.membershipTier,
+        });
       } else if (modal.type === "edit-point") {
         const amount = Number(modal.calAmount);
         if (!Number.isInteger(amount) || amount < 0) throw new Error("Enter a valid cal amount.");
-        await updatePointCollectionAmount({ id: modal.id, calAmount: amount });
+        if (!modal.membershipTier) throw new Error("Select a membership tier.");
+        await updatePointCollectionAmount({
+          id: modal.id,
+          calAmount: amount,
+          membershipTier: modal.membershipTier,
+        });
       } else if (modal.type === "add-bonus") {
         const amount = Number(modal.bonusAmount);
         if (!Number.isInteger(amount) || amount < 0) throw new Error("Enter a valid bonus amount.");
-        await createBonus({ bonusAmount: amount, isAffiliate: isAffiliate });
+        if (!modal.membershipTier) throw new Error("Select a membership tier.");
+        await createBonus({
+          bonusAmount: amount,
+          isAffiliate: isAffiliate,
+          membershipTier: modal.membershipTier,
+        });
       } else if (modal.type === "edit-bonus") {
         const amount = Number(modal.bonusAmount);
         if (!Number.isInteger(amount) || amount < 0) throw new Error("Enter a valid bonus amount.");
-        await updateBonusAmount({ id: modal.id, bonusAmount: amount });
+        if (!modal.membershipTier) throw new Error("Select a membership tier.");
+        await updateBonusAmount({
+          id: modal.id,
+          bonusAmount: amount,
+          membershipTier: modal.membershipTier,
+        });
       } else if (modal.type === "add-level") {
         const bonusAmount = Number(modal.clientBonusAmount);
         const clientCount = Number(modal.clientCount);
@@ -438,6 +581,14 @@ export default function LoyaltyManagementPanel() {
     modal?.type === "add-point" || modal?.type === "edit-point"
       ? [
           {
+            name: "membershipTier",
+            label: "Tier",
+            type: "select",
+            value: modal.membershipTier || nextPointTier,
+            options: membershipTierSelectOptions(usedPointTiers, modal.membershipTier),
+            onChange: (value) => setModal((prev) => ({ ...prev, membershipTier: value })),
+          },
+          {
             name: "calAmount",
             label: "Cal Amount",
             value: modal.calAmount,
@@ -446,6 +597,14 @@ export default function LoyaltyManagementPanel() {
         ]
       : modal?.type === "add-bonus" || modal?.type === "edit-bonus"
         ? [
+            {
+              name: "membershipTier",
+              label: "Tier",
+              type: "select",
+              value: modal.membershipTier || nextBonusTier,
+              options: membershipTierSelectOptions(usedBonusTiers, modal.membershipTier),
+              onChange: (value) => setModal((prev) => ({ ...prev, membershipTier: value })),
+            },
             {
               name: "bonusAmount",
               label: "Bonus Amount",
@@ -526,7 +685,7 @@ export default function LoyaltyManagementPanel() {
         </div>
       </div>
 
-      {error ? (
+      {error && !modal ? (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
           {error}
         </div>
@@ -541,7 +700,10 @@ export default function LoyaltyManagementPanel() {
         <>
           <section className="admin-card overflow-visible p-0">
             <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-lg font-semibold text-white">Point Collection</h2>
+              <div>
+                <h2 className="text-lg font-semibold text-white">Point Collection</h2>
+                <p className="mt-0.5 text-xs text-slate-400">Cal amount per membership tier</p>
+              </div>
               <div className="flex flex-wrap items-center justify-end gap-3 sm:ml-auto">
                 <label className="inline-flex items-center gap-2 text-sm text-slate-400">
                   <ActiveCheckbox
@@ -553,8 +715,12 @@ export default function LoyaltyManagementPanel() {
                 </label>
                 <button
                   type="button"
-                  onClick={() => setModal({ type: "add-point", calAmount: "1" })}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-xs font-semibold text-white"
+                  onClick={() =>
+                    setModal({ type: "add-point", calAmount: "1", membershipTier: nextPointTier })
+                  }
+                  disabled={allPointTiersUsed}
+                  title={allPointTiersUsed ? "Each tier already has a cal amount." : "Add Amount"}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Add Amount
@@ -566,9 +732,15 @@ export default function LoyaltyManagementPanel() {
               busyKey={busyKey}
               amountKey="cal_amount"
               amountLabel="Cal Amount"
+              showTier
               onToggle={togglePointRow}
               onEdit={(row) =>
-                setModal({ type: "edit-point", id: row.id, calAmount: String(row.cal_amount) })
+                setModal({
+                  type: "edit-point",
+                  id: row.id,
+                  calAmount: String(row.cal_amount),
+                  membershipTier: row.membership_tier || "NORMAL",
+                })
               }
               onDelete={handleDeletePoint}
             />
@@ -576,7 +748,10 @@ export default function LoyaltyManagementPanel() {
 
           <section className="admin-card overflow-visible p-0">
             <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-lg font-semibold text-white">Bonus</h2>
+              <div>
+                <h2 className="text-lg font-semibold text-white">Bonus</h2>
+                <p className="mt-0.5 text-xs text-slate-400">Bonus amount per membership tier</p>
+              </div>
               <div className="flex flex-wrap items-center justify-end gap-3 sm:ml-auto">
                 <label className="inline-flex items-center gap-2 text-sm text-slate-400">
                   <ActiveCheckbox
@@ -588,8 +763,12 @@ export default function LoyaltyManagementPanel() {
                 </label>
                 <button
                   type="button"
-                  onClick={() => setModal({ type: "add-bonus", bonusAmount: "5" })}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-xs font-semibold text-white"
+                  onClick={() =>
+                    setModal({ type: "add-bonus", bonusAmount: "5", membershipTier: nextBonusTier })
+                  }
+                  disabled={allBonusTiersUsed}
+                  title={allBonusTiersUsed ? "Each tier already has a bonus amount." : "Add Amount"}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Add Amount
@@ -601,9 +780,15 @@ export default function LoyaltyManagementPanel() {
               busyKey={busyKey}
               amountKey="bonus_amount"
               amountLabel="Bonus Amount"
+              showTier
               onToggle={toggleBonusRow}
               onEdit={(row) =>
-                setModal({ type: "edit-bonus", id: row.id, bonusAmount: String(row.bonus_amount) })
+                setModal({
+                  type: "edit-bonus",
+                  id: row.id,
+                  bonusAmount: String(row.bonus_amount),
+                  membershipTier: row.membership_tier || "NORMAL",
+                })
               }
               onDelete={handleDeleteBonus}
             />
@@ -667,12 +852,34 @@ export default function LoyaltyManagementPanel() {
             : null}
 
           <section className="admin-card p-0">
-            <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-white">User Ranking</h2>
-                <p className="mt-0.5 text-xs text-slate-400">Top 50 point earners · {audience}</p>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  Top 50 earners in the previous 12 months · {audience} · {selectedTierLabel}
+                </p>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Ranking uses Trust Points earned in the last 365 days. User type is Normal or Affluent
+                  (partner).
+                </p>
               </div>
-              <div className="flex flex-wrap justify-end gap-2 sm:ml-auto">
+              <div className="flex flex-wrap items-end justify-end gap-2 sm:ml-auto">
+                <FilterField label="Filter by Tier" className="w-[10.5rem]">
+                  <select
+                    value={selectedTier}
+                    onChange={(e) => setTier(e.target.value)}
+                    className={inputCls}
+                  >
+                    <option value="all" className="bg-admin-surface">
+                      All Tiers
+                    </option>
+                    {tierOptions.map((tier) => (
+                      <option key={tier.slug} value={tier.slug} className="bg-admin-surface">
+                        {tier.name}
+                      </option>
+                    ))}
+                  </select>
+                </FilterField>
                 <button
                   type="button"
                   onClick={openSendEmailModal}
@@ -715,6 +922,7 @@ export default function LoyaltyManagementPanel() {
                     </th>
                     <th className="px-4 py-3">User ID</th>
                     <th className="px-4 py-3">Name</th>
+                    <th className="px-4 py-3">Tier</th>
                     <th className="px-4 py-3">Email</th>
                     <th className="px-4 py-3">Mobile No.</th>
                     <th className="px-4 py-3">Total Loyalty Points</th>
@@ -723,7 +931,7 @@ export default function LoyaltyManagementPanel() {
                 <tbody>
                   {topEarners.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                      <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
                         No ranking data available.
                       </td>
                     </tr>
@@ -749,6 +957,9 @@ export default function LoyaltyManagementPanel() {
                         </td>
                         <td className="px-4 py-3 font-medium text-white">{row.user_id}</td>
                         <td className="px-4 py-3">{row.name}</td>
+                        <td className="px-4 py-3">
+                          <TierBadge tier={row.tier} />
+                        </td>
                         <td className="px-4 py-3 text-slate-400">{row.email}</td>
                         <td className="px-4 py-3">{row.mobile_number}</td>
                         <td className="px-4 py-3 font-semibold text-[#FBBF24]">{row.total_points_display}</td>
@@ -856,14 +1067,19 @@ export default function LoyaltyManagementPanel() {
         title={modalTitle}
         fields={modalFields}
         saving={saving}
-        onClose={() => setModal(null)}
+        error={error}
+        onClose={() => {
+          setModal(null);
+          setError("");
+        }}
         onSave={saveModal}
       />
     </div>
   );
 }
 
-function ConfigTable({ rows, busyKey, amountKey, amountLabel, onToggle, onEdit, onDelete }) {
+function ConfigTable({ rows, busyKey, amountKey, amountLabel, onToggle, onEdit, onDelete, showTier = false }) {
+  const colSpan = showTier ? 7 : 6;
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full text-left text-[13px]">
@@ -871,6 +1087,7 @@ function ConfigTable({ rows, busyKey, amountKey, amountLabel, onToggle, onEdit, 
           <tr>
             <th className="px-4 py-3">ID</th>
             <th className="px-4 py-3">Admin ID</th>
+            {showTier ? <th className="px-4 py-3">Tier</th> : null}
             <th className="px-4 py-3">{amountLabel}</th>
             <th className="px-4 py-3">Changed Date</th>
             <th className="px-4 py-3">Set as Active</th>
@@ -880,7 +1097,7 @@ function ConfigTable({ rows, busyKey, amountKey, amountLabel, onToggle, onEdit, 
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+              <td colSpan={colSpan} className="px-4 py-8 text-center text-slate-500">
                 No records found.
               </td>
             </tr>
@@ -889,6 +1106,19 @@ function ConfigTable({ rows, busyKey, amountKey, amountLabel, onToggle, onEdit, 
               <tr key={row.id} className="border-t border-white/10 text-slate-300">
                 <td className="px-4 py-3 font-medium text-white">{row.display_id}</td>
                 <td className="px-4 py-3">{row.admin_id ?? "—"}</td>
+                {showTier ? (
+                  <td className="px-4 py-3">
+                    <TierBadge
+                      tier={
+                        row.membership_tier
+                          ? DEFAULT_TIER_OPTIONS.find(
+                              (tier) => tier.slug === String(row.membership_tier).toLowerCase(),
+                            ) || { name: row.membership_tier_label, color: "#64969A" }
+                          : { name: row.membership_tier_label || "All Tiers", color: "#94a3b8" }
+                      }
+                    />
+                  </td>
+                ) : null}
                 <td className="px-4 py-3">{row[amountKey]}</td>
                 <td className="px-4 py-3 text-slate-400">{row.changed_date}</td>
                 <td className="px-4 py-3">

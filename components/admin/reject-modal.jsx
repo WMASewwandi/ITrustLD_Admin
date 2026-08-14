@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AlertTriangle, X } from "lucide-react";
+import { FormError } from "@/components/admin/queue-ui";
 
 const PRESET = [
   "Payment slip unclear",
@@ -12,25 +13,28 @@ const PRESET = [
   "Custom",
 ];
 
-export default function RejectModal({ open, title = "Reject record", onClose, onConfirm }) {
+export default function RejectModal({
+  open,
+  title = "Reject record",
+  onClose,
+  onConfirm,
+  error = "",
+  busy = false,
+}) {
   const [reason, setReason] = useState(PRESET[0]);
   const [custom, setCustom] = useState("");
   const [confirming, setConfirming] = useState(false);
 
   if (!open) return null;
 
-  function submit() {
+  async function submit() {
     if (!confirming) {
       setConfirming(true);
       return;
     }
     const finalReason = reason === "Custom" ? custom.trim() : reason;
     if (!finalReason) return;
-    onConfirm?.(finalReason);
-    setConfirming(false);
-    setReason(PRESET[0]);
-    setCustom("");
-    onClose?.();
+    await onConfirm?.(finalReason);
   }
 
   return (
@@ -84,6 +88,8 @@ export default function RejectModal({ open, title = "Reject record", onClose, on
           </div>
         )}
 
+        <FormError message={error} className="mt-4" />
+
         <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
@@ -92,15 +98,17 @@ export default function RejectModal({ open, title = "Reject record", onClose, on
               onClose?.();
             }}
             className="admin-btn-secondary"
+            disabled={busy}
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={submit}
-            className="rounded-xl bg-admin-danger px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700"
+            disabled={busy}
+            className="rounded-xl bg-admin-danger px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-50"
           >
-            {confirming ? "Confirm Reject" : "Continue"}
+            {busy ? "Please wait…" : confirming ? "Confirm Reject" : "Continue"}
           </button>
         </div>
       </div>

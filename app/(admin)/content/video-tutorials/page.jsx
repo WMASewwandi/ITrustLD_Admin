@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ExternalLink, Loader2, Pencil, Trash2, X } from "lucide-react";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
-import { inputCls } from "@/components/admin/queue-ui";
+import { FormError, inputCls } from "@/components/admin/queue-ui";
 import {
   VIDEO_TUTORIAL_CATEGORIES,
   createVideoTutorial,
@@ -196,7 +196,7 @@ export default function VideoTutorialsPage() {
         </div>
       </div>
 
-      {pageError ? (
+      {pageError && !deleteConfirm ? (
         <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
           {pageError}
         </div>
@@ -317,6 +317,7 @@ export default function VideoTutorialsPage() {
             </div>
           </div>
 
+          <FormError message={!deleteConfirm ? pageError : ""} />
           <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
             <button
               type="submit"
@@ -443,8 +444,12 @@ export default function VideoTutorialsPage() {
         }
         confirmLabel="Delete"
         confirmClassName="bg-rose-600"
+        error={pageError}
         onConfirm={() => handleDelete(deleteConfirm.id)}
-        onCancel={() => setDeleteConfirm(null)}
+        onCancel={() => {
+          setDeleteConfirm(null);
+          setPageError("");
+        }}
       />
     </div>
   );

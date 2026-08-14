@@ -18,6 +18,7 @@ import {
   downloadDepositsExport,
   fetchDepositProofBlob,
   fetchDeposits,
+  fetchSimilarDeposits,
   getDefaultAdvancedSearchIn,
   hasAdvancedDepositFilters,
   mapDurationToFilter,
@@ -52,6 +53,7 @@ import {
   MessageSquare,
   RefreshCw,
   Search,
+  ShieldCheck,
   UserPlus,
   X,
 } from "lucide-react";
@@ -227,43 +229,44 @@ function getSubmittedProofs(record) {
   return proofs;
 }
 
+function ProofField({ label, value }) {
+  return (
+    <div className="rounded-lg bg-white/5 px-3 py-2">
+      <dt className="text-slate-400">{label}</dt>
+      <dd>
+        <CopyCell value={value || "—"} />
+      </dd>
+    </div>
+  );
+}
+
 function ProofSummaryFields({ proof }) {
   return (
     <dl className="grid gap-2 text-sm">
       <div className="rounded-lg bg-white/5 px-3 py-2">
-        <dt className="text-slate-400">Platform</dt>
-        <dd className="font-medium text-white">
-          <CopyCell value={proof.platform || "—"} />
-        </dd>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <dt className="text-slate-400">Platform</dt>
+            <dd>
+              <CopyCell value={proof.platform || "—"} />
+            </dd>
+          </div>
+          <div className="min-w-0 text-right">
+            <dt className="text-slate-400">Platform ID</dt>
+            <dd className="flex justify-end">
+              <CopyCell value={proof.platformId || "—"} />
+            </dd>
+          </div>
+        </div>
       </div>
-      <div className="rounded-lg bg-white/5 px-3 py-2">
-        <dt className="text-slate-400">Method</dt>
-        <dd className="font-medium text-white">{proof.method || "—"}</dd>
-      </div>
-      <div className="rounded-lg bg-white/5 px-3 py-2">
-        <dt className="text-slate-400">Client Pay</dt>
-        <dd className="font-medium text-white">{proof.clientPay || "—"}</dd>
-      </div>
-      <div className="rounded-lg bg-white/5 px-3 py-2">
-        <dt className="text-slate-400">Cashout</dt>
-        <dd className="font-medium text-white">{proof.cashoutAmt || "—"}</dd>
-      </div>
-      <div className="rounded-lg bg-white/5 px-3 py-2">
-        <dt className="text-slate-400">Receiving Amount</dt>
-        <dd className="font-medium text-white">{proof.receiving || proof.deposited || proof.amount || "—"}</dd>
-      </div>
-      <div className="rounded-lg bg-white/5 px-3 py-2">
-        <dt className="mb-0.5 text-slate-400">Account</dt>
-        <dd>
-          <CopyCell value={proof.account} />
-        </dd>
-      </div>
-      <div className="rounded-lg bg-white/5 px-3 py-2">
-        <dt className="mb-0.5 text-slate-400">Platform ID</dt>
-        <dd>
-          <CopyCell value={proof.platformId} />
-        </dd>
-      </div>
+      <ProofField label="Method" value={proof.method} />
+      <ProofField label="Client Pay" value={proof.clientPay} />
+      <ProofField label="Cashout" value={proof.cashoutAmt} />
+      <ProofField
+        label="Sending Amount"
+        value={proof.receiving || proof.deposited || proof.amount}
+      />
+      <ProofField label="Account" value={proof.account} />
     </dl>
   );
 }
@@ -442,7 +445,7 @@ function SubmittedProofViewer({ proof, proofs, activeId, onOpenImage, fetchProof
   const active = proofs.find((p) => p.id === activeId) || proofs[0];
   if (!active) {
     return (
-      <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_220px]">
+      <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_260px]">
         <div className="flex h-48 flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 text-sm text-slate-400">
           <FileText className="mb-2 h-8 w-8 opacity-50" />
           No proof submitted by the customer
@@ -453,7 +456,7 @@ function SubmittedProofViewer({ proof, proofs, activeId, onOpenImage, fetchProof
   }
 
   return (
-    <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_220px]">
+    <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_260px]">
       <div className="overflow-hidden rounded-xl border border-white/10 bg-[#0c0f1a]">
         <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
           <div className="min-w-0">
@@ -487,6 +490,7 @@ function TransactionsContent() {
   const pathname = usePathname();
   const canUpdateDeposits = useCan("status_update_deposit_data");
   const canUpdateWithdrawals = useCan("status_update_withdrawal_data");
+  const canAuthorizeWithdrawalPerm = useCan("authorize_withdrawal_data");
   const [currentAdminKey, setCurrentAdminKey] = useState("admin");
   const [tab, setTab] = useState(params.get("tab") === "withdrawals" ? "withdrawals" : "deposits");
   const [depositFilters, setDepositFilters] = useState(() =>
@@ -537,8 +541,8 @@ function TransactionsContent() {
   const [statusActionBusy, setStatusActionBusy] = useState(false);
   const [proofSaving, setProofSaving] = useState(false);
   const [proof, setProof] = useState(null);
-  const [similarWithdrawals, setSimilarWithdrawals] = useState([]);
-  const [similarWithdrawalsLoading, setSimilarWithdrawalsLoading] = useState(false);
+  const [similarToday, setSimilarToday] = useState([]);
+  const [similarTodayLoading, setSimilarTodayLoading] = useState(false);
   const [activeProofId, setActiveProofId] = useState(null);
   const [imageLightbox, setImageLightbox] = useState(null);
   const proofBodyRef = useRef(null);
@@ -546,6 +550,13 @@ function TransactionsContent() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [depositIsAdmin, setDepositIsAdmin] = useState(false);
   const [withdrawalIsAdmin, setWithdrawalIsAdmin] = useState(false);
+  const [allowedDepositStatuses, setAllowedDepositStatuses] = useState(null);
+  const [allowedWithdrawalStatuses, setAllowedWithdrawalStatuses] = useState(null);
+  const [makerCheckerEnabled, setMakerCheckerEnabled] = useState(false);
+  const [isWithdrawalAuthorizer, setIsWithdrawalAuthorizer] = useState(false);
+  const [canAuthorizeWithdrawals, setCanAuthorizeWithdrawals] = useState(false);
+  const [isWithdrawalExecutive, setIsWithdrawalExecutive] = useState(false);
+  const [authorizeConfirmId, setAuthorizeConfirmId] = useState(null);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [smsModalOpen, setSmsModalOpen] = useState(false);
   const [emailCompose, setEmailCompose] = useState({ receivers: "", subject: "", body: "", attachment: null, templateId: null });
@@ -855,6 +866,7 @@ function TransactionsContent() {
       setDepositTotals(data.totals || { totalDepositAmount: 0, totalPaymentAmount: 0 });
       setDepositPagination(data.pagination || depositPagination);
       setDepositIsAdmin(Boolean(data.isAdmin));
+      setAllowedDepositStatuses(data.allowed_deposit_statuses ?? null);
     } catch (err) {
       setDepositsError(err.message || "Failed to load deposits.");
       setDeposits([]);
@@ -900,6 +912,11 @@ function TransactionsContent() {
       );
       setWithdrawalPagination(data.pagination || withdrawalPagination);
       setWithdrawalIsAdmin(Boolean(data.isAdmin));
+      setMakerCheckerEnabled(Boolean(data.makerCheckerEnabled));
+      setIsWithdrawalAuthorizer(Boolean(data.isWithdrawalAuthorizer));
+      setCanAuthorizeWithdrawals(Boolean(data.canAuthorizeWithdrawals));
+      setIsWithdrawalExecutive(Boolean(data.isWithdrawalExecutive));
+      setAllowedWithdrawalStatuses(data.allowed_withdrawal_statuses ?? null);
     } catch (err) {
       setWithdrawalsError(err.message || "Failed to load withdrawals.");
       setWithdrawals([]);
@@ -1367,7 +1384,26 @@ function TransactionsContent() {
     );
   }
 
-  const canMutateCurrentTab = tab === "deposits" ? canUpdateDeposits : canUpdateWithdrawals;
+  const canMutateCurrentTab =
+    tab === "deposits"
+      ? canUpdateDeposits
+      : canUpdateWithdrawals || canAuthorizeWithdrawalPerm || withdrawalIsAdmin;
+  const allowedStatusesForTab = tab === "deposits" ? allowedDepositStatuses : allowedWithdrawalStatuses;
+  const canAuthorizeCurrentUser =
+    withdrawalIsAdmin || canAuthorizeWithdrawalPerm || canAuthorizeWithdrawals;
+
+  function canMutateRow(row) {
+    if (!row) return false;
+    if (tab === "withdrawals" && row.status === "Pending Authorization") {
+      if (!canAuthorizeCurrentUser) return false;
+    } else if (tab === "withdrawals" && !canUpdateWithdrawals && !withdrawalIsAdmin) {
+      return false;
+    } else if (tab === "deposits" && !canUpdateDeposits) {
+      return false;
+    }
+    if (!allowedStatusesForTab) return true;
+    return allowedStatusesForTab.includes(row.status);
+  }
 
   const pendingRows =
     tab === "deposits"
@@ -1395,7 +1431,9 @@ function TransactionsContent() {
             );
 
   const title =
-    resolvedDepositStatus === "Pending" || resolvedDepositStatus.includes("Pending")
+    resolvedDepositStatus === "Pending Authorization"
+      ? "Pending Authorization"
+      : resolvedDepositStatus === "Pending" || resolvedDepositStatus.includes("Pending")
       ? tab === "deposits"
         ? "Pending Deposits"
         : "Pending Withdrawals"
@@ -1413,22 +1451,26 @@ function TransactionsContent() {
 
   function openProof(r) {
     setProof(r);
+    setActionError("");
     setActiveProofId(null);
     setRejectId(null);
     requestAnimationFrame(() => {
       proofBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     });
-    if (tabRef.current === "withdrawals") {
-      setSimilarWithdrawalsLoading(true);
-      setSimilarWithdrawals([]);
-      fetchSimilarWithdrawals({ transactionId: r.id, withdrawalId: r.withdrawalId })
-        .then((data) => setSimilarWithdrawals(data.withdrawals || []))
-        .catch(() => setSimilarWithdrawals([]))
-        .finally(() => setSimilarWithdrawalsLoading(false));
-    } else {
-      setSimilarWithdrawals([]);
-      setSimilarWithdrawalsLoading(false);
-    }
+    setSimilarTodayLoading(true);
+    setSimilarToday([]);
+    const similarRequest =
+      tabRef.current === "withdrawals"
+        ? fetchSimilarWithdrawals({ transactionId: r.id, withdrawalId: r.withdrawalId }).then(
+            (data) => data.withdrawals || [],
+          )
+        : fetchSimilarDeposits({ transactionId: r.id, depositId: r.depositId }).then(
+            (data) => data.deposits || [],
+          );
+    similarRequest
+      .then((rows) => setSimilarToday(rows))
+      .catch(() => setSimilarToday([]))
+      .finally(() => setSimilarTodayLoading(false));
   }
 
   function openSubmittedImage(record, file) {
@@ -1439,8 +1481,8 @@ function TransactionsContent() {
 
   function closeProof() {
     setProof(null);
-    setSimilarWithdrawals([]);
-    setSimilarWithdrawalsLoading(false);
+    setSimilarToday([]);
+    setSimilarTodayLoading(false);
     setActiveProofId(null);
     setImageLightbox(null);
   }
@@ -1638,6 +1680,27 @@ function TransactionsContent() {
     }
   }
 
+  async function authorizeTransaction(id) {
+    const row = withdrawals.find((r) => r.id === id);
+    if (!row) return;
+    setActionError("");
+    setStatusActionBusy(true);
+    try {
+      await updateWithdrawalStatus({
+        withdrawalId: row.withdrawalId,
+        status: "Pending Authorization",
+      });
+      setAuthorizeConfirmId(null);
+      if (proof?.id === id) closeProof();
+      await loadWithdrawals();
+      notifyAdminNavCountsRefresh();
+    } catch (err) {
+      setActionError(err.message || "Failed to send withdrawal for authorization.");
+    } finally {
+      setStatusActionBusy(false);
+    }
+  }
+
   async function approveTransaction(id) {
     const rows = tab === "deposits" ? deposits : withdrawals;
     const row = rows.find((r) => r.id === id);
@@ -1669,6 +1732,7 @@ function TransactionsContent() {
     const row = rows.find((r) => r.id === targetId);
     if (!row) return;
     setActionError("");
+    setStatusActionBusy(true);
     try {
       if (tab === "deposits") {
         await updateDepositStatus({
@@ -1690,11 +1754,13 @@ function TransactionsContent() {
       notifyAdminNavCountsRefresh();
     } catch (err) {
       setActionError(err.message || "Failed to reject transaction.");
+    } finally {
+      setStatusActionBusy(false);
     }
   }
 
   function renderRowActions(r) {
-    if (!canMutateCurrentTab) {
+    if (!canMutateRow(r)) {
       return <span className="text-[11px] text-slate-500">—</span>;
     }
 
@@ -1710,6 +1776,20 @@ function TransactionsContent() {
     }
 
     const actionMode = getRowActionMode(r.status);
+    const showAuthorize =
+      tab === "withdrawals" &&
+      makerCheckerEnabled &&
+      actionMode === "Pending" &&
+      (withdrawalIsAdmin || isWithdrawalExecutive || !isWithdrawalAuthorizer);
+    const hideCompleteForEnterer =
+      tab === "withdrawals" &&
+      makerCheckerEnabled &&
+      actionMode === "Pending" &&
+      !withdrawalIsAdmin;
+    const showAuthorizerComplete =
+      tab === "withdrawals" &&
+      actionMode === "Pending Authorization" &&
+      canAuthorizeCurrentUser;
 
     return (
       <div className="relative flex gap-1">
@@ -1723,11 +1803,43 @@ function TransactionsContent() {
             >
               <AlertTriangle className="h-3.5 w-3.5" />
             </button>
+            {showAuthorize ? (
+              <button
+                type="button"
+                onClick={() => setAuthorizeConfirmId(r.id)}
+                className="rounded-lg bg-[#2563EB] p-1.5 text-white shadow-sm"
+                title="Send for authorization"
+              >
+                <ShieldCheck className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+            {hideCompleteForEnterer ? null : (
+              <button
+                type="button"
+                onClick={() => setApproveConfirmId(r.id)}
+                className="rounded-lg bg-theme-green-action p-1.5 text-white shadow-sm"
+                title="Approve"
+              >
+                <Check className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </>
+        ) : null}
+        {showAuthorizerComplete ? (
+          <>
+            <button
+              type="button"
+              onClick={() => toggleRowReject(r.id)}
+              className="rounded-lg bg-[#E11D48] p-1.5 text-white shadow-sm"
+              title="Reject"
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
+            </button>
             <button
               type="button"
               onClick={() => setApproveConfirmId(r.id)}
               className="rounded-lg bg-theme-green-action p-1.5 text-white shadow-sm"
-              title="Approve"
+              title="Authorize and complete"
             >
               <Check className="h-3.5 w-3.5" />
             </button>
@@ -1909,7 +2021,10 @@ function TransactionsContent() {
               }}
               className={`${inputCls} w-40`}
             >
-              {["Pending", "Completed", "Rejected", "All"].map((s) => (
+              {(tab === "withdrawals"
+                ? ["Pending", "Pending Authorization", "Completed", "Rejected", "All"]
+                : ["Pending", "Completed", "Rejected", "All"]
+              ).map((s) => (
                 <option key={s} value={s} className="bg-admin-surface">
                   {s}
                 </option>
@@ -2071,10 +2186,12 @@ function TransactionsContent() {
           </div>
         </div>
 
-        {actionError ? (
-          <div className="border-b border-white/10 px-5 py-3 text-sm text-rose-400">{actionError}</div>
-        ) : null}
         <form onSubmit={runTransactionSearch} className="border-b border-white/10 bg-white/5 px-5 py-4">
+          {actionError && !proof && !rejectId && !pendingConfirmId && !authorizeConfirmId && !approveConfirmId ? (
+            <div className="mb-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+              {actionError}
+            </div>
+          ) : null}
           {filterError ? (
             <div className="mb-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
               {filterError}
@@ -2566,7 +2683,12 @@ function TransactionsContent() {
             ? `${rejectRecord.id} · ${rejectRecord.customer} · ${rejectRecord.clientPay || rejectRecord.cashoutAmt || rejectRecord.amount}`
             : undefined
         }
-        onCancel={() => setRejectId(null)}
+        error={actionError}
+        busy={statusActionBusy}
+        onCancel={() => {
+          setRejectId(null);
+          setActionError("");
+        }}
         onConfirm={(reason) => rejectTransaction(reason, rejectId)}
       />
 
@@ -2581,13 +2703,43 @@ function TransactionsContent() {
         confirmLabel="Yes"
         confirmClassName="bg-[#D1900F]"
         busy={statusActionBusy}
-        onCancel={() => setPendingConfirmId(null)}
+        error={actionError}
+        onCancel={() => {
+          setPendingConfirmId(null);
+          setActionError("");
+        }}
         onConfirm={() => pendingTransaction(pendingConfirmId)}
       />
 
       <DepositStatusConfirmModal
+        open={Boolean(authorizeConfirmId)}
+        title="Send for authorization?"
+        message={
+          authorizeConfirmId
+            ? `${withdrawals.find((r) => r.id === authorizeConfirmId)?.id || ""} · ${
+                withdrawals.find((r) => r.id === authorizeConfirmId)?.customer || ""
+              }`
+            : undefined
+        }
+        confirmLabel="Authorize"
+        confirmClassName="bg-[#2563EB]"
+        busy={statusActionBusy}
+        error={actionError}
+        onCancel={() => {
+          setAuthorizeConfirmId(null);
+          setActionError("");
+        }}
+        onConfirm={() => authorizeTransaction(authorizeConfirmId)}
+      />
+
+      <DepositStatusConfirmModal
         open={Boolean(approveConfirmId)}
-        title="Set as Completed?"
+        title={
+          tab === "withdrawals" &&
+          withdrawals.find((r) => r.id === approveConfirmId)?.status === "Pending Authorization"
+            ? "Authorize and complete?"
+            : "Set as Completed?"
+        }
         message={
           approveConfirmRecord
             ? `${approveConfirmRecord.id} · ${approveConfirmRecord.customer}`
@@ -2596,7 +2748,11 @@ function TransactionsContent() {
         confirmLabel="Yes"
         confirmClassName="bg-theme-green-action"
         busy={statusActionBusy}
-        onCancel={() => setApproveConfirmId(null)}
+        error={actionError}
+        onCancel={() => {
+          setApproveConfirmId(null);
+          setActionError("");
+        }}
         onConfirm={() => approveTransaction(approveConfirmId)}
       />
 
@@ -2667,75 +2823,73 @@ function TransactionsContent() {
                   Rejection reason (customer-facing): <span className="font-semibold">{proof.rejectReason}</span>
                 </div>
               ) : null}
-              {tab === "withdrawals" ? (
-                <>
-                  <h4 className="mb-2 mt-5 text-sm font-semibold text-white">
-                    Same-day transactions grid
-                  </h4>
-                  <p className="mb-2 text-[11px] text-slate-500">
-                    Same platform method and Plat. ID since today&apos;s business day (from 0:10 AM).
-                  </p>
-                  <div className="overflow-x-auto rounded-xl border border-white/10">
-                    <table className="min-w-[640px] w-full text-left text-sm">
-                      <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
+              <h4 className="mb-2 mt-5 text-sm font-semibold text-white">
+                Same-day transactions grid
+              </h4>
+                <p className="mb-2 text-[11px] text-slate-500">
+                  Same platform method and Plat. ID since today&apos;s business day (from 0:10 AM).
+                </p>
+                <div className="overflow-x-auto rounded-xl border border-white/10">
+                  <table className="min-w-[640px] w-full text-left text-sm">
+                    <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
+                      <tr>
+                        <th className="px-3 py-2">Tran. ID</th>
+                        <th className="px-3 py-2">Platform ID</th>
+                        <th className="px-3 py-2">Amount</th>
+                        <th className="px-3 py-2">Method</th>
+                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">Proof</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {similarTodayLoading ? (
                         <tr>
-                          <th className="px-3 py-2">Tran. ID</th>
-                          <th className="px-3 py-2">Platform ID</th>
-                          <th className="px-3 py-2">Amount</th>
-                          <th className="px-3 py-2">Method</th>
-                          <th className="px-3 py-2">Status</th>
-                          <th className="px-3 py-2">Proof</th>
+                          <td colSpan={6} className="px-3 py-6 text-center text-slate-400">
+                            Loading same-day transactions…
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {similarWithdrawalsLoading ? (
-                          <tr>
-                            <td colSpan={6} className="px-3 py-6 text-center text-slate-400">
-                              Loading same-day transactions…
+                      ) : similarToday.length ? (
+                        similarToday.map((r) => (
+                          <tr key={r.id} className="border-t border-white/10 text-slate-300">
+                            <td className="px-3 py-2">
+                              <CopyCell value={r.id} />
+                            </td>
+                            <td className="px-3 py-2">
+                              <CopyCell value={r.platformId} />
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2">
+                              {r.cashoutAmt || r.deposited || r.amount}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2">{r.method}</td>
+                            <td className="px-3 py-2">
+                              <StatusPill status={r.status} />
+                            </td>
+                            <td className="px-3 py-2">
+                              {r.proof ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openSubmittedImage(r)}
+                                  className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-teal-300 hover:underline"
+                                >
+                                  <Eye className="h-3 w-3" />
+                                  View submitted
+                                </button>
+                              ) : (
+                                <span className="text-slate-500">Not submitted</span>
+                              )}
                             </td>
                           </tr>
-                        ) : similarWithdrawals.length ? (
-                          similarWithdrawals.map((r) => (
-                            <tr key={r.id} className="border-t border-white/10 text-slate-300">
-                              <td className="px-3 py-2">
-                                <CopyCell value={r.id} />
-                              </td>
-                              <td className="px-3 py-2">
-                                <CopyCell value={r.platformId} />
-                              </td>
-                              <td className="whitespace-nowrap px-3 py-2">{r.cashoutAmt || r.amount}</td>
-                              <td className="whitespace-nowrap px-3 py-2">{r.method}</td>
-                              <td className="px-3 py-2">
-                                <StatusPill status={r.status} />
-                              </td>
-                              <td className="px-3 py-2">
-                                {r.proof ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => openSubmittedImage(r)}
-                                    className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-teal-300 hover:underline"
-                                  >
-                                    <Eye className="h-3 w-3" />
-                                    View submitted
-                                  </button>
-                                ) : (
-                                  <span className="text-slate-500">Not submitted</span>
-                                )}
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={6} className="px-3 py-6 text-center text-slate-400">
-                              No same-day transactions for this platform ID.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              ) : null}
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6} className="px-3 py-6 text-center text-slate-400">
+                            No same-day transactions for this platform ID.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
 
               <div className="mt-4">
                 <SubmittedFilesList
@@ -2759,9 +2913,15 @@ function TransactionsContent() {
               <div className="border-t border-amber-500/20 bg-amber-500/10 px-5 py-3 text-sm text-amber-200">
                 Locked by {proof.lockedBy} — claim or wait before approving or rejecting.
               </div>
-            ) : !canMutateCurrentTab ? (
+            ) : !canMutateRow(proof) ? (
               <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4 text-sm text-slate-400">
-                You do not have permission to update transaction status.
+                {tab === "withdrawals" &&
+                proof.status === "Pending Authorization" &&
+                !canAuthorizeCurrentUser
+                  ? "You do not have permission to authorize withdrawals."
+                  : canMutateCurrentTab
+                  ? `You can only update ${tab === "deposits" ? "deposit" : "withdrawal"} records with status: ${(allowedStatusesForTab || []).join(", ") || "none"}.`
+                  : "You do not have permission to update transaction status."}
               </div>
             ) : (
               <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4">
@@ -2775,6 +2935,8 @@ function TransactionsContent() {
                   key={proof.id}
                   initialStatus={proof.status}
                   saving={proofSaving}
+                  includeAuthorization={tab === "withdrawals"}
+                  error={actionError}
                   onCancel={closeProof}
                   onSave={saveProofStatus}
                 />

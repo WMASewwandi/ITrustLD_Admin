@@ -592,6 +592,9 @@ function LoyaltyContent() {
       if (detail?.id === id) {
         setDetail(null);
       }
+      setApproveConfirmId(null);
+      setReopenConfirmId(null);
+      setRejectId(null);
       notifyAdminNavCountsRefresh();
     } catch (err) {
       setOrderActionError(err.message || "Failed to update loyalty order status.");
@@ -609,6 +612,9 @@ function LoyaltyContent() {
       if (detail?.id === id) {
         setDetail(null);
       }
+      setApproveConfirmId(null);
+      setReopenConfirmId(null);
+      setRejectId(null);
       notifyAdminNavCountsRefresh();
     } catch (err) {
       setBonusActionError(err.message || "Failed to update bonus claim status.");
@@ -626,6 +632,7 @@ function LoyaltyContent() {
       if (detail?.id === id) {
         setDetail(null);
       }
+      setApproveConfirmId(null);
       notifyAdminNavCountsRefresh();
     } catch (err) {
       setVoucherActionError(err.message || "Failed to complete voucher claim.");
@@ -643,6 +650,7 @@ function LoyaltyContent() {
       if (detail?.id === id) {
         setDetail(null);
       }
+      setRejectId(null);
       notifyAdminNavCountsRefresh();
     } catch (err) {
       setVoucherActionError(err.message || "Failed to reject voucher claim.");
@@ -992,19 +1000,19 @@ function LoyaltyContent() {
             {tab === "orders" && ordersError ? (
               <p className="mt-2 text-xs text-rose-400">{ordersError}</p>
             ) : null}
-            {tab === "orders" && orderActionError ? (
+            {tab === "orders" && orderActionError && !approveConfirmId && !reopenConfirmId && !rejectId ? (
               <p className="mt-2 text-xs text-rose-400">{orderActionError}</p>
             ) : null}
             {tab === "bonus" && bonusError ? (
               <p className="mt-2 text-xs text-rose-400">{bonusError}</p>
             ) : null}
-            {tab === "bonus" && bonusActionError ? (
+            {tab === "bonus" && bonusActionError && !approveConfirmId && !reopenConfirmId && !rejectId ? (
               <p className="mt-2 text-xs text-rose-400">{bonusActionError}</p>
             ) : null}
             {tab === "vouchers" && voucherError ? (
               <p className="mt-2 text-xs text-rose-400">{voucherError}</p>
             ) : null}
-            {tab === "vouchers" && voucherActionError ? (
+            {tab === "vouchers" && voucherActionError && !approveConfirmId && !rejectId ? (
               <p className="mt-2 text-xs text-rose-400">{voucherActionError}</p>
             ) : null}
           </div>
@@ -1706,11 +1714,16 @@ function LoyaltyContent() {
         busy={
           tab === "orders" ? orderStatusBusy : tab === "bonus" ? bonusStatusBusy : voucherStatusBusy
         }
-        onCancel={() => setApproveConfirmId(null)}
-        onConfirm={() => {
-          approve(approveConfirmId);
+        error={
+          tab === "orders" ? orderActionError : tab === "bonus" ? bonusActionError : voucherActionError
+        }
+        onCancel={() => {
           setApproveConfirmId(null);
+          setOrderActionError("");
+          setBonusActionError("");
+          setVoucherActionError("");
         }}
+        onConfirm={() => approve(approveConfirmId)}
       />
 
       <DepositStatusConfirmModal
@@ -1726,11 +1739,13 @@ function LoyaltyContent() {
         confirmLabel="Yes"
         confirmClassName="bg-[#D1900F]"
         busy={tab === "orders" ? orderStatusBusy : bonusStatusBusy}
-        onCancel={() => setReopenConfirmId(null)}
-        onConfirm={() => {
-          reopen(reopenConfirmId);
+        error={tab === "orders" ? orderActionError : bonusActionError}
+        onCancel={() => {
           setReopenConfirmId(null);
+          setOrderActionError("");
+          setBonusActionError("");
         }}
+        onConfirm={() => reopen(reopenConfirmId)}
       />
 
       <DepositStatusConfirmModal
@@ -1746,21 +1761,25 @@ function LoyaltyContent() {
         confirmLabel="Yes"
         confirmClassName="bg-[#E11D48]"
         busy={tab === "orders" ? orderStatusBusy : bonusStatusBusy}
-        onCancel={() => setRejectId(null)}
-        onConfirm={() => {
-          rejectRecord(rejectId);
+        error={tab === "orders" ? orderActionError : bonusActionError}
+        onCancel={() => {
           setRejectId(null);
+          setOrderActionError("");
+          setBonusActionError("");
         }}
+        onConfirm={() => rejectRecord(rejectId)}
       />
 
       <RejectModal
         open={Boolean(rejectId) && tab === "vouchers"}
         title="Reject voucher claim"
-        onClose={() => setRejectId(null)}
-        onConfirm={(reason) => {
-          rejectRecord(rejectId, reason);
+        error={voucherActionError}
+        busy={voucherStatusBusy}
+        onClose={() => {
           setRejectId(null);
+          setVoucherActionError("");
         }}
+        onConfirm={(reason) => rejectRecord(rejectId, reason)}
       />
 
       <LoyaltyDetailModal

@@ -143,3 +143,12 @@ export function FilterField({ label, children, className = "" }) {
 
 export const inputCls =
   "w-full rounded-xl border border-white/10 bg-admin-chrome-deep px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-admin-teal/50 focus:ring-2 focus:ring-admin-teal/20";
+
+export function FormError({ message, className = "" }) {
+  if (!message) return null;
+  return (
+    <div className={`rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300 ${className}`}>
+      {message}
+    </div>
+  );
+}

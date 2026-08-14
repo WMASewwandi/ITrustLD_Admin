@@ -19,18 +19,24 @@ export const DEPOSIT_PROOF_REJECT_REASONS = [
 const STATUS_OPTIONS = [
   { value: "Completed", label: "Completed" },
   { value: "Pending", label: "Pending" },
+  { value: "Pending Authorization", label: "Pending Authorization" },
   { value: "Rejected", label: "Rejected" },
 ];
 
 export default function DepositProofStatusPanel({
   initialStatus = "Pending",
   saving = false,
+  includeAuthorization = false,
+  error = "",
   onCancel,
   onSave,
 }) {
   const [status, setStatus] = useState(initialStatus);
   const [rejectReason, setRejectReason] = useState(DEPOSIT_PROOF_REJECT_REASONS[0]);
   const [rejectMessage, setRejectMessage] = useState("");
+  const statusOptions = includeAuthorization
+    ? STATUS_OPTIONS
+    : STATUS_OPTIONS.filter((option) => option.value !== "Pending Authorization");
 
   useEffect(() => {
     setStatus(initialStatus || "Pending");
@@ -61,7 +67,7 @@ export default function DepositProofStatusPanel({
       <div>
         <p className="mb-2 text-sm font-semibold text-white">Transaction status</p>
         <div className="flex flex-wrap gap-4">
-          {STATUS_OPTIONS.map((option) => (
+          {statusOptions.map((option) => (
             <label
               key={option.value}
               className="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-200"
@@ -79,6 +85,12 @@ export default function DepositProofStatusPanel({
           ))}
         </div>
       </div>
+
+      {error ? (
+        <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+          {error}
+        </div>
+      ) : null}
 
       {status === "Rejected" ? (
         <div className="rounded-xl border border-rose-400/20 bg-rose-500/5 p-4">

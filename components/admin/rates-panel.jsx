@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
-import { inputCls } from "@/components/admin/queue-ui";
+import { FormError, inputCls } from "@/components/admin/queue-ui";
 import { useCan } from "@/contexts/admin-permissions";
 import { useAppDialog } from "@/components/admin/app-dialog";
 import {
@@ -334,7 +334,7 @@ export default function RatesPanel({ method }) {
 
   return (
     <div className="mt-5">
-      {error ? <p className="mb-3 text-sm text-rose-400">{error}</p> : null}
+      {error && !modal && !pointModal ? <p className="mb-3 text-sm text-rose-400">{error}</p> : null}
       {success ? <p className="mb-3 text-sm text-theme-green-action">{success}</p> : null}
 
       <div className="admin-fade-up flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -506,6 +506,8 @@ export default function RatesPanel({ method }) {
                 ) : null}
               </div>
 
+              <FormError message={error} />
+
               <div className="flex justify-end gap-2 pt-1">
                 <button type="button" onClick={() => setModal(null)} className="admin-btn-secondary" disabled={busy}>
                   Cancel
@@ -575,6 +577,8 @@ export default function RatesPanel({ method }) {
                   disabled={busy}
                 />
               </label>
+
+              <FormError message={error} />
 
               <div className="flex justify-end gap-2 pt-1">
                 <button type="button" onClick={() => setPointModal(null)} className="admin-btn-secondary" disabled={busy}>

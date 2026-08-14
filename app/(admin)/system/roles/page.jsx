@@ -5,7 +5,7 @@ import Breadcrumb from "@/components/admin/breadcrumb";
 import RolePermissionsEditor, {
   RolePermissionsEditorSkeleton,
 } from "@/components/admin/role-permissions-editor";
-import { inputCls } from "@/components/admin/queue-ui";
+import { FormError, inputCls } from "@/components/admin/queue-ui";
 import {
   createRole,
   fetchRoleActivities,
@@ -135,7 +135,7 @@ export default function RolesPage() {
         ]}
       />
 
-      {error && !editRole ? (
+      {error && !editRole && !showCreate ? (
         <div className="admin-fade-up mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {error}
         </div>
@@ -325,7 +325,7 @@ export default function RolesPage() {
                 <h3 className="text-lg font-semibold text-white">Create New Role</h3>
                 <p className="mt-1 text-sm text-slate-500">
                   Use a lowercase slug, e.g.{" "}
-                  <code className="text-admin-teal">withdrawal-authorizer</code>
+                  <code className="text-admin-teal">finance-manager</code>
                 </p>
               </div>
               <button
@@ -344,6 +344,8 @@ export default function RolesPage() {
               placeholder="role-name"
               className={inputCls}
             />
+
+            <FormError message={error} className="mt-4" />
 
             <div className="mt-5 flex justify-end gap-2">
               <button
