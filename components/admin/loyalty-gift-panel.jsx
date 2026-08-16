@@ -19,6 +19,8 @@ import {
   updateGiftState,
 } from "@/lib/loyalty-gifts";
 import { useAppDialog } from "@/components/admin/app-dialog";
+import { parseDbDateTime } from "@/lib/sl-time";
+import { notifyAdminNavCountsRefresh } from "@/lib/notifications";
 
 const LEVEL_OPTIONS = [
   { key: "NORMAL", label: "Normal" },
@@ -67,11 +69,112 @@ function FieldHelp({ message }) {
   return <p className="mt-1 text-[11px] text-rose-400">{message}</p>;
 }
 
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function toDateInputValue(value) {
+  if (!value) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return String(value);
+  const parsed = parseDbDateTime(value);
+  if (!parsed) return "";
+  return `${parsed.getFullYear()}-${pad2(parsed.getMonth() + 1)}-${pad2(parsed.getDate())}`;
+}
+
+function getCountdownParts(expiresAt) {
+  if (!expiresAt) {
+    return { expired: true, days: 0, hours: 0, minutes: 0, seconds: 0 };
+  }
+  const totalMs = expiresAt.getTime() - Date.now();
+  if (totalMs <= 0) {
+    return { expired: true, days: 0, hours: 0, minutes: 0, seconds: 0 };
+  }
+  const totalSec = Math.floor(totalMs / 1000);
+  return {
+    expired: false,
+    days: Math.floor(totalSec / 86400),
+    hours: Math.floor((totalSec % 86400) / 3600),
+    minutes: Math.floor((totalSec % 3600) / 60),
+    seconds: totalSec % 60,
+  };
+}
+
+function formatCountdown(parts) {
+  if (parts.expired) return "Expired";
+  if (parts.days > 0) {
+    return `${parts.days}d ${pad2(parts.hours)}h ${pad2(parts.minutes)}m ${pad2(parts.seconds)}s`;
+  }
+  if (parts.hours > 0) {
+    return `${parts.hours}h ${pad2(parts.minutes)}m ${pad2(parts.seconds)}s`;
+  }
+  return `${parts.minutes}m ${pad2(parts.seconds)}s`;
+}
+
+function GiftExpiryCountdown({ expiresAt, isExpired }) {
+  const expires = useMemo(() => parseDbDateTime(expiresAt), [expiresAt]);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!expires || isExpired) return undefined;
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [expires, isExpired]);
+
+  const parts = useMemo(() => {
+    if (isExpired || !expires) return { expired: true, days: 0, hours: 0, minutes: 0, seconds: 0 };
+    return getCountdownParts(expires);
+  }, [expires, isExpired, nowMs]);
+
+  if (!expiresAt) {
+    return <span className="text-slate-500">—</span>;
+  }
+
+  if (parts.expired) {
+    return (
+      <span className="inline-flex rounded-md bg-rose-500/15 px-2 py-1 text-[11px] font-semibold text-rose-300">
+        Expired
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex rounded-md bg-amber-500/15 px-2 py-1 font-mono text-[11px] font-semibold text-amber-200">
+      {formatCountdown(parts)}
+    </span>
+  );
+}
+
+function useGiftExpired(expiresAt, serverExpired) {
+  const expires = useMemo(() => parseDbDateTime(expiresAt), [expiresAt]);
+  const [expired, setExpired] = useState(() =>
+    Boolean(serverExpired || (expires && expires.getTime() <= Date.now())),
+  );
+
+  useEffect(() => {
+    if (serverExpired) {
+      setExpired(true);
+      return undefined;
+    }
+    if (!expires) {
+      setExpired(false);
+      return undefined;
+    }
+    const tick = () => setExpired(expires.getTime() <= Date.now());
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [expires, serverExpired]);
+
+  return expired;
+}
+
 function GiftFormModal({ open, title, initial, saving, saveError, onClose, onSave }) {
   const [giftTitle, setGiftTitle] = useState("");
   const [description, setDescription] = useState("");
   const [audienceType, setAudienceType] = useState("normal");
   const [levels, setLevels] = useState([]);
+  const [expiresAt, setExpiresAt] = useState("");
+  const [notifyUsersByEmail, setNotifyUsersByEmail] = useState(false);
   const [errors, setErrors] = useState({});
   const [mounted, setMounted] = useState(false);
 
@@ -85,6 +188,8 @@ function GiftFormModal({ open, title, initial, saving, saveError, onClose, onSav
     setDescription(initial?.description || "");
     setAudienceType(initial?.audience_type || initial?.audience || "normal");
     setLevels(initial?.allowed_levels || []);
+    setExpiresAt(toDateInputValue(initial?.expires_at_date || initial?.expires_at || ""));
+    setNotifyUsersByEmail(false);
     setErrors({});
   }, [open, initial]);
 
@@ -100,9 +205,17 @@ function GiftFormModal({ open, title, initial, saving, saveError, onClose, onSav
     if (!giftTitle.trim()) nextErrors.title = "Gift title is required.";
     if (!audienceType) nextErrors.audienceType = "Select a customer type.";
     if (!levels.length) nextErrors.levels = "Select at least one allowed level.";
+    if (!expiresAt) nextErrors.expiresAt = "Expiration date is required.";
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
-    onSave({ title: giftTitle, description, audienceType, allowedLevels: levels });
+    onSave({
+      title: giftTitle,
+      description,
+      audienceType,
+      allowedLevels: levels,
+      expiresAt,
+      notifyUsersByEmail,
+    });
   }
 
   return createPortal(
@@ -142,6 +255,20 @@ function GiftFormModal({ open, title, initial, saving, saveError, onClose, onSav
               className={`${inputCls} resize-none`}
               placeholder="Brief description of the gift"
             />
+          </label>
+
+          <label className="block text-sm text-slate-300">
+            <span className="mb-1 block text-xs text-slate-400">Expiration Date</span>
+            <input
+              type="date"
+              value={expiresAt}
+              onChange={(e) => {
+                setExpiresAt(e.target.value);
+                setErrors((prev) => ({ ...prev, expiresAt: "" }));
+              }}
+              className={`${inputCls} ${errors.expiresAt ? "border-rose-500/60" : ""}`}
+            />
+            <FieldHelp message={errors.expiresAt} />
           </label>
 
           <div>
@@ -198,6 +325,23 @@ function GiftFormModal({ open, title, initial, saving, saveError, onClose, onSav
             </div>
             <FieldHelp message={errors.levels} />
           </div>
+
+          <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+            <div>
+              <span className="block text-sm font-medium text-slate-200">Notify users by email &amp; SMS</span>
+              <span className="block text-xs text-slate-500">
+                If checked, selected customer types and tiers will receive email and SMS.
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              checked={notifyUsersByEmail}
+              onChange={(e) => setNotifyUsersByEmail(e.target.checked)}
+              disabled={saving}
+              className="h-4 w-4 rounded border-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+            />
+          </label>
+
           <FieldHelp message={saveError} />
         </div>
 
@@ -222,6 +366,73 @@ function GiftFormModal({ open, title, initial, saving, saveError, onClose, onSav
       </div>
     </div>,
     document.body,
+  );
+}
+
+function GiftCatalogRow({ gift, busy, onToggleActive, onEdit, onDelete }) {
+  const expired = useGiftExpired(gift.expires_at, gift.is_expired);
+
+  return (
+    <tr
+      className={`border-t border-white/10 text-slate-300 ${
+        expired ? "bg-rose-500/[0.04]" : ""
+      }`}
+    >
+      <td className="px-3 py-3">{gift.id}</td>
+      <td className="px-3 py-3 font-medium text-white">{gift.title}</td>
+      <td className="px-3 py-3">
+        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold">
+          {gift.audience_label || "Normal"}
+        </span>
+      </td>
+      <td className="max-w-[200px] truncate px-3 py-3 text-slate-400">
+        {gift.description || "—"}
+      </td>
+      <td className="px-3 py-3">
+        <div className="flex flex-wrap gap-1">
+          {(gift.allowed_levels || []).map((level) => (
+            <span
+              key={level}
+              className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold"
+            >
+              {level}
+            </span>
+          ))}
+        </div>
+      </td>
+      <td className="px-3 py-3">
+        <GiftExpiryCountdown expiresAt={gift.expires_at} isExpired={expired} />
+      </td>
+      <td className="px-3 py-3">
+        <ActiveCheckbox
+          checked={gift.is_active}
+          disabled={busy}
+          onChange={onToggleActive}
+        />
+      </td>
+      <td className="px-3 py-3">
+        <div className="flex justify-end gap-1.5">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onEdit}
+            title="Edit"
+            className="rounded-lg bg-theme-green-action/90 p-1.5 text-white disabled:opacity-60"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onDelete}
+            title="Delete"
+            className="rounded-lg bg-[#E11D48] p-1.5 text-white disabled:opacity-60"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </td>
+    </tr>
   );
 }
 
@@ -329,6 +540,8 @@ export default function LoyaltyGiftPanel() {
           description: values.description?.trim() || "",
           audienceType: values.audienceType,
           allowedLevels: values.allowedLevels,
+          expiresAt: values.expiresAt,
+          notifyUsersByEmail: Boolean(values.notifyUsersByEmail),
         });
       } else {
         await createGift({
@@ -336,6 +549,8 @@ export default function LoyaltyGiftPanel() {
           description: values.description?.trim() || "",
           audienceType: values.audienceType,
           allowedLevels: values.allowedLevels,
+          expiresAt: values.expiresAt,
+          notifyUsersByEmail: Boolean(values.notifyUsersByEmail),
         });
       }
       setGiftModal(null);
@@ -472,76 +687,32 @@ export default function LoyaltyGiftPanel() {
                       <th className="px-3 py-3">Customer Type</th>
                       <th className="px-3 py-3">Description</th>
                       <th className="px-3 py-3">Allowed Levels</th>
+                      <th className="px-3 py-3">Expiry</th>
                       <th className="px-3 py-3">Active</th>
                       <th className="px-3 py-3 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {gifts.map((gift) => (
-                      <tr key={gift.id} className="border-t border-white/10 text-slate-300">
-                        <td className="px-3 py-3">{gift.id}</td>
-                        <td className="px-3 py-3 font-medium text-white">{gift.title}</td>
-                        <td className="px-3 py-3">
-                          <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold">
-                            {gift.audience_label || "Normal"}
-                          </span>
-                        </td>
-                        <td className="max-w-[200px] truncate px-3 py-3 text-slate-400">
-                          {gift.description || "—"}
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {(gift.allowed_levels || []).map((level) => (
-                              <span
-                                key={level}
-                                className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold"
-                              >
-                                {level}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="px-3 py-3">
-                          <ActiveCheckbox
-                            checked={gift.is_active}
-                            disabled={busy}
-                            onChange={() =>
-                              runAction(() =>
-                                updateGiftState({ id: gift.id, isActive: !gift.is_active }),
-                              )
-                            }
-                          />
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="flex justify-end gap-1.5">
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => {
-                                setGiftSaveError("");
-                                setGiftModal({ mode: "edit", record: gift });
-                              }}
-                              className="rounded-lg bg-theme-green-action/90 p-1.5 text-white disabled:opacity-60"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() =>
-                                runAction(() => deleteGift({ id: gift.id }))
-                              }
-                              className="rounded-lg bg-[#E11D48] p-1.5 text-white disabled:opacity-60"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                      <GiftCatalogRow
+                        key={gift.id}
+                        gift={gift}
+                        busy={busy}
+                        onToggleActive={() =>
+                          runAction(() =>
+                            updateGiftState({ id: gift.id, isActive: !gift.is_active }),
+                          )
+                        }
+                        onEdit={() => {
+                          setGiftSaveError("");
+                          setGiftModal({ mode: "edit", record: gift });
+                        }}
+                        onDelete={() => runAction(() => deleteGift({ id: gift.id }))}
+                      />
                     ))}
                     {!gifts.length ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-14 text-center text-slate-400">
+                        <td colSpan={8} className="px-4 py-14 text-center text-slate-400">
                           No gifts configured yet
                         </td>
                       </tr>

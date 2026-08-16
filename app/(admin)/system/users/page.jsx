@@ -150,6 +150,7 @@ function StatusScopeFields({
 const EMPTY_CREATE_FORM = {
   name: "",
   email: "",
+  mobile_number: "",
   password: "",
   role: "",
   shift: "-",
@@ -199,6 +200,7 @@ export default function SystemUsersPage() {
       [
         user.name,
         user.email,
+        user.mobile_number,
         user.role_display_name,
         user.role,
         user.shift,
@@ -228,6 +230,7 @@ export default function SystemUsersPage() {
       id: user.id,
       name: user.name,
       email: user.email,
+      mobile_number: user.mobile_number || "",
       role: user.role || "",
       shift: user.shift || "-",
       pending_show_count:
@@ -265,6 +268,7 @@ export default function SystemUsersPage() {
       const res = await createSystemUser({
         name: createForm.name,
         email: createForm.email,
+        mobile_number: createForm.mobile_number || null,
         password: createForm.password,
         role: createForm.role,
         shift: createForm.shift,
@@ -300,6 +304,7 @@ export default function SystemUsersPage() {
       const res = await updateSystemUser(editUser.id, {
         name: editUser.name,
         email: editUser.email,
+        mobile_number: editUser.mobile_number || null,
         role: editUser.role,
         shift: editUser.shift,
         pending_show_count: editUser.pending_show_count || null,
@@ -408,6 +413,7 @@ export default function SystemUsersPage() {
               <tr>
                 <th className="px-3 py-3">User</th>
                 <th className="px-3 py-3">Email</th>
+                <th className="px-3 py-3">Mobile No</th>
                 <th className="px-3 py-3">Role</th>
                 <th className="px-3 py-3">Shift</th>
                 <th className="px-3 py-3">Pending show</th>
@@ -440,6 +446,13 @@ export default function SystemUsersPage() {
                   </td>
                   <td className="px-3 py-3">
                     <CopyCell value={user.email} />
+                  </td>
+                  <td className="px-3 py-3">
+                    {user.mobile_number ? (
+                      <CopyCell value={user.mobile_number} />
+                    ) : (
+                      <span className="text-slate-500">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-3">
                     <span className="inline-flex rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs font-medium text-slate-200">
@@ -529,6 +542,19 @@ export default function SystemUsersPage() {
                   autoComplete="off"
                   value={editUser.email}
                   onChange={(e) => setEditUser((u) => ({ ...u, email: e.target.value }))}
+                  className={`mt-1 ${inputCls}`}
+                />
+              </label>
+
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Mobile No
+                <input
+                  type="tel"
+                  name="system-user-edit-mobile"
+                  autoComplete="off"
+                  value={editUser.mobile_number}
+                  onChange={(e) => setEditUser((u) => ({ ...u, mobile_number: e.target.value }))}
+                  placeholder="Optional"
                   className={`mt-1 ${inputCls}`}
                 />
               </label>
@@ -707,6 +733,19 @@ export default function SystemUsersPage() {
                   autoComplete="off"
                   value={createForm.email}
                   onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
+                  className={`mt-1 ${inputCls}`}
+                />
+              </label>
+
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Mobile No
+                <input
+                  type="tel"
+                  name="system-user-create-mobile"
+                  autoComplete="off"
+                  value={createForm.mobile_number}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, mobile_number: e.target.value }))}
+                  placeholder="Optional"
                   className={`mt-1 ${inputCls}`}
                 />
               </label>

@@ -158,6 +158,7 @@ export default function RatesPanel({ method }) {
       walletId: wallets[0]?.id ? String(wallets[0].id) : "",
       depositRate: "",
       withdrawRate: "",
+      notifyUsersByEmail: false,
     });
   }
 
@@ -169,6 +170,7 @@ export default function RatesPanel({ method }) {
       walletId: row.walletId ? String(row.walletId) : "",
       topupMethodId: row.topupMethodId,
       depositRate: String(row.depositRate),
+      notifyUsersByEmail: false,
     });
   }
 
@@ -180,6 +182,7 @@ export default function RatesPanel({ method }) {
       walletId: row.walletId ? String(row.walletId) : "",
       cashoutMethodId: row.cashoutMethodId,
       withdrawRate: String(row.withdrawRate),
+      notifyUsersByEmail: false,
     });
   }
 
@@ -206,14 +209,20 @@ export default function RatesPanel({ method }) {
     setError("");
     setSuccess("");
     try {
+      const notifyUsersByEmail = Boolean(modal.notifyUsersByEmail);
       if (modal.mode === "add") {
         await createRates({
           paymentOptionId: paymentOption.id,
           walletId: Number(modal.walletId),
           depositRate: modal.depositRate,
           withdrawalRate: modal.withdrawRate,
+          notifyUsersByEmail,
         });
-        setSuccess("Rates saved successfully.");
+        setSuccess(
+          notifyUsersByEmail
+            ? "Rates saved successfully. User emails and SMS are being sent."
+            : "Rates saved successfully.",
+        );
       } else if (modal.kind === "deposit") {
         await updateDepositRate({
           depositRateId: modal.id,
@@ -221,8 +230,13 @@ export default function RatesPanel({ method }) {
           walletId: Number(modal.walletId),
           topupMethodId: modal.topupMethodId,
           rate: modal.depositRate,
+          notifyUsersByEmail,
         });
-        setSuccess("Deposit rate updated.");
+        setSuccess(
+          notifyUsersByEmail
+            ? "Deposit rate updated. User emails and SMS are being sent."
+            : "Deposit rate updated.",
+        );
       } else {
         await updateWithdrawalRate({
           withdrawalRateId: modal.id,
@@ -230,8 +244,13 @@ export default function RatesPanel({ method }) {
           walletId: Number(modal.walletId),
           cashoutMethodId: modal.cashoutMethodId,
           rate: modal.withdrawRate,
+          notifyUsersByEmail,
         });
-        setSuccess("Withdrawal rate updated.");
+        setSuccess(
+          notifyUsersByEmail
+            ? "Withdrawal rate updated. User emails and SMS are being sent."
+            : "Withdrawal rate updated.",
+        );
       }
       setModal(null);
       await load();
@@ -505,6 +524,24 @@ export default function RatesPanel({ method }) {
                   </label>
                 ) : null}
               </div>
+
+              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+                <div>
+                  <span className="block text-sm font-medium text-slate-200">Notify users by email &amp; SMS</span>
+                  <span className="block text-xs text-slate-500">
+                    If checked, users will receive email and SMS about this rate change.
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={Boolean(modal.notifyUsersByEmail)}
+                  onChange={(e) =>
+                    setModal((m) => ({ ...m, notifyUsersByEmail: e.target.checked }))
+                  }
+                  disabled={busy}
+                  className="h-4 w-4 rounded border-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+                />
+              </label>
 
               <FormError message={error} />
 

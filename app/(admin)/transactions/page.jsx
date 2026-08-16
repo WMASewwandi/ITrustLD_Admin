@@ -240,7 +240,15 @@ function ProofField({ label, value }) {
   );
 }
 
-function ProofSummaryFields({ proof }) {
+function isBankTransferMethod(proof) {
+  const method = String(proof?.method || "").toLowerCase();
+  const selected = String(proof?.selectedAccountType || "").toLowerCase();
+  return method.includes("bank") || selected.includes("bank");
+}
+
+function ProofSummaryFields({ proof, isDeposit = false }) {
+  const showBankDetails = !isDeposit && isBankTransferMethod(proof);
+
   return (
     <dl className="grid gap-2 text-sm">
       <div className="rounded-lg bg-white/5 px-3 py-2">
@@ -260,13 +268,26 @@ function ProofSummaryFields({ proof }) {
         </div>
       </div>
       <ProofField label="Method" value={proof.method} />
-      <ProofField label="Client Pay" value={proof.clientPay} />
-      <ProofField label="Cashout" value={proof.cashoutAmt} />
+      <ProofField
+        label="Client Pay"
+        value={isDeposit ? proof.clientPay : proof.cashoutAmt || proof.clientPay}
+      />
       <ProofField
         label="Sending Amount"
         value={proof.receiving || proof.deposited || proof.amount}
       />
-      <ProofField label="Account" value={proof.account} />
+      {showBankDetails ? (
+        <div className="rounded-lg bg-white/5 px-3 py-2">
+          <dt className="mb-2 text-slate-400">Bank Details</dt>
+          <dd className="space-y-1 text-sm text-slate-200">
+            <CopyCell value={proof.bankName || "—"} />
+            <CopyCell value={proof.accountName || "—"} />
+            <CopyCell value={proof.bankAccountNo || "—"} />
+          </dd>
+        </div>
+      ) : !isDeposit ? (
+        <ProofField label="Account" value={proof.account} />
+      ) : null}
     </dl>
   );
 }
@@ -441,7 +462,7 @@ function SubmittedFilesList({ proofs, activeId, onSelect, onViewImage }) {
   );
 }
 
-function SubmittedProofViewer({ proof, proofs, activeId, onOpenImage, fetchProofBlob }) {
+function SubmittedProofViewer({ proof, proofs, activeId, onOpenImage, fetchProofBlob, isDeposit = false }) {
   const active = proofs.find((p) => p.id === activeId) || proofs[0];
   if (!active) {
     return (
@@ -450,7 +471,7 @@ function SubmittedProofViewer({ proof, proofs, activeId, onOpenImage, fetchProof
           <FileText className="mb-2 h-8 w-8 opacity-50" />
           No proof submitted by the customer
         </div>
-        <ProofSummaryFields proof={proof} />
+        <ProofSummaryFields proof={proof} isDeposit={isDeposit} />
       </div>
     );
   }
@@ -479,7 +500,7 @@ function SubmittedProofViewer({ proof, proofs, activeId, onOpenImage, fetchProof
         </button>
       </div>
 
-      <ProofSummaryFields proof={proof} />
+      <ProofSummaryFields proof={proof} isDeposit={isDeposit} />
     </div>
   );
 }
@@ -2815,6 +2836,7 @@ function TransactionsContent() {
                   activeId={activeProofId || getSubmittedProofs(proof)[0]?.id}
                   onOpenImage={(file) => openSubmittedImage(proof, file)}
                   fetchProofBlob={activeProofFetcher}
+                  isDeposit={tab === "deposits"}
                 />
               </div>
 
