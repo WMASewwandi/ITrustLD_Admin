@@ -7,6 +7,7 @@ import { Loader2, Mail, MessageSquare, Pencil, Plus, RefreshCw, Trash2, X } from
 import { FilterField, inputCls } from "@/components/admin/queue-ui";
 import { useAppDialog } from "@/components/admin/app-dialog";
 import { sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
+import { parseDbDateTime } from "@/lib/sl-time";
 import {
   createBonus,
   createLoyaltyLevel,
@@ -23,6 +24,8 @@ import {
   updatePointCollectionAmount,
   updatePointCollectionState,
 } from "@/lib/loyalty-management";
+
+const LEVEL_BONUS_VALIDITY_DAYS = 30;
 
 const LEVEL_META = [
   { key: "SILVER", label: "Silver Level", configKey: "silver_bonus", masterId: "SILVER-BONUS" },
@@ -128,24 +131,40 @@ function ActiveCheckbox({ checked, onChange, disabled, title }) {
   );
 }
 
-function ActionButtons({ onEdit, onDelete, disabled }) {
+function ActionButtons({
+  onEdit,
+  onDelete,
+  disabled,
+  disabledTitle,
+  editDisabled,
+  deleteDisabled,
+  editTitle,
+  deleteTitle,
+}) {
+  const isEditDisabled = editDisabled ?? disabled;
+  const isDeleteDisabled = deleteDisabled ?? disabled;
+
   return (
     <div className="flex justify-end gap-1.5">
       <button
         type="button"
         onClick={onEdit}
-        disabled={disabled}
-        className="rounded-lg bg-theme-green-action/90 p-1.5 text-white disabled:opacity-60"
-        title="Edit"
+        disabled={isEditDisabled}
+        className="rounded-lg bg-theme-green-action/90 p-1.5 text-white disabled:cursor-not-allowed disabled:opacity-40"
+        title={isEditDisabled ? editTitle || disabledTitle || "Unavailable" : editTitle || "Edit"}
       >
         <Pencil className="h-3.5 w-3.5" />
       </button>
       <button
         type="button"
         onClick={onDelete}
-        disabled={disabled}
-        className="rounded-lg bg-[#E11D48] p-1.5 text-white disabled:opacity-60"
-        title="Delete"
+        disabled={isDeleteDisabled}
+        className="rounded-lg bg-[#E11D48] p-1.5 text-white disabled:cursor-not-allowed disabled:opacity-40"
+        title={
+          isDeleteDisabled
+            ? deleteTitle || disabledTitle || "Unavailable"
+            : deleteTitle || "Delete"
+        }
       >
         <Trash2 className="h-3.5 w-3.5" />
       </button>
@@ -153,7 +172,169 @@ function ActionButtons({ onEdit, onDelete, disabled }) {
   );
 }
 
-function AmountModal({ open, title, fields, saving, error = "", onClose, onSave }) {
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function getLevelBonusExpiresAt(expiresAt, createdAt) {
+  const fromExpires = parseDbDateTime(expiresAt);
+  if (fromExpires) return fromExpires;
+
+  const created = parseDbDateTime(createdAt);
+  if (!created) return null;
+  return new Date(created.getTime() + LEVEL_BONUS_VALIDITY_DAYS * 24 * 60 * 60 * 1000);
+}
+
+function getCountdownParts(expiresAt) {
+  if (!expiresAt) {
+    return { expired: true, days: 0, hours: 0, minutes: 0, seconds: 0 };
+  }
+  const totalMs = expiresAt.getTime() - Date.now();
+  if (totalMs <= 0) {
+    return { expired: true, days: 0, hours: 0, minutes: 0, seconds: 0 };
+  }
+  const totalSec = Math.floor(totalMs / 1000);
+  return {
+    expired: false,
+    days: Math.floor(totalSec / 86400),
+    hours: Math.floor((totalSec % 86400) / 3600),
+    minutes: Math.floor((totalSec % 3600) / 60),
+    seconds: totalSec % 60,
+  };
+}
+
+function formatCountdown(parts) {
+  if (parts.expired) return "Expired";
+  if (parts.days > 0) {
+    return `${parts.days}d ${pad2(parts.hours)}h ${pad2(parts.minutes)}m ${pad2(parts.seconds)}s`;
+  }
+  if (parts.hours > 0) {
+    return `${parts.hours}h ${pad2(parts.minutes)}m ${pad2(parts.seconds)}s`;
+  }
+  return `${parts.minutes}m ${pad2(parts.seconds)}s`;
+}
+
+function LevelBonusCountdown({ expiresAt, createdAt, isExpired }) {
+  const expires = useMemo(
+    () => getLevelBonusExpiresAt(expiresAt, createdAt),
+    [expiresAt, createdAt],
+  );
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!expires || isExpired) return undefined;
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [expires, isExpired]);
+
+  const parts = useMemo(() => {
+    if (isExpired || !expires) return { expired: true, days: 0, hours: 0, minutes: 0, seconds: 0 };
+    return getCountdownParts(expires);
+  }, [expires, isExpired, nowMs]);
+
+  if (parts.expired) {
+    return (
+      <span className="inline-flex rounded-md bg-rose-500/15 px-2 py-1 text-[11px] font-semibold text-rose-300">
+        Expired
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="inline-flex rounded-md bg-amber-500/15 px-2 py-1 font-mono text-[11px] font-semibold text-amber-200"
+      title={expires ? `Expires ${expires.toLocaleString()}` : undefined}
+    >
+      {formatCountdown(parts)}
+    </span>
+  );
+}
+
+function useLevelBonusExpired(expiresAt, createdAt, serverExpired) {
+  const expires = useMemo(
+    () => getLevelBonusExpiresAt(expiresAt, createdAt),
+    [expiresAt, createdAt],
+  );
+  const [expired, setExpired] = useState(() =>
+    Boolean(serverExpired || !expires || expires.getTime() <= Date.now()),
+  );
+
+  useEffect(() => {
+    if (serverExpired || !expires) {
+      setExpired(true);
+      return undefined;
+    }
+    const tick = () => setExpired(expires.getTime() <= Date.now());
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [expires, serverExpired]);
+
+  return expired;
+}
+
+function LevelBonusRow({ row, busyKey, onToggle, onEdit, onDelete }) {
+  const expired = useLevelBonusExpired(row.expires_at, row.created_at, row.is_expired);
+  const busy = Boolean(busyKey);
+  const mutateDisabled = busy || expired;
+  const deleteDisabled = busy || !expired;
+
+  return (
+    <tr
+      className={`border-t border-white/10 text-slate-300 ${
+        expired ? "bg-rose-500/[0.04] opacity-80" : ""
+      }`}
+    >
+      <td className="px-4 py-3 font-medium text-white">{row.display_id}</td>
+      <td className="px-4 py-3">{row.admin_id ?? "—"}</td>
+      <td className="px-4 py-3">{row.client_bonus_amount}</td>
+      <td className="px-4 py-3">{row.client_count}</td>
+      <td className="px-4 py-3 text-slate-400">{row.changed_date}</td>
+      <td className="px-4 py-3">
+        <LevelBonusCountdown
+          expiresAt={row.expires_at}
+          createdAt={row.created_at}
+          isExpired={expired}
+        />
+      </td>
+      <td className="px-4 py-3">
+        <ActiveCheckbox
+          checked={Boolean(row.is_active)}
+          disabled={mutateDisabled}
+          title={expired ? "Expired level bonus cannot be activated" : undefined}
+          onChange={(e) => onToggle(row, e.target.checked)}
+        />
+      </td>
+      <td className="px-4 py-3 text-right">
+        <ActionButtons
+          editDisabled={mutateDisabled}
+          deleteDisabled={deleteDisabled}
+          editTitle={expired ? "Expired level bonus cannot be edited" : "Edit"}
+          deleteTitle={
+            expired
+              ? "Delete expired level bonus"
+              : "Delete is only available after the bonus expires"
+          }
+          onEdit={() => onEdit(row)}
+          onDelete={() => onDelete(row)}
+        />
+      </td>
+    </tr>
+  );
+}
+
+function AmountModal({
+  open,
+  title,
+  fields,
+  saving,
+  error = "",
+  showNotify = false,
+  notifyUsersByEmail = false,
+  onNotifyChange,
+  onClose,
+  onSave,
+}) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -207,6 +388,26 @@ function AmountModal({ open, title, fields, saving, error = "", onClose, onSave 
               )}
             </label>
           ))}
+
+          {showNotify ? (
+            <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+              <div>
+                <span className="block text-sm font-medium text-slate-200">
+                  Notify users by email &amp; SMS
+                </span>
+                <span className="block text-xs text-slate-500">
+                  If checked, selected tier users will receive email and SMS.
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={Boolean(notifyUsersByEmail)}
+                onChange={(e) => onNotifyChange?.(e.target.checked)}
+                disabled={saving}
+                className="h-4 w-4 rounded border-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+              />
+            </label>
+          ) : null}
         </div>
         {error ? (
           <div className="mt-4 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
@@ -449,6 +650,7 @@ export default function LoyaltyManagementPanel() {
           bonusAmount: amount,
           isAffiliate: isAffiliate,
           membershipTier: modal.membershipTier,
+          notifyUsersByEmail: Boolean(modal.notifyUsersByEmail),
         });
       } else if (modal.type === "edit-bonus") {
         const amount = Number(modal.bonusAmount);
@@ -458,6 +660,7 @@ export default function LoyaltyManagementPanel() {
           id: modal.id,
           bonusAmount: amount,
           membershipTier: modal.membershipTier,
+          notifyUsersByEmail: Boolean(modal.notifyUsersByEmail),
         });
       } else if (modal.type === "add-level") {
         const bonusAmount = Number(modal.clientBonusAmount);
@@ -472,6 +675,7 @@ export default function LoyaltyManagementPanel() {
           clientBonusAmount: bonusAmount,
           clientCount,
           loyaltyLevel: modal.loyaltyLevel,
+          notifyUsersByEmail: Boolean(modal.notifyUsersByEmail),
         });
       } else if (modal.type === "edit-level") {
         const bonusAmount = Number(modal.clientBonusAmount);
@@ -486,6 +690,7 @@ export default function LoyaltyManagementPanel() {
           id: modal.id,
           clientBonusAmount: bonusAmount,
           clientCount,
+          notifyUsersByEmail: Boolean(modal.notifyUsersByEmail),
         });
       }
       setModal(null);
@@ -764,7 +969,12 @@ export default function LoyaltyManagementPanel() {
                 <button
                   type="button"
                   onClick={() =>
-                    setModal({ type: "add-bonus", bonusAmount: "5", membershipTier: nextBonusTier })
+                    setModal({
+                      type: "add-bonus",
+                      bonusAmount: "5",
+                      membershipTier: nextBonusTier,
+                      notifyUsersByEmail: false,
+                    })
                   }
                   disabled={allBonusTiersUsed}
                   title={allBonusTiersUsed ? "Each tier already has a bonus amount." : "Add Amount"}
@@ -788,6 +998,7 @@ export default function LoyaltyManagementPanel() {
                   id: row.id,
                   bonusAmount: String(row.bonus_amount),
                   membershipTier: row.membership_tier || "NORMAL",
+                  notifyUsersByEmail: false,
                 })
               }
               onDelete={handleDeleteBonus}
@@ -822,6 +1033,7 @@ export default function LoyaltyManagementPanel() {
                               levelLabel: level.label,
                               clientBonusAmount: "5",
                               clientCount: "10",
+                              notifyUsersByEmail: false,
                             })
                           }
                           className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-xs font-semibold text-white"
@@ -842,6 +1054,7 @@ export default function LoyaltyManagementPanel() {
                           levelLabel: level.label,
                           clientBonusAmount: String(row.client_bonus_amount),
                           clientCount: String(row.client_count),
+                          notifyUsersByEmail: false,
                         })
                       }
                       onDelete={handleDeleteLevel}
@@ -1068,6 +1281,16 @@ export default function LoyaltyManagementPanel() {
         fields={modalFields}
         saving={saving}
         error={error}
+        showNotify={
+          modal?.type === "add-bonus" ||
+          modal?.type === "edit-bonus" ||
+          modal?.type === "add-level" ||
+          modal?.type === "edit-level"
+        }
+        notifyUsersByEmail={Boolean(modal?.notifyUsersByEmail)}
+        onNotifyChange={(checked) =>
+          setModal((prev) => (prev ? { ...prev, notifyUsersByEmail: checked } : prev))
+        }
         onClose={() => {
           setModal(null);
           setError("");
@@ -1155,6 +1378,7 @@ function LevelTable({ rows, busyKey, onToggle, onEdit, onDelete }) {
             <th className="px-4 py-3">Client Bonus Amt</th>
             <th className="px-4 py-3">Client Count</th>
             <th className="px-4 py-3">Changed Date</th>
+            <th className="px-4 py-3">Expiry</th>
             <th className="px-4 py-3">Set as Active</th>
             <th className="px-4 py-3 text-right">Action</th>
           </tr>
@@ -1162,33 +1386,20 @@ function LevelTable({ rows, busyKey, onToggle, onEdit, onDelete }) {
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+              <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
                 No records found.
               </td>
             </tr>
           ) : (
             rows.map((row) => (
-              <tr key={row.id} className="border-t border-white/10 text-slate-300">
-                <td className="px-4 py-3 font-medium text-white">{row.display_id}</td>
-                <td className="px-4 py-3">{row.admin_id ?? "—"}</td>
-                <td className="px-4 py-3">{row.client_bonus_amount}</td>
-                <td className="px-4 py-3">{row.client_count}</td>
-                <td className="px-4 py-3 text-slate-400">{row.changed_date}</td>
-                <td className="px-4 py-3">
-                  <ActiveCheckbox
-                    checked={Boolean(row.is_active)}
-                    disabled={Boolean(busyKey)}
-                    onChange={(e) => onToggle(row, e.target.checked)}
-                  />
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <ActionButtons
-                    disabled={Boolean(busyKey)}
-                    onEdit={() => onEdit(row)}
-                    onDelete={() => onDelete(row)}
-                  />
-                </td>
-              </tr>
+              <LevelBonusRow
+                key={row.id}
+                row={row}
+                busyKey={busyKey}
+                onToggle={onToggle}
+                onEdit={onEdit}
+                onDelete={onDelete}
+              />
             ))
           )}
         </tbody>
