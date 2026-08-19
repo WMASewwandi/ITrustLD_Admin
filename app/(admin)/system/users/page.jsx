@@ -39,6 +39,9 @@ const SHIFT_OPTIONS = ["-", "Shift A", "Shift B"];
 
 const DEPOSIT_STATUS_OPTIONS = ["Pending", "Completed", "Rejected"];
 const WITHDRAWAL_STATUS_OPTIONS = ["Pending", "Pending Authorization", "Completed", "Rejected"];
+const LOYALTY_ORDER_STATUS_OPTIONS = ["Pending", "Completed", "Rejected"];
+const LOYALTY_BONUS_STATUS_OPTIONS = ["Pending", "Claimed", "Rejected"];
+const LOYALTY_VOUCHER_STATUS_OPTIONS = ["Pending", "Claimed", "Rejected"];
 
 function canUpdateWithdrawals(permissions = []) {
   return (
@@ -61,6 +64,9 @@ function statusScopeForRole(roles, roleName, current = {}) {
   const permissions = rolePermissions(roles, roleName);
   const canDeposit = permissions.includes("status_update_deposit_data");
   const canWithdrawal = canUpdateWithdrawals(permissions);
+  const canLoyaltyOrders = permissions.includes("status_update_loyalty_orders_data");
+  const canLoyaltyBonus = permissions.includes("status_update_loyalty_bonus_claims_data");
+  const canLoyaltyVouchers = permissions.includes("status_update_loyalty_voucher_claims_data");
   return {
     allowed_deposit_statuses: canDeposit
       ? current.allowed_deposit_statuses?.length
@@ -73,6 +79,27 @@ function statusScopeForRole(roles, roleName, current = {}) {
             WITHDRAWAL_STATUS_OPTIONS.includes(status),
           )
         : [...WITHDRAWAL_STATUS_OPTIONS]
+      : [],
+    allowed_loyalty_order_statuses: canLoyaltyOrders
+      ? current.allowed_loyalty_order_statuses?.length
+        ? current.allowed_loyalty_order_statuses.filter((status) =>
+            LOYALTY_ORDER_STATUS_OPTIONS.includes(status),
+          )
+        : [...LOYALTY_ORDER_STATUS_OPTIONS]
+      : [],
+    allowed_loyalty_bonus_statuses: canLoyaltyBonus
+      ? current.allowed_loyalty_bonus_statuses?.length
+        ? current.allowed_loyalty_bonus_statuses.filter((status) =>
+            LOYALTY_BONUS_STATUS_OPTIONS.includes(status),
+          )
+        : [...LOYALTY_BONUS_STATUS_OPTIONS]
+      : [],
+    allowed_loyalty_voucher_statuses: canLoyaltyVouchers
+      ? current.allowed_loyalty_voucher_statuses?.length
+        ? current.allowed_loyalty_voucher_statuses.filter((status) =>
+            LOYALTY_VOUCHER_STATUS_OPTIONS.includes(status),
+          )
+        : [...LOYALTY_VOUCHER_STATUS_OPTIONS]
       : [],
   };
 }
@@ -87,13 +114,22 @@ function StatusScopeFields({
   roleName,
   depositStatuses,
   withdrawalStatuses,
+  loyaltyOrderStatuses,
+  loyaltyBonusStatuses,
+  loyaltyVoucherStatuses,
   onDepositChange,
   onWithdrawalChange,
+  onLoyaltyOrderChange,
+  onLoyaltyBonusChange,
+  onLoyaltyVoucherChange,
 }) {
   const permissions = rolePermissions(roles, roleName);
   const showDeposit = permissions.includes("status_update_deposit_data");
   const showWithdrawal = canUpdateWithdrawals(permissions);
-  if (!showDeposit && !showWithdrawal) return null;
+  const showLoyaltyOrders = permissions.includes("status_update_loyalty_orders_data");
+  const showLoyaltyBonus = permissions.includes("status_update_loyalty_bonus_claims_data");
+  const showLoyaltyVouchers = permissions.includes("status_update_loyalty_voucher_claims_data");
+  if (!showDeposit && !showWithdrawal && !showLoyaltyOrders && !showLoyaltyBonus && !showLoyaltyVouchers) return null;
 
   return (
     <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
@@ -143,6 +179,69 @@ function StatusScopeFields({
           </div>
         </fieldset>
       ) : null}
+
+      {showLoyaltyOrders ? (
+        <fieldset>
+          <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Loyalty order statuses this user can update
+          </legend>
+          <div className="flex flex-wrap gap-3">
+            {LOYALTY_ORDER_STATUS_OPTIONS.map((status) => (
+              <label key={status} className="inline-flex items-center gap-2 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={loyaltyOrderStatuses.includes(status)}
+                  onChange={() => onLoyaltyOrderChange(toggleStatus(loyaltyOrderStatuses, status))}
+                  className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action"
+                />
+                {status}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
+
+      {showLoyaltyBonus ? (
+        <fieldset>
+          <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Loyalty bonus claim statuses this user can update
+          </legend>
+          <div className="flex flex-wrap gap-3">
+            {LOYALTY_BONUS_STATUS_OPTIONS.map((status) => (
+              <label key={status} className="inline-flex items-center gap-2 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={loyaltyBonusStatuses.includes(status)}
+                  onChange={() => onLoyaltyBonusChange(toggleStatus(loyaltyBonusStatuses, status))}
+                  className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action"
+                />
+                {status}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
+
+      {showLoyaltyVouchers ? (
+        <fieldset>
+          <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Loyalty voucher claim statuses this user can update
+          </legend>
+          <div className="flex flex-wrap gap-3">
+            {LOYALTY_VOUCHER_STATUS_OPTIONS.map((status) => (
+              <label key={status} className="inline-flex items-center gap-2 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={loyaltyVoucherStatuses.includes(status)}
+                  onChange={() => onLoyaltyVoucherChange(toggleStatus(loyaltyVoucherStatuses, status))}
+                  className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action"
+                />
+                {status}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
     </div>
   );
 }
@@ -157,6 +256,9 @@ const EMPTY_CREATE_FORM = {
   pending_show_count: "",
   allowed_deposit_statuses: [],
   allowed_withdrawal_statuses: [],
+  allowed_loyalty_order_statuses: [],
+  allowed_loyalty_bonus_statuses: [],
+  allowed_loyalty_voucher_statuses: [],
   is_active: true,
 };
 
@@ -247,6 +349,21 @@ export default function SystemUsersPage() {
         WITHDRAWAL_STATUS_OPTIONS,
         permissions.includes("status_update_withdrawal_data"),
       ),
+      allowed_loyalty_order_statuses: statusesForForm(
+        user.allowed_loyalty_order_statuses,
+        LOYALTY_ORDER_STATUS_OPTIONS,
+        permissions.includes("status_update_loyalty_orders_data"),
+      ),
+      allowed_loyalty_bonus_statuses: statusesForForm(
+        user.allowed_loyalty_bonus_statuses,
+        LOYALTY_BONUS_STATUS_OPTIONS,
+        permissions.includes("status_update_loyalty_bonus_claims_data"),
+      ),
+      allowed_loyalty_voucher_statuses: statusesForForm(
+        user.allowed_loyalty_voucher_statuses,
+        LOYALTY_VOUCHER_STATUS_OPTIONS,
+        permissions.includes("status_update_loyalty_voucher_claims_data"),
+      ),
       is_active: user.is_active,
       password: "",
     });
@@ -262,6 +379,18 @@ export default function SystemUsersPage() {
       setError("Select at least one withdrawal status this user can update.");
       return;
     }
+    if (permissions.includes("status_update_loyalty_orders_data") && !createForm.allowed_loyalty_order_statuses?.length) {
+      setError("Select at least one loyalty order status this user can update.");
+      return;
+    }
+    if (permissions.includes("status_update_loyalty_bonus_claims_data") && !createForm.allowed_loyalty_bonus_statuses?.length) {
+      setError("Select at least one loyalty bonus claim status this user can update.");
+      return;
+    }
+    if (permissions.includes("status_update_loyalty_voucher_claims_data") && !createForm.allowed_loyalty_voucher_statuses?.length) {
+      setError("Select at least one loyalty voucher claim status this user can update.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -275,6 +404,9 @@ export default function SystemUsersPage() {
         pending_show_count: createForm.pending_show_count || null,
         allowed_deposit_statuses: createForm.allowed_deposit_statuses,
         allowed_withdrawal_statuses: createForm.allowed_withdrawal_statuses,
+        allowed_loyalty_order_statuses: createForm.allowed_loyalty_order_statuses,
+        allowed_loyalty_bonus_statuses: createForm.allowed_loyalty_bonus_statuses,
+        allowed_loyalty_voucher_statuses: createForm.allowed_loyalty_voucher_statuses,
         is_active: createForm.is_active,
       });
       setUsers((prev) => [...prev, res.user].sort((a, b) => a.name.localeCompare(b.name)));
@@ -298,6 +430,18 @@ export default function SystemUsersPage() {
       setError("Select at least one withdrawal status this user can update.");
       return;
     }
+    if (permissions.includes("status_update_loyalty_orders_data") && !editUser.allowed_loyalty_order_statuses?.length) {
+      setError("Select at least one loyalty order status this user can update.");
+      return;
+    }
+    if (permissions.includes("status_update_loyalty_bonus_claims_data") && !editUser.allowed_loyalty_bonus_statuses?.length) {
+      setError("Select at least one loyalty bonus claim status this user can update.");
+      return;
+    }
+    if (permissions.includes("status_update_loyalty_voucher_claims_data") && !editUser.allowed_loyalty_voucher_statuses?.length) {
+      setError("Select at least one loyalty voucher claim status this user can update.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -310,6 +454,9 @@ export default function SystemUsersPage() {
         pending_show_count: editUser.pending_show_count || null,
         allowed_deposit_statuses: editUser.allowed_deposit_statuses,
         allowed_withdrawal_statuses: editUser.allowed_withdrawal_statuses,
+        allowed_loyalty_order_statuses: editUser.allowed_loyalty_order_statuses,
+        allowed_loyalty_bonus_statuses: editUser.allowed_loyalty_bonus_statuses,
+        allowed_loyalty_voucher_statuses: editUser.allowed_loyalty_voucher_statuses,
         is_active: editUser.is_active,
         password: editUser.password || undefined,
       });
@@ -599,11 +746,23 @@ export default function SystemUsersPage() {
                 roleName={editUser.role}
                 depositStatuses={editUser.allowed_deposit_statuses || []}
                 withdrawalStatuses={editUser.allowed_withdrawal_statuses || []}
+                loyaltyOrderStatuses={editUser.allowed_loyalty_order_statuses || []}
+                loyaltyBonusStatuses={editUser.allowed_loyalty_bonus_statuses || []}
+                loyaltyVoucherStatuses={editUser.allowed_loyalty_voucher_statuses || []}
                 onDepositChange={(next) =>
                   setEditUser((u) => ({ ...u, allowed_deposit_statuses: next }))
                 }
                 onWithdrawalChange={(next) =>
                   setEditUser((u) => ({ ...u, allowed_withdrawal_statuses: next }))
+                }
+                onLoyaltyOrderChange={(next) =>
+                  setEditUser((u) => ({ ...u, allowed_loyalty_order_statuses: next }))
+                }
+                onLoyaltyBonusChange={(next) =>
+                  setEditUser((u) => ({ ...u, allowed_loyalty_bonus_statuses: next }))
+                }
+                onLoyaltyVoucherChange={(next) =>
+                  setEditUser((u) => ({ ...u, allowed_loyalty_voucher_statuses: next }))
                 }
               />
 
@@ -790,11 +949,23 @@ export default function SystemUsersPage() {
                 roleName={createForm.role}
                 depositStatuses={createForm.allowed_deposit_statuses || []}
                 withdrawalStatuses={createForm.allowed_withdrawal_statuses || []}
+                loyaltyOrderStatuses={createForm.allowed_loyalty_order_statuses || []}
+                loyaltyBonusStatuses={createForm.allowed_loyalty_bonus_statuses || []}
+                loyaltyVoucherStatuses={createForm.allowed_loyalty_voucher_statuses || []}
                 onDepositChange={(next) =>
                   setCreateForm((f) => ({ ...f, allowed_deposit_statuses: next }))
                 }
                 onWithdrawalChange={(next) =>
                   setCreateForm((f) => ({ ...f, allowed_withdrawal_statuses: next }))
+                }
+                onLoyaltyOrderChange={(next) =>
+                  setCreateForm((f) => ({ ...f, allowed_loyalty_order_statuses: next }))
+                }
+                onLoyaltyBonusChange={(next) =>
+                  setCreateForm((f) => ({ ...f, allowed_loyalty_bonus_statuses: next }))
+                }
+                onLoyaltyVoucherChange={(next) =>
+                  setCreateForm((f) => ({ ...f, allowed_loyalty_voucher_statuses: next }))
                 }
               />
 

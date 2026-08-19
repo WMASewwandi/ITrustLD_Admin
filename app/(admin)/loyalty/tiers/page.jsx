@@ -8,8 +8,11 @@ import {
   fetchLoyaltyMembershipTiers,
   saveLoyaltyMembershipTiers,
 } from "@/lib/loyalty-tiers";
+import { useCan } from "@/contexts/admin-permissions";
+import { LOYALTY_MANAGEMENT_UPDATE } from "@/lib/loyalty-permissions";
 
 export default function LoyaltyTiersPage() {
+  const canMutate = useCan(LOYALTY_MANAGEMENT_UPDATE);
   const [tiers, setTiers] = useState([]);
   const [expandedId, setExpandedId] = useState(null);
   const [saved, setSaved] = useState(false);
@@ -120,6 +123,7 @@ export default function LoyaltyTiersPage() {
             apply to membership ranking; existing users keep current behaviour until points are saved.
           </p>
         </div>
+        {canMutate ? (
         <button
           type="button"
           onClick={handleSave}
@@ -129,6 +133,7 @@ export default function LoyaltyTiersPage() {
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Save tiers
         </button>
+        ) : null}
       </div>
 
       {pageError ? (
@@ -169,7 +174,8 @@ export default function LoyaltyTiersPage() {
                         step="1000"
                         value={Number(tier.points) || 0}
                         onChange={(e) => updateTier(tier.id, { points: e.target.value })}
-                        className="ml-1 w-24 rounded-md border border-white/10 bg-transparent px-1 py-0.5 text-xs font-semibold text-white outline-none focus:border-admin-teal/50"
+                        disabled={!canMutate}
+                        className="ml-1 w-24 rounded-md border border-white/10 bg-transparent px-1 py-0.5 text-xs font-semibold text-white outline-none focus:border-admin-teal/50 disabled:opacity-60"
                       />
                     </span>
                     <label className="inline-flex items-center gap-2 text-sm text-slate-300">
@@ -179,7 +185,8 @@ export default function LoyaltyTiersPage() {
                         onChange={(e) =>
                           updateTier(tier.id, { active: e.target.checked, isActive: e.target.checked })
                         }
-                        className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action"
+                        disabled={!canMutate}
+                        className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action disabled:opacity-60"
                       />
                       Active
                     </label>
@@ -214,6 +221,7 @@ export default function LoyaltyTiersPage() {
                       <h3 className="text-sm font-semibold text-white">
                         Benefits – {tier.name || "Tier"} Level
                       </h3>
+                      {canMutate ? (
                       <button
                         type="button"
                         onClick={() => addBenefit(tier.id)}
@@ -222,6 +230,7 @@ export default function LoyaltyTiersPage() {
                         <Plus className="h-3.5 w-3.5" />
                         Add benefit
                       </button>
+                      ) : null}
                     </div>
 
                     <div className="space-y-2">
@@ -236,10 +245,12 @@ export default function LoyaltyTiersPage() {
                             <textarea
                               value={benefit}
                               onChange={(e) => updateBenefit(tier.id, bi, e.target.value)}
+                              disabled={!canMutate}
                               rows={2}
                               placeholder="Benefit detail…"
                               className={`${inputCls} min-h-[44px] resize-y`}
                             />
+                            {canMutate ? (
                             <button
                               type="button"
                               onClick={() => removeBenefit(tier.id, bi)}
@@ -248,6 +259,7 @@ export default function LoyaltyTiersPage() {
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
+                            ) : null}
                           </div>
                         ))
                       )}

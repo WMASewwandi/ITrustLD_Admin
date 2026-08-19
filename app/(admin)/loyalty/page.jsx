@@ -15,6 +15,8 @@ import {
   rejectVoucherClaim,
 } from "@/lib/loyalty-voucher-claims";
 import { notifyAdminNavCountsRefresh } from "@/lib/notifications";
+import { useAdminPermissions } from "@/contexts/admin-permissions";
+import { hasLoyaltyTabRead, hasLoyaltyTabUpdate, hasLoyaltyGiftsCatalogUpdate } from "@/lib/loyalty-permissions";
 import LoyaltyManagementPanel from "@/components/admin/loyalty-management-panel";
 import LoyaltyGiftPanel from "@/components/admin/loyalty-gift-panel";
 import { Check, RefreshCw, Search, X } from "lucide-react";
@@ -47,6 +49,7 @@ function LoyaltyDetailModal({
   onRequestReject,
   onRequestApprove,
   onRequestReopen,
+  canMutate = true,
 }) {
   const [rejectOpen, setRejectOpen] = useState(false);
   const usesOrderConfirmFlow = tab === "orders" || tab === "bonus" || tab === "vouchers";
@@ -60,15 +63,19 @@ function LoyaltyDetailModal({
   const title =
     tab === "bonus" ? "Bonus claim details" : tab === "vouchers" ? "Voucher claim details" : "Loyalty order details";
   // Pending: approve + reject · Rejected: approve + reopen · Claimed/Completed: reject + reopen
-  const canApprove = tab === "vouchers" ? record.status === "Pending" : record.status === "Pending" || record.status === "Rejected";
+  const canApprove =
+    canMutate &&
+    (tab === "vouchers" ? record.status === "Pending" : record.status === "Pending" || record.status === "Rejected");
   const canReject =
-    tab === "vouchers"
+    canMutate &&
+    (tab === "vouchers"
       ? record.status === "Pending"
-      : record.status === "Pending" || record.status === "Completed" || record.status === "Claimed";
+      : record.status === "Pending" || record.status === "Completed" || record.status === "Claimed");
   const canReopen =
-    tab === "vouchers"
+    canMutate &&
+    (tab === "vouchers"
       ? false
-      : record.status === "Rejected" || record.status === "Completed" || record.status === "Claimed";
+      : record.status === "Rejected" || record.status === "Completed" || record.status === "Claimed");
 
   return (
     <div className="admin-modal-overlay z-[80]" onClick={onClose}>
@@ -276,6 +283,11 @@ function LoyaltyDetailModal({
 
 function LoyaltyContent() {
   const params = useSearchParams();
+  const permissions = useAdminPermissions();
+  const visibleTabs = useMemo(
+    () => TABS.filter((t) => hasLoyaltyTabRead(permissions, t.id)),
+    [permissions],
+  );
   const [tab, setTab] = useState(params.get("tab") || "orders");
   const [status, setStatus] = useState(params.get("status") || "Pending");
   const [q, setQ] = useState("");
@@ -346,6 +358,16 @@ function LoyaltyContent() {
   const [approveConfirmId, setApproveConfirmId] = useState(null);
   const [reopenConfirmId, setReopenConfirmId] = useState(null);
   const [detail, setDetail] = useState(null);
+  const canUpdateTab = hasLoyaltyTabUpdate(permissions, tab);
+
+  useEffect(() => {
+    if (visibleTabs.length === 0) return;
+    if (!hasLoyaltyTabRead(permissions, tab)) {
+      setTab(visibleTabs[0].id);
+      setStatus(visibleTabs[0].id === "management" || visibleTabs[0].id === "gifts" ? "All" : "Pending");
+    }
+  }, [permissions, tab, visibleTabs]);
+
   useEffect(() => {
     const nextTab = params.get("tab") || "orders";
     setTab(nextTab);
@@ -806,7 +828,7 @@ function LoyaltyContent() {
       <Breadcrumb items={[{ label: "Loyalty", href: "/loyalty" }, { label: pageTitle }]} />
 
       <div className="mb-4 flex flex-wrap gap-1 rounded-xl border border-white/10 bg-admin-chrome-deep/80 p-1">
-        {TABS.map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t.id}
             type="button"
@@ -826,9 +848,12 @@ function LoyaltyContent() {
       </div>
 
       {tab === "management" ? (
-        <LoyaltyManagementPanel />
+        <LoyaltyManagementPanel canMutate={canUpdateTab} />
       ) : tab === "gifts" ? (
-        <LoyaltyGiftPanel />
+        <LoyaltyGiftPanel
+          canMutateClaims={canUpdateTab}
+          canMutateCatalog={hasLoyaltyGiftsCatalogUpdate(permissions)}
+        />
       ) : (
         <section className="admin-card overflow-visible p-0">
           <div className="border-b border-white/10 px-5 py-4">
@@ -1074,8 +1099,11 @@ function LoyaltyContent() {
                           <div className="flex gap-1">
                             <button
                               type="button"
-                              disabled={orderStatusBusy}
-                              onClick={() => setRejectId(r.id)}
+                              disabled={orderStatusBusy || !canUpdateTab}
+                              onClick={() => {
+                                if (!canUpdateTab) return;
+                                setRejectId(r.id);
+                              }}
                               className="rounded-lg bg-[#E11D48] p-1.5 text-white disabled:opacity-50"
                               title="Reject"
                             >
@@ -1083,8 +1111,11 @@ function LoyaltyContent() {
                             </button>
                             <button
                               type="button"
-                              disabled={orderStatusBusy}
-                              onClick={() => setApproveConfirmId(r.id)}
+                              disabled={orderStatusBusy || !canUpdateTab}
+                              onClick={() => {
+                                if (!canUpdateTab) return;
+                                setApproveConfirmId(r.id);
+                              }}
                               className="rounded-lg bg-theme-green-action p-1.5 text-white disabled:opacity-50"
                               title="Approve"
                             >
@@ -1095,8 +1126,11 @@ function LoyaltyContent() {
                           <div className="flex gap-1">
                             <button
                               type="button"
-                              disabled={orderStatusBusy}
-                              onClick={() => setApproveConfirmId(r.id)}
+                              disabled={orderStatusBusy || !canUpdateTab}
+                              onClick={() => {
+                                if (!canUpdateTab) return;
+                                setApproveConfirmId(r.id);
+                              }}
                               className="rounded-lg bg-theme-green-action p-1.5 text-white disabled:opacity-50"
                               title="Approve"
                             >
@@ -1104,8 +1138,11 @@ function LoyaltyContent() {
                             </button>
                             <button
                               type="button"
-                              disabled={orderStatusBusy}
-                              onClick={() => setReopenConfirmId(r.id)}
+                              disabled={orderStatusBusy || !canUpdateTab}
+                              onClick={() => {
+                                if (!canUpdateTab) return;
+                                setReopenConfirmId(r.id);
+                              }}
                               className="rounded-lg bg-[#D1900F] p-1.5 text-white disabled:opacity-50"
                               title="Reopen"
                             >
@@ -1116,8 +1153,11 @@ function LoyaltyContent() {
                           <div className="flex gap-1">
                             <button
                               type="button"
-                              disabled={orderStatusBusy}
-                              onClick={() => setRejectId(r.id)}
+                              disabled={orderStatusBusy || !canUpdateTab}
+                              onClick={() => {
+                                if (!canUpdateTab) return;
+                                setRejectId(r.id);
+                              }}
                               className="rounded-lg bg-[#E11D48] p-1.5 text-white disabled:opacity-50"
                               title="Reject"
                             >
@@ -1125,8 +1165,11 @@ function LoyaltyContent() {
                             </button>
                             <button
                               type="button"
-                              disabled={orderStatusBusy}
-                              onClick={() => setReopenConfirmId(r.id)}
+                              disabled={orderStatusBusy || !canUpdateTab}
+                              onClick={() => {
+                                if (!canUpdateTab) return;
+                                setReopenConfirmId(r.id);
+                              }}
                               className="rounded-lg bg-[#D1900F] p-1.5 text-white disabled:opacity-50"
                               title="Reopen"
                             >
@@ -1208,8 +1251,11 @@ function LoyaltyContent() {
                           <div className="flex gap-1">
                             <button
                               type="button"
-                              disabled={bonusStatusBusy}
-                              onClick={() => setRejectId(r.id)}
+                              disabled={bonusStatusBusy || !canUpdateTab}
+                              onClick={() => {
+                                if (!canUpdateTab) return;
+                                setRejectId(r.id);
+                              }}
                               className="rounded-lg bg-[#E11D48] p-1.5 text-white disabled:opacity-50"
                               title="Reject"
                             >
@@ -1217,8 +1263,11 @@ function LoyaltyContent() {
                             </button>
                             <button
                               type="button"
-                              disabled={bonusStatusBusy}
-                              onClick={() => setApproveConfirmId(r.id)}
+                              disabled={bonusStatusBusy || !canUpdateTab}
+                              onClick={() => {
+                                if (!canUpdateTab) return;
+                                setApproveConfirmId(r.id);
+                              }}
                               className="rounded-lg bg-theme-green-action p-1.5 text-white disabled:opacity-50"
                               title="Approve"
                             >
@@ -1229,8 +1278,11 @@ function LoyaltyContent() {
                           <div className="flex gap-1">
                             <button
                               type="button"
-                              disabled={bonusStatusBusy}
-                              onClick={() => setApproveConfirmId(r.id)}
+                              disabled={bonusStatusBusy || !canUpdateTab}
+                              onClick={() => {
+                                if (!canUpdateTab) return;
+                                setApproveConfirmId(r.id);
+                              }}
                               className="rounded-lg bg-theme-green-action p-1.5 text-white disabled:opacity-50"
                               title="Approve / claim"
                             >
@@ -1238,8 +1290,11 @@ function LoyaltyContent() {
                             </button>
                             <button
                               type="button"
-                              disabled={bonusStatusBusy}
-                              onClick={() => setReopenConfirmId(r.id)}
+                              disabled={bonusStatusBusy || !canUpdateTab}
+                              onClick={() => {
+                                if (!canUpdateTab) return;
+                                setReopenConfirmId(r.id);
+                              }}
                               className="rounded-lg bg-[#D1900F] p-1.5 text-white disabled:opacity-50"
                               title="Reopen as pending"
                             >
@@ -1250,8 +1305,11 @@ function LoyaltyContent() {
                           <div className="flex gap-1">
                             <button
                               type="button"
-                              disabled={bonusStatusBusy}
-                              onClick={() => setRejectId(r.id)}
+                              disabled={bonusStatusBusy || !canUpdateTab}
+                              onClick={() => {
+                                if (!canUpdateTab) return;
+                                setRejectId(r.id);
+                              }}
                               className="rounded-lg bg-[#E11D48] p-1.5 text-white disabled:opacity-50"
                               title="Reject"
                             >
@@ -1259,8 +1317,11 @@ function LoyaltyContent() {
                             </button>
                             <button
                               type="button"
-                              disabled={bonusStatusBusy}
-                              onClick={() => setReopenConfirmId(r.id)}
+                              disabled={bonusStatusBusy || !canUpdateTab}
+                              onClick={() => {
+                                if (!canUpdateTab) return;
+                                setReopenConfirmId(r.id);
+                              }}
                               className="rounded-lg bg-[#D1900F] p-1.5 text-white disabled:opacity-50"
                               title="Reopen as pending"
                             >
@@ -1494,8 +1555,11 @@ function LoyaltyContent() {
                           <div className="flex gap-1">
                             <button
                               type="button"
-                              disabled={voucherStatusBusy}
-                              onClick={() => setRejectId(r.id)}
+                              disabled={voucherStatusBusy || !canUpdateTab}
+                              onClick={() => {
+                                if (!canUpdateTab) return;
+                                setRejectId(r.id);
+                              }}
                               className="rounded-lg bg-[#E11D48] p-1.5 text-white shadow-sm disabled:opacity-50"
                               title="Reject"
                             >
@@ -1503,8 +1567,11 @@ function LoyaltyContent() {
                             </button>
                             <button
                               type="button"
-                              disabled={voucherStatusBusy}
-                              onClick={() => setApproveConfirmId(r.id)}
+                              disabled={voucherStatusBusy || !canUpdateTab}
+                              onClick={() => {
+                                if (!canUpdateTab) return;
+                                setApproveConfirmId(r.id);
+                              }}
                               className="rounded-lg bg-theme-green-action p-1.5 text-white shadow-sm disabled:opacity-50"
                               title="Approve / claim"
                             >
@@ -1793,6 +1860,7 @@ function LoyaltyContent() {
         onRequestReject={setRejectId}
         onRequestApprove={setApproveConfirmId}
         onRequestReopen={setReopenConfirmId}
+        canMutate={canUpdateTab}
       />
     </div>
   );

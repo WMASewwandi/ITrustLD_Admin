@@ -92,7 +92,9 @@ export default function HelpTicketsPage() {
       if (!row.isRead) {
         const data = await markHelpTicketRead(row.id);
         updateRowReadState(data.ticket);
-        notifyAdminNavCountsRefresh();
+        notifyAdminNavCountsRefresh({
+          counts: { help_tickets: { unread: data.unread } },
+        });
       }
     } catch (err) {
       setPageError(err.message || "Could not mark ticket as read.");
@@ -113,7 +115,9 @@ export default function HelpTicketsPage() {
       });
       updateRowReadState(data.ticket);
       setActionMessage(data.message || "Reply sent successfully.");
-      notifyAdminNavCountsRefresh();
+      notifyAdminNavCountsRefresh({
+        counts: { help_tickets: { unread: data.unread } },
+      });
     } catch (err) {
       setPageError(err.message || "Failed to send reply.");
     } finally {
@@ -135,7 +139,9 @@ export default function HelpTicketsPage() {
       const data = await markAllHelpTicketsRead();
       setRows((prev) => prev.map((row) => ({ ...row, isRead: true })));
       setActionMessage(data.message || "All help tickets marked as read.");
-      notifyAdminNavCountsRefresh();
+      notifyAdminNavCountsRefresh({
+        counts: { help_tickets: { unread: 0 } },
+      });
       await loadTickets(pagination.page);
       setMarkAllConfirmOpen(false);
     } catch (err) {
@@ -389,7 +395,9 @@ export default function HelpTicketsPage() {
 
             <div className="mt-6 rounded-xl border border-white/10 bg-white/[0.03] p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Message</p>
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-200">{selected.message}</p>
+              <p className="mt-3 whitespace-pre-wrap break-words break-all text-sm leading-7 text-slate-200">
+                {selected.message}
+              </p>
             </div>
 
             <div className="mt-6 rounded-xl border border-white/10 bg-white/[0.03] p-4">

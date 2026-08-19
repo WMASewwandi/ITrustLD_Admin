@@ -369,7 +369,7 @@ function GiftFormModal({ open, title, initial, saving, saveError, onClose, onSav
   );
 }
 
-function GiftCatalogRow({ gift, busy, onToggleActive, onEdit, onDelete }) {
+function GiftCatalogRow({ gift, busy, readOnly = false, onToggleActive, onEdit, onDelete }) {
   const expired = useGiftExpired(gift.expires_at, gift.is_expired);
 
   return (
@@ -406,7 +406,7 @@ function GiftCatalogRow({ gift, busy, onToggleActive, onEdit, onDelete }) {
       <td className="px-3 py-3">
         <ActiveCheckbox
           checked={gift.is_active}
-          disabled={busy}
+          disabled={busy || readOnly}
           onChange={onToggleActive}
         />
       </td>
@@ -414,18 +414,24 @@ function GiftCatalogRow({ gift, busy, onToggleActive, onEdit, onDelete }) {
         <div className="flex justify-end gap-1.5">
           <button
             type="button"
-            disabled={busy}
-            onClick={onEdit}
-            title="Edit"
+            disabled={busy || readOnly}
+            onClick={() => {
+              if (busy || readOnly) return;
+              onEdit?.();
+            }}
+            title={readOnly ? "No permission to edit" : "Edit"}
             className="rounded-lg bg-theme-green-action/90 p-1.5 text-white disabled:opacity-60"
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
           <button
             type="button"
-            disabled={busy}
-            onClick={onDelete}
-            title="Delete"
+            disabled={busy || readOnly}
+            onClick={() => {
+              if (busy || readOnly) return;
+              onDelete?.();
+            }}
+            title={readOnly ? "No permission to delete" : "Delete"}
             className="rounded-lg bg-[#E11D48] p-1.5 text-white disabled:opacity-60"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -436,7 +442,7 @@ function GiftCatalogRow({ gift, busy, onToggleActive, onEdit, onDelete }) {
   );
 }
 
-export default function LoyaltyGiftPanel() {
+export default function LoyaltyGiftPanel({ canMutateClaims = true, canMutateCatalog = true }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -664,11 +670,14 @@ export default function LoyaltyGiftPanel() {
               <p className="text-sm text-slate-400">{gifts.length} gifts configured</p>
               <button
                 type="button"
+                disabled={!canMutateCatalog || busy}
                 onClick={() => {
+                  if (!canMutateCatalog || busy) return;
                   setGiftSaveError("");
                   setGiftModal({ mode: "create" });
                 }}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2 text-sm font-semibold text-white"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                title={canMutateCatalog ? "Add Gift" : "No permission"}
               >
                 <Plus className="h-4 w-4" />
                 Add Gift
@@ -698,6 +707,7 @@ export default function LoyaltyGiftPanel() {
                         key={gift.id}
                         gift={gift}
                         busy={busy}
+                        readOnly={!canMutateCatalog}
                         onToggleActive={() =>
                           runAction(() =>
                             updateGiftState({ id: gift.id, isActive: !gift.is_active }),
@@ -783,41 +793,50 @@ export default function LoyaltyGiftPanel() {
                           <CopyCell value={claim.contact_phone || "—"} />
                         </td>
                         <td className="px-3 py-3">
-                          {claim.status === "Pending" ? (
-                            <div className="flex gap-1">
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() => setRejectId(claim.id)}
-                                className="rounded-lg bg-[#E11D48] p-1.5 text-white disabled:opacity-50"
-                                title="Reject"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() => setApproveId(claim.id)}
-                                className="rounded-lg bg-theme-green-action p-1.5 text-white disabled:opacity-50"
-                                title="Approve"
-                              >
-                                <Check className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          ) : claim.status === "Approved" ? (
+                        {claim.status === "Pending" ? (
+                          <div className="flex gap-1">
                             <button
                               type="button"
-                              disabled={busy}
-                              onClick={() => setDeliverId(claim.id)}
-                              className="inline-flex items-center gap-1 rounded-lg bg-[#D1900F] px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
-                              title="Mark delivered"
+                              disabled={busy || !canMutateClaims}
+                              onClick={() => {
+                                if (busy || !canMutateClaims) return;
+                                setRejectId(claim.id);
+                              }}
+                              className="rounded-lg bg-[#E11D48] p-1.5 text-white disabled:opacity-50"
+                              title={canMutateClaims ? "Reject" : "No permission"}
                             >
-                              <Truck className="h-3.5 w-3.5" />
-                              Deliver
+                              <X className="h-3.5 w-3.5" />
                             </button>
-                          ) : (
-                            <span className="text-slate-500">—</span>
-                          )}
+                            <button
+                              type="button"
+                              disabled={busy || !canMutateClaims}
+                              onClick={() => {
+                                if (busy || !canMutateClaims) return;
+                                setApproveId(claim.id);
+                              }}
+                              className="rounded-lg bg-theme-green-action p-1.5 text-white disabled:opacity-50"
+                              title={canMutateClaims ? "Approve" : "No permission"}
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : claim.status === "Approved" ? (
+                          <button
+                            type="button"
+                            disabled={busy || !canMutateClaims}
+                            onClick={() => {
+                              if (busy || !canMutateClaims) return;
+                              setDeliverId(claim.id);
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg bg-[#D1900F] px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
+                            title={canMutateClaims ? "Mark delivered" : "No permission"}
+                          >
+                            <Truck className="h-3.5 w-3.5" />
+                            Deliver
+                          </button>
+                        ) : (
+                          <span className="text-slate-500">—</span>
+                        )}
                         </td>
                         <td className="px-3 py-3">
                           <StatusPill
