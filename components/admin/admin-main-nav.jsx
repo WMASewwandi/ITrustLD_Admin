@@ -14,14 +14,20 @@ import {
 } from "lucide-react";
 import { DEFAULT_BOOKMARKS, TOP_NAV } from "@/lib/mock-data";
 import { logoutAdmin } from "@/lib/auth";
-import { fetchNavCounts, ADMIN_NAV_COUNTS_REFRESH_EVENT, NAV_COUNTS_POLL_MS } from "@/lib/notifications";
+import {
+  fetchNavCounts,
+  ADMIN_NAV_COUNTS_REFRESH_EVENT,
+  NAV_COUNTS_POLL_MS,
+  mergeNavCounts,
+} from "@/lib/notifications";
 import {
   applyBookmarkBadges,
   applyNavBadges,
   buildNotificationItems,
 } from "@/lib/nav-badges";
 import { useAdminPermissions } from "@/contexts/admin-permissions";
-import { filterBookmarksByPermissions, filterNavByPermissions } from "@/lib/permissions";
+import { filterBookmarksByPermissions, filterNavByPermissions, hasPermission } from "@/lib/permissions";
+import { hasAnyLoyaltyRead } from "@/lib/loyalty-permissions";
 
 function pathMatches(pathname, search, href) {
   if (!href) return false;
@@ -64,9 +70,10 @@ function NavInner({ user, roleLabel }) {
     [permissions, navCounts]
   );
   const notifItems = useMemo(() => {
-    return buildNotificationItems(navCounts).filter(
-      (item) => !item.permission || permissions.includes(item.permission)
-    );
+    return buildNotificationItems(navCounts).filter((item) => {
+      if (item.checkLoyaltyRead) return hasAnyLoyaltyRead(permissions);
+      return !item.permission || hasPermission(permissions, item.permission);
+    });
   }, [navCounts, permissions]);
   const notifTotal = useMemo(
     () => notifItems.reduce((sum, item) => sum + item.count, 0),
@@ -134,14 +141,22 @@ function NavInner({ user, roleLabel }) {
       loadCounts();
     }
 
-    window.addEventListener(ADMIN_NAV_COUNTS_REFRESH_EVENT, loadCounts);
+    function handleNavCountsRefresh(event) {
+      const patch = event?.detail?.counts;
+      if (patch) {
+        setNavCounts((prev) => mergeNavCounts(prev, patch));
+      }
+      loadCounts();
+    }
+
+    window.addEventListener(ADMIN_NAV_COUNTS_REFRESH_EVENT, handleNavCountsRefresh);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("focus", handleFocus);
 
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
-      window.removeEventListener(ADMIN_NAV_COUNTS_REFRESH_EVENT, loadCounts);
+      window.removeEventListener(ADMIN_NAV_COUNTS_REFRESH_EVENT, handleNavCountsRefresh);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("focus", handleFocus);
     };

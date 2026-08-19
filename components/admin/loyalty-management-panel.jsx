@@ -273,10 +273,10 @@ function useLevelBonusExpired(expiresAt, createdAt, serverExpired) {
   return expired;
 }
 
-function LevelBonusRow({ row, busyKey, onToggle, onEdit, onDelete }) {
+function LevelBonusRow({ row, busyKey, readOnly = false, onToggle, onEdit, onDelete }) {
   const expired = useLevelBonusExpired(row.expires_at, row.created_at, row.is_expired);
   const busy = Boolean(busyKey);
-  const mutateDisabled = busy || expired;
+  const mutateDisabled = busy || expired || readOnly;
   const deleteDisabled = busy || !expired;
 
   return (
@@ -438,7 +438,7 @@ function AmountModal({
   );
 }
 
-export default function LoyaltyManagementPanel() {
+export default function LoyaltyManagementPanel({ canMutate = true }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -449,6 +449,7 @@ export default function LoyaltyManagementPanel() {
   const audienceKey = audienceOption.apiKey;
   const selectedTier = resolveTierSlug(searchParams.get("tier"));
 
+  const readOnly = !canMutate;
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyKey, setBusyKey] = useState("");
@@ -913,11 +914,12 @@ export default function LoyaltyManagementPanel() {
                 <label className="inline-flex items-center gap-2 text-sm text-slate-400">
                   <ActiveCheckbox
                     checked={Boolean(configs.point_collection?.is_active)}
-                    disabled={Boolean(busyKey)}
+                    disabled={readOnly || Boolean(busyKey)}
                     onChange={(e) => toggleMasterConfig(pointMasterId, e.target.checked)}
                   />
                   Activate Amount
                 </label>
+                {readOnly ? null : (
                 <button
                   type="button"
                   onClick={() =>
@@ -930,11 +932,13 @@ export default function LoyaltyManagementPanel() {
                   <Plus className="h-3.5 w-3.5" />
                   Add Amount
                 </button>
+                )}
               </div>
             </div>
             <ConfigTable
               rows={pointRows}
               busyKey={busyKey}
+              readOnly={readOnly}
               amountKey="cal_amount"
               amountLabel="Cal Amount"
               showTier
@@ -961,11 +965,12 @@ export default function LoyaltyManagementPanel() {
                 <label className="inline-flex items-center gap-2 text-sm text-slate-400">
                   <ActiveCheckbox
                     checked={Boolean(configs.bonus?.is_active)}
-                    disabled={Boolean(busyKey)}
+                    disabled={readOnly || Boolean(busyKey)}
                     onChange={(e) => toggleMasterConfig(bonusMasterId, e.target.checked)}
                   />
                   Activate Amount
                 </label>
+                {readOnly ? null : (
                 <button
                   type="button"
                   onClick={() =>
@@ -983,11 +988,13 @@ export default function LoyaltyManagementPanel() {
                   <Plus className="h-3.5 w-3.5" />
                   Add Amount
                 </button>
+                )}
               </div>
             </div>
             <ConfigTable
               rows={bonusRows}
               busyKey={busyKey}
+              readOnly={readOnly}
               amountKey="bonus_amount"
               amountLabel="Bonus Amount"
               showTier
@@ -1019,11 +1026,12 @@ export default function LoyaltyManagementPanel() {
                         <label className="inline-flex items-center gap-2 text-sm text-slate-400">
                           <ActiveCheckbox
                             checked={Boolean(config?.is_active)}
-                            disabled={Boolean(busyKey)}
+                            disabled={readOnly || Boolean(busyKey)}
                             onChange={(e) => toggleMasterConfig(masterId, e.target.checked)}
                           />
                           Activate Amount
                         </label>
+                        {readOnly ? null : (
                         <button
                           type="button"
                           onClick={() =>
@@ -1041,11 +1049,13 @@ export default function LoyaltyManagementPanel() {
                           <Plus className="h-3.5 w-3.5" />
                           Add Amount
                         </button>
+                        )}
                       </div>
                     </div>
                     <LevelTable
                       rows={rows}
                       busyKey={busyKey}
+                      readOnly={readOnly}
                       onToggle={toggleLevelRow}
                       onEdit={(row) =>
                         setModal({
@@ -1301,7 +1311,7 @@ export default function LoyaltyManagementPanel() {
   );
 }
 
-function ConfigTable({ rows, busyKey, amountKey, amountLabel, onToggle, onEdit, onDelete, showTier = false }) {
+function ConfigTable({ rows, busyKey, readOnly = false, amountKey, amountLabel, onToggle, onEdit, onDelete, showTier = false }) {
   const colSpan = showTier ? 7 : 6;
   return (
     <div className="overflow-x-auto">
@@ -1347,16 +1357,20 @@ function ConfigTable({ rows, busyKey, amountKey, amountLabel, onToggle, onEdit, 
                 <td className="px-4 py-3">
                   <ActiveCheckbox
                     checked={Boolean(row.is_active)}
-                    disabled={Boolean(busyKey)}
+                    disabled={readOnly || Boolean(busyKey)}
                     onChange={(e) => onToggle(row, e.target.checked)}
                   />
                 </td>
                 <td className="px-4 py-3 text-right">
+                  {readOnly ? (
+                    <span className="text-slate-500">—</span>
+                  ) : (
                   <ActionButtons
                     disabled={Boolean(busyKey)}
                     onEdit={() => onEdit(row)}
                     onDelete={() => onDelete(row)}
                   />
+                  )}
                 </td>
               </tr>
             ))
@@ -1367,7 +1381,7 @@ function ConfigTable({ rows, busyKey, amountKey, amountLabel, onToggle, onEdit, 
   );
 }
 
-function LevelTable({ rows, busyKey, onToggle, onEdit, onDelete }) {
+function LevelTable({ rows, busyKey, readOnly = false, onToggle, onEdit, onDelete }) {
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full text-left text-[13px]">
@@ -1396,6 +1410,7 @@ function LevelTable({ rows, busyKey, onToggle, onEdit, onDelete }) {
                 key={row.id}
                 row={row}
                 busyKey={busyKey}
+                readOnly={readOnly}
                 onToggle={onToggle}
                 onEdit={onEdit}
                 onDelete={onDelete}
