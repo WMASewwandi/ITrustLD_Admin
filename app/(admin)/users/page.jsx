@@ -73,6 +73,23 @@ function isPartnerValue(value) {
   return String(value).toLowerCase() === "yes" || value === "Affiliate";
 }
 
+function formatDateOfBirth(value) {
+  if (!value) return "—";
+  const raw = String(value).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return String(value);
+  const [year, month, day] = raw.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+function DetailField({ label, value }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="mt-1 break-words text-sm font-medium text-white">{value || "—"}</p>
+    </div>
+  );
+}
+
 function KycBadge({ value, onClick, title }) {
   const v = String(value || "");
   let label = "Pending";
@@ -271,6 +288,22 @@ function KycDocsModal({ open, user, field, canActOnKyc, onClose, onApprove, onRe
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
+          {field === "nic" ? (
+            <div className="mb-4 grid gap-2 sm:grid-cols-2">
+              <DetailField label="First Name" value={user.firstName} />
+              <DetailField label="Last Name" value={user.lastName} />
+              <DetailField label="Date of Birth" value={formatDateOfBirth(user.dateOfBirth)} />
+              <DetailField label="Country" value={user.country} />
+            </div>
+          ) : null}
+          {field === "address" ? (
+            <div className="mb-4 grid gap-2 sm:grid-cols-2">
+              <DetailField label="Address" value={user.addressNumber} />
+              <DetailField label="Street" value={user.street} />
+              <DetailField label="City" value={user.city} />
+              <DetailField label="Country" value={user.country} />
+            </div>
+          ) : null}
           {loading ? (
             <div className="flex h-40 items-center justify-center text-sm text-slate-400">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
