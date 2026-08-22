@@ -240,6 +240,15 @@ function ProofField({ label, value }) {
   );
 }
 
+function ProofTextField({ label, value }) {
+  return (
+    <div className="rounded-lg bg-white/5 px-3 py-2">
+      <dt className="text-slate-400">{label}</dt>
+      <dd className="break-words text-slate-100">{value || "—"}</dd>
+    </div>
+  );
+}
+
 function isBankTransferMethod(proof) {
   const method = String(proof?.method || "").toLowerCase();
   const selected = String(proof?.selectedAccountType || "").toLowerCase();
@@ -249,29 +258,30 @@ function isBankTransferMethod(proof) {
 function ProofSummaryFields({ proof, isDeposit = false }) {
   const showBankDetails = !isDeposit && isBankTransferMethod(proof);
 
+  if (isDeposit) {
+    return (
+      <dl className="grid gap-2 text-sm">
+        <ProofTextField label="Platform" value={proof.platform} />
+        <ProofTextField label="Method" value={proof.method} />
+        <ProofField label="Client Pay" value={proof.clientPay} />
+        <ProofField label="Platform ID" value={proof.platformId} />
+        <ProofField
+          label="Sending Amount"
+          value={proof.receiving || proof.deposited || proof.amount}
+        />
+      </dl>
+    );
+  }
+
   return (
     <dl className="grid gap-2 text-sm">
-      <div className="rounded-lg bg-white/5 px-3 py-2">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <dt className="text-slate-400">Platform</dt>
-            <dd>
-              <CopyCell value={proof.platform || "—"} />
-            </dd>
-          </div>
-          <div className="min-w-0 text-right">
-            <dt className="text-slate-400">Platform ID</dt>
-            <dd className="flex justify-end">
-              <CopyCell value={proof.platformId || "—"} />
-            </dd>
-          </div>
-        </div>
-      </div>
-      <ProofField label="Method" value={proof.method} />
+      <ProofTextField label="Platform" value={proof.platform} />
+      <ProofTextField label="Method" value={proof.method} />
       <ProofField
         label="Client Pay"
-        value={isDeposit ? proof.clientPay : proof.cashoutAmt || proof.clientPay}
+        value={proof.cashoutAmt || proof.clientPay}
       />
+      <ProofField label="Platform ID" value={proof.platformId} />
       <ProofField
         label="Sending Amount"
         value={proof.receiving || proof.deposited || proof.amount}
@@ -285,9 +295,9 @@ function ProofSummaryFields({ proof, isDeposit = false }) {
             <CopyCell value={proof.bankAccountNo || "—"} />
           </dd>
         </div>
-      ) : !isDeposit ? (
-        <ProofField label="Account" value={proof.account} />
-      ) : null}
+      ) : (
+        <ProofTextField label="Account" value={proof.account} />
+      )}
     </dl>
   );
 }
