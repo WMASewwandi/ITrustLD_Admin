@@ -6,7 +6,7 @@ import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectModal from "@/components/admin/reject-modal";
 import RejectReasonPanel from "@/components/admin/reject-reason-panel";
 import CopyCell, { FilterField, FormError, inputCls } from "@/components/admin/queue-ui";
-import { fetchCustomers, fetchCustomerKycDocuments, fetchKycDocumentBlob, approveCustomerKyc, rejectCustomerKyc, banCustomer, unbanCustomer, banMultipleCustomers, updateCustomerPartner, sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
+import { fetchCustomers, fetchCustomerKycDocuments, fetchKycDocumentBlob, approveCustomerKyc, rejectCustomerKyc, verifyCustomerMobile, banCustomer, unbanCustomer, banMultipleCustomers, updateCustomerPartner, sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
 import { EmailSendModal, SmsSendModal } from "@/components/admin/customer-message-modals";
 import { notifyAdminNavCountsRefresh } from "@/lib/notifications";
 import { useCan } from "@/contexts/admin-permissions";
@@ -29,6 +29,7 @@ const FILTERS = [
   { value: "pending", label: "All Pending Users" },
   { value: "address-pending", label: "Address Pending" },
   { value: "nic-pending", label: "NIC Verification Pending" },
+  { value: "mobile-pending", label: "Mobile Verification Pending" },
   { value: "self-verified", label: "Self-verification Done" },
   { value: "not-confirmed", label: "Not Confirmed" },
   { value: "only-address", label: "Only Address Verified" },
@@ -495,6 +496,8 @@ function UsersContent() {
   const [error, setError] = useState(null);
   const [banOpen, setBanOpen] = useState(null);
   const [partnerConfirm, setPartnerConfirm] = useState(null);
+  const [mobileVerifyTarget, setMobileVerifyTarget] = useState(null);
+  const [verifyingMobile, setVerifyingMobile] = useState(false);
   const [kycDocs, setKycDocs] = useState(null);
   const [unbanTarget, setUnbanTarget] = useState(null);
   const [bulkBanOpen, setBulkBanOpen] = useState(false);
@@ -574,6 +577,7 @@ function UsersContent() {
   }, [loadCustomers]);
 
   const title = FILTERS.find((f) => f.value === filter)?.label || "Users";
+  const isMobilePending = filter === "mobile-pending";
 
   const filtered = useMemo(() => {
     if (!q.trim()) return rows;
@@ -809,6 +813,24 @@ function UsersContent() {
     }
   }
 
+  async function handleVerifyMobile() {
+    if (!mobileVerifyTarget) return;
+    setError("");
+    setVerifyingMobile(true);
+    try {
+      const res = await verifyCustomerMobile(mobileVerifyTarget.accountHolderId);
+      setRows((prev) => prev.filter((row) => row.id !== mobileVerifyTarget.id));
+      setSelected((prev) => prev.filter((id) => id !== mobileVerifyTarget.id));
+      setMobileVerifyTarget(null);
+      setActionMessage(res.message || "Mobile number marked as verified.");
+      notifyAdminNavCountsRefresh();
+    } catch (err) {
+      setError(err.message || "Failed to verify mobile number.");
+    } finally {
+      setVerifyingMobile(false);
+    }
+  }
+
   if (loading && rows.length === 0) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center text-slate-400">
@@ -828,7 +850,7 @@ function UsersContent() {
         </div>
       ) : null}
 
-      {error && !unbanTarget && !bulkBanOpen && !partnerConfirm && !banOpen ? (
+      {error && !unbanTarget && !bulkBanOpen && !partnerConfirm && !mobileVerifyTarget && !banOpen ? (
         <div className="admin-card mb-4 border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
           {error}
         </div>
@@ -1027,7 +1049,7 @@ function UsersContent() {
         </div>
 
         <div className={`overflow-x-auto overflow-y-visible transition-opacity ${loading ? "opacity-60" : "opacity-100"}`}>
-                      <table className="min-w-[1280px] w-full text-left text-[13px]">
+                      <table className={`${isMobilePending ? "min-w-[860px]" : "min-w-[1280px]"} w-full text-left text-[13px]`}>
             <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
               <tr>
                 <th className="px-3 py-3">
@@ -1043,12 +1065,21 @@ function UsersContent() {
                 <th className="px-3 py-3">Full Name</th>
                 <th className="px-3 py-3">Email</th>
                 <th className="px-3 py-3">Mobile No.</th>
-                <th className="px-3 py-3">Is Partner</th>
-                <th className="px-3 py-3">User Type</th>
-                <th className="px-3 py-3">Loyalty Tier</th>
+                {isMobilePending ? <th className="px-3 py-3">Mobile</th> : null}
+                {!isMobilePending ? (
+                  <>
+                    <th className="px-3 py-3">Is Partner</th>
+                    <th className="px-3 py-3">User Type</th>
+                    <th className="px-3 py-3">Loyalty Tier</th>
+                  </>
+                ) : null}
                 {filter === "banned" ? <th className="px-3 py-3">Reason for Banning</th> : null}
-                <th className="px-3 py-3">NIC</th>
-                <th className="px-3 py-3">Address</th>
+                {!isMobilePending ? (
+                  <>
+                    <th className="px-3 py-3">NIC</th>
+                    <th className="px-3 py-3">Address</th>
+                  </>
+                ) : null}
                 <th className="px-3 py-3">Action</th>
               </tr>
             </thead>
@@ -1075,58 +1106,82 @@ function UsersContent() {
                   <td className="px-3 py-3">
                     <CopyCell value={u.mobile || "—"} />
                   </td>
-                  <td className="px-3 py-3">
-                    <PartnerBadge
-                      value={u.partner}
-                      disabled={u.banned}
-                      onClick={() => {
-                        if (u.banned) return;
-                        const currentlyYes = isPartnerValue(u.partner);
-                        setPartnerConfirm({
-                          id: u.id,
-                          name: u.name,
-                          next: currentlyYes ? "No" : "Yes",
-                        });
-                      }}
-                    />
-                  </td>
-                  <td className="px-3 py-3">
-                    <span
-                      className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-semibold ${
-                        u.userType === "Affluent" || isPartnerValue(u.partner)
-                          ? "border-theme-green-action/40 bg-theme-green-action/10 text-theme-green-action"
-                          : "border-white/15 bg-white/5 text-slate-300"
-                      }`}
-                    >
-                      {u.userType || (isPartnerValue(u.partner) ? "Affluent" : "Normal")}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3">
-                    <span className="inline-flex rounded-md border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-white">
-                      {u.loyaltyTier || "Normal"}
-                    </span>
-                  </td>
+                  {isMobilePending ? (
+                    <td className="px-3 py-3">
+                      <KycBadge value={u.mobileVerification} />
+                    </td>
+                  ) : null}
+                  {!isMobilePending ? (
+                    <>
+                      <td className="px-3 py-3">
+                        <PartnerBadge
+                          value={u.partner}
+                          disabled={u.banned}
+                          onClick={() => {
+                            if (u.banned) return;
+                            const currentlyYes = isPartnerValue(u.partner);
+                            setPartnerConfirm({
+                              id: u.id,
+                              name: u.name,
+                              next: currentlyYes ? "No" : "Yes",
+                            });
+                          }}
+                        />
+                      </td>
+                      <td className="px-3 py-3">
+                        <span
+                          className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-semibold ${
+                            u.userType === "Affluent" || isPartnerValue(u.partner)
+                              ? "border-theme-green-action/40 bg-theme-green-action/10 text-theme-green-action"
+                              : "border-white/15 bg-white/5 text-slate-300"
+                          }`}
+                        >
+                          {u.userType || (isPartnerValue(u.partner) ? "Affluent" : "Normal")}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className="inline-flex rounded-md border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-white">
+                          {u.loyaltyTier || "Normal"}
+                        </span>
+                      </td>
+                    </>
+                  ) : null}
                   {filter === "banned" ? (
                     <td className="max-w-[240px] px-3 py-3">
                       <CopyCell value={u.banReason || "—"} />
                     </td>
                   ) : null}
-                  <td className="px-3 py-3">
-                    <KycBadge
-                      value={u.nic}
-                      onClick={() => setKycDocs({ user: u, field: "nic" })}
-                      title="View NIC documents"
-                    />
-                  </td>
-                  <td className="px-3 py-3">
-                    <KycBadge
-                      value={u.address}
-                      onClick={() => setKycDocs({ user: u, field: "address" })}
-                      title="View Address documents"
-                    />
-                  </td>
+                  {!isMobilePending ? (
+                    <>
+                      <td className="px-3 py-3">
+                        <KycBadge
+                          value={u.nic}
+                          onClick={() => setKycDocs({ user: u, field: "nic" })}
+                          title="View NIC documents"
+                        />
+                      </td>
+                      <td className="px-3 py-3">
+                        <KycBadge
+                          value={u.address}
+                          onClick={() => setKycDocs({ user: u, field: "address" })}
+                          title="View Address documents"
+                        />
+                      </td>
+                    </>
+                  ) : null}
                   <td className="px-3 py-3">
                     <div className="flex gap-1.5">
+                      {isMobilePending && canActOnKyc && u.mobileVerification !== "Verified" ? (
+                        <button
+                          type="button"
+                          onClick={() => setMobileVerifyTarget(u)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-emerald-400/30 px-2 py-1 text-xs text-emerald-300 transition hover:bg-emerald-500/10"
+                          title="Mark mobile number as verified"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                          Verify
+                        </button>
+                      ) : null}
                       {!u.banned ? (
                         <button
                           type="button"
@@ -1163,7 +1218,7 @@ function UsersContent() {
               ))}
               {shown.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-14 text-center text-slate-400">
+                  <td colSpan={isMobilePending ? 7 : 11} className="px-4 py-14 text-center text-slate-400">
                     {loading ? (
                       <span className="inline-flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -1324,6 +1379,25 @@ function UsersContent() {
           setError(null);
         }}
         onConfirm={handlePartnerChange}
+      />
+
+      <ConfirmModal
+        open={!!mobileVerifyTarget}
+        title="Verify mobile number"
+        message={
+          mobileVerifyTarget
+            ? `Mark ${mobileVerifyTarget.mobile || "this mobile number"} for ${mobileVerifyTarget.name} as verified?`
+            : ""
+        }
+        confirmLabel="Verify"
+        busy={verifyingMobile}
+        error={mobileVerifyTarget ? error : ""}
+        onClose={() => {
+          if (verifyingMobile) return;
+          setMobileVerifyTarget(null);
+          setError(null);
+        }}
+        onConfirm={handleVerifyMobile}
       />
 
       <RejectModal
