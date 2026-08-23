@@ -24,17 +24,20 @@ import {
   X,
 } from "lucide-react";
 
+const READ_ACCOUNTS_PERMISSION = "read_customer_accounts_data";
+const READ_MOBILE_PENDING_PERMISSION = "read_mobile_verification_pending";
+
 const FILTERS = [
-  { value: "all", label: "All Users" },
-  { value: "pending", label: "All Pending Users" },
-  { value: "address-pending", label: "Address Pending" },
-  { value: "nic-pending", label: "NIC Verification Pending" },
-  { value: "mobile-pending", label: "Mobile Verification Pending" },
-  { value: "self-verified", label: "Self-verification Done" },
-  { value: "not-confirmed", label: "Not Confirmed" },
-  { value: "only-address", label: "Only Address Verified" },
-  { value: "only-nic", label: "Only NIC Verified" },
-  { value: "banned", label: "Banned Customers" },
+  { value: "all", label: "All Users", permission: READ_ACCOUNTS_PERMISSION },
+  { value: "pending", label: "All Pending Users", permission: READ_ACCOUNTS_PERMISSION },
+  { value: "address-pending", label: "Address Pending", permission: READ_ACCOUNTS_PERMISSION },
+  { value: "nic-pending", label: "NIC Verification Pending", permission: READ_ACCOUNTS_PERMISSION },
+  { value: "mobile-pending", label: "Mobile Verification Pending", permission: READ_MOBILE_PENDING_PERMISSION },
+  { value: "self-verified", label: "Self-verification Done", permission: READ_ACCOUNTS_PERMISSION },
+  { value: "not-confirmed", label: "Not Confirmed", permission: READ_ACCOUNTS_PERMISSION },
+  { value: "only-address", label: "Only Address Verified", permission: READ_ACCOUNTS_PERMISSION },
+  { value: "only-nic", label: "Only NIC Verified", permission: READ_ACCOUNTS_PERMISSION },
+  { value: "banned", label: "Banned Customers", permission: READ_ACCOUNTS_PERMISSION },
 ];
 
 const FILTER_VALUES = new Set(FILTERS.map((f) => f.value));
@@ -476,9 +479,17 @@ function UsersContent() {
   const router = useRouter();
   const params = useSearchParams();
   const filter = useMemo(() => resolveFilter(params), [params]);
+  const canReadAccounts = useCan(READ_ACCOUNTS_PERMISSION);
+  const canReadMobilePending = useCan(READ_MOBILE_PENDING_PERMISSION);
   const canActOnKyc = useCan("change_customer_account_status");
+  const canVerifyMobile = useCan([READ_MOBILE_PENDING_PERMISSION, "change_customer_account_status"]);
   const canCommunicate = useCan("comunicatte_to_customer");
   const canBan = useCan("change_customer_account_status");
+  const allowedFilters = useMemo(
+    () => FILTERS.filter((item) => (item.value === "mobile-pending" ? canReadMobilePending : canReadAccounts)),
+    [canReadAccounts, canReadMobilePending],
+  );
+  const canAccessCurrentFilter = filter === "mobile-pending" ? canReadMobilePending : canReadAccounts;
   const [q, setQ] = useState("");
   const [email, setEmail] = useState("");
   const [accountId, setAccountId] = useState("");
@@ -518,6 +529,11 @@ function UsersContent() {
   const loadCustomersRef = useRef(null);
 
   const loadCustomers = useCallback(async (searchOverride = null) => {
+    if (!canAccessCurrentFilter) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -549,7 +565,7 @@ function UsersContent() {
     } finally {
       setLoading(false);
     }
-  }, [filter, applied]);
+  }, [filter, applied, canAccessCurrentFilter]);
 
   loadCustomersRef.current = loadCustomers;
 
@@ -567,6 +583,14 @@ function UsersContent() {
     setLoyaltyTier("");
     setApplied(EMPTY_SEARCH);
   }, [filter]);
+
+  useEffect(() => {
+    if (canAccessCurrentFilter) return;
+    const fallback = allowedFilters[0]?.value;
+    if (fallback) {
+      router.replace(`/users?filter=${encodeURIComponent(fallback)}`);
+    }
+  }, [allowedFilters, canAccessCurrentFilter, router]);
 
   useEffect(() => {
     if (skipNextEffectLoadRef.current) {
@@ -601,7 +625,7 @@ function UsersContent() {
   );
 
   function changeFilter(nextFilter) {
-    if (!FILTER_VALUES.has(nextFilter) || nextFilter === filter) return;
+    if (!allowedFilters.some((item) => item.value === nextFilter) || nextFilter === filter) return;
     skipSearchOnNextLoadRef.current = true;
     setQ("");
     setEmail("");
@@ -831,6 +855,22 @@ function UsersContent() {
     }
   }
 
+  if (!canAccessCurrentFilter) {
+    if (allowedFilters.length === 0) {
+      return (
+        <div>
+          <p className="text-sm text-slate-400">You do not have permission to view this page.</p>
+        </div>
+      );
+    }
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center text-slate-400">
+        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+        Loading customers…
+      </div>
+    );
+  }
+
   if (loading && rows.length === 0) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center text-slate-400">
@@ -842,7 +882,7 @@ function UsersContent() {
 
   return (
     <div>
-      <Breadcrumb items={[{ label: "User Management", href: "/users?filter=pending" }, { label: title }]} />
+      <Breadcrumb items={[{ label: "User Management", href: canReadAccounts ? "/users?filter=pending" : "/users?filter=mobile-pending" }, { label: title }]} />
 
       {actionMessage ? (
         <div className="admin-card mb-4 border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
@@ -875,7 +915,7 @@ function UsersContent() {
                   onChange={(e) => changeFilter(e.target.value)}
                   className={inputCls}
                 >
-                  {FILTERS.map((f) => (
+                  {allowedFilters.map((f) => (
                     <option key={f.value} value={f.value} className="bg-admin-surface">
                       {f.label}
                     </option>
@@ -1171,7 +1211,7 @@ function UsersContent() {
                   ) : null}
                   <td className="px-3 py-3">
                     <div className="flex gap-1.5">
-                      {isMobilePending && canActOnKyc && u.mobileVerification !== "Verified" ? (
+                      {isMobilePending && canVerifyMobile && u.mobileVerification !== "Verified" ? (
                         <button
                           type="button"
                           onClick={() => setMobileVerifyTarget(u)}
