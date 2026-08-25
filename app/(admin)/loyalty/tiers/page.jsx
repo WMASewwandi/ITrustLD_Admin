@@ -11,6 +11,29 @@ import {
 import { useCan } from "@/contexts/admin-permissions";
 import { LOYALTY_MANAGEMENT_UPDATE } from "@/lib/loyalty-permissions";
 
+const BENEFIT_AUDIENCES = [
+  { value: "normal", label: "Normal" },
+  { value: "affiliate", label: "Partner" },
+  { value: "both", label: "Both" },
+];
+
+function normalizeBenefitItem(item) {
+  if (typeof item === "string") {
+    return { text: item, audience: "both" };
+  }
+  const audience = BENEFIT_AUDIENCES.some((option) => option.value === item?.audience)
+    ? item.audience
+    : "both";
+  return { text: String(item?.text || ""), audience };
+}
+
+function normalizeTiers(list = []) {
+  return list.map((tier) => ({
+    ...tier,
+    benefits: (tier.benefits || []).map(normalizeBenefitItem),
+  }));
+}
+
 export default function LoyaltyTiersPage() {
   const canMutate = useCan(LOYALTY_MANAGEMENT_UPDATE);
   const [tiers, setTiers] = useState([]);
@@ -25,7 +48,7 @@ export default function LoyaltyTiersPage() {
     setPageError("");
     try {
       const data = await fetchLoyaltyMembershipTiers();
-      const loaded = data.tiers || [];
+      const loaded = normalizeTiers(data.tiers || []);
       setTiers(loaded);
       setExpandedId((current) => current || loaded[0]?.id || null);
     } catch (err) {
@@ -44,12 +67,15 @@ export default function LoyaltyTiersPage() {
     setSaved(false);
   }
 
-  function updateBenefit(tierId, benefitIndex, value) {
+  function updateBenefit(tierId, benefitIndex, patch) {
     setTiers((prev) =>
       prev.map((t) => {
         if (t.id !== tierId) return t;
         const benefits = [...(t.benefits || [])];
-        benefits[benefitIndex] = value;
+        benefits[benefitIndex] = {
+          ...normalizeBenefitItem(benefits[benefitIndex]),
+          ...patch,
+        };
         return { ...t, benefits };
       }),
     );
@@ -60,7 +86,7 @@ export default function LoyaltyTiersPage() {
     setTiers((prev) =>
       prev.map((t) => {
         if (t.id !== tierId) return t;
-        return { ...t, benefits: [...(t.benefits || []), ""] };
+        return { ...t, benefits: [...(t.benefits || []), { text: "", audience: "both" }] };
       }),
     );
     setExpandedId(tierId);
@@ -90,10 +116,13 @@ export default function LoyaltyTiersPage() {
         name: t.name,
         points: Number(t.points) || 0,
         active: t.active !== false && t.isActive !== false,
-        benefits: (t.benefits || []).map((b) => String(b).trim()).filter(Boolean),
+        benefits: (t.benefits || [])
+          .map(normalizeBenefitItem)
+          .filter((b) => b.text.trim())
+          .map((b) => ({ text: b.text.trim(), audience: b.audience })),
       }));
       const data = await saveLoyaltyMembershipTiers(cleaned);
-      setTiers(data.tiers || cleaned);
+      setTiers(normalizeTiers(data.tiers || cleaned));
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (err) {
@@ -218,9 +247,14 @@ export default function LoyaltyTiersPage() {
                 {open ? (
                   <div className="px-5 py-4">
                     <div className="mb-3 flex items-center justify-between gap-3">
-                      <h3 className="text-sm font-semibold text-white">
-                        Benefits – {tier.name || "Tier"} Level
-                      </h3>
+                      <div>
+                        <h3 className="text-sm font-semibold text-white">
+                          Benefits – {tier.name || "Tier"} Level
+                        </h3>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Choose whether each benefit applies to Normal users, Partners, or both.
+                        </p>
+                      </div>
                       {canMutate ? (
                       <button
                         type="button"
@@ -239,29 +273,45 @@ export default function LoyaltyTiersPage() {
                           No benefits yet. Click “Add benefit” to add details for this tier.
                         </p>
                       ) : (
-                        (tier.benefits || []).map((benefit, bi) => (
-                          <div key={`${tier.id}-b-${bi}`} className="flex items-start gap-2">
-                            <span className="mt-3 text-xs font-semibold text-slate-500">{bi + 1}.</span>
-                            <textarea
-                              value={benefit}
-                              onChange={(e) => updateBenefit(tier.id, bi, e.target.value)}
+                        (tier.benefits || []).map((benefit, bi) => {
+                          const item = normalizeBenefitItem(benefit);
+                          return (
+                          <div key={`${tier.id}-b-${bi}`} className="flex items-center gap-2">
+                            <span className="w-5 shrink-0 text-xs font-semibold text-slate-500">{bi + 1}.</span>
+                            <select
+                              value={item.audience}
+                              onChange={(e) => updateBenefit(tier.id, bi, { audience: e.target.value })}
                               disabled={!canMutate}
-                              rows={2}
+                              className={`${inputCls} w-[140px] shrink-0`}
+                              aria-label="Benefit audience"
+                            >
+                              {BENEFIT_AUDIENCES.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              type="text"
+                              value={item.text}
+                              onChange={(e) => updateBenefit(tier.id, bi, { text: e.target.value })}
+                              disabled={!canMutate}
                               placeholder="Benefit detail…"
-                              className={`${inputCls} min-h-[44px] resize-y`}
+                              className={inputCls}
                             />
                             {canMutate ? (
                             <button
                               type="button"
                               onClick={() => removeBenefit(tier.id, bi)}
-                              className="mt-1 rounded-lg bg-[#E11D48]/90 p-2 text-white transition hover:brightness-110"
+                              className="shrink-0 rounded-lg bg-[#E11D48]/90 p-2 text-white transition hover:brightness-110"
                               title="Remove benefit"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
                             ) : null}
                           </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   </div>
