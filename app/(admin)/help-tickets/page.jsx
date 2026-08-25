@@ -6,13 +6,14 @@ import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm
 import CopyCell, { FilterField, FormError, inputCls } from "@/components/admin/queue-ui";
 import { useCan } from "@/contexts/admin-permissions";
 import {
+  deleteAllHelpTickets,
   fetchHelpTickets,
   markAllHelpTicketsRead,
   markHelpTicketRead,
   notifyAdminNavCountsRefresh,
   replyToHelpTicket,
 } from "@/lib/help-tickets";
-import { CheckCheck, Eye, Loader2, Mail, Search, X } from "lucide-react";
+import { CheckCheck, Eye, Loader2, Mail, Search, Trash2, X } from "lucide-react";
 
 function buildReplySubject(subject) {
   const value = String(subject || "").trim();
@@ -39,6 +40,8 @@ export default function HelpTicketsPage() {
   const [viewBusy, setViewBusy] = useState(false);
   const [markAllBusy, setMarkAllBusy] = useState(false);
   const [markAllConfirmOpen, setMarkAllConfirmOpen] = useState(false);
+  const [deleteAllBusy, setDeleteAllBusy] = useState(false);
+  const [deleteAllConfirmOpen, setDeleteAllConfirmOpen] = useState(false);
   const [perPage, setPerPage] = useState(10);
 
   const loadTickets = useCallback(
@@ -151,6 +154,28 @@ export default function HelpTicketsPage() {
     }
   }
 
+  async function confirmDeleteAll() {
+    setDeleteAllBusy(true);
+    setActionMessage("");
+    setPageError("");
+    try {
+      const data = await deleteAllHelpTickets();
+      setSelected(null);
+      setRows([]);
+      setPagination({ page: 1, total_pages: 1, total: 0 });
+      setActionMessage(data.message || "All help tickets permanently deleted.");
+      notifyAdminNavCountsRefresh({
+        counts: { help_tickets: { unread: 0, total: 0 } },
+      });
+      await loadTickets(1);
+      setDeleteAllConfirmOpen(false);
+    } catch (err) {
+      setPageError(err.message || "Failed to delete help tickets.");
+    } finally {
+      setDeleteAllBusy(false);
+    }
+  }
+
   const pageSize = Number(pagination.per_page) || perPage;
   const rangeStart =
     pagination.total === 0 ? 0 : (pagination.page - 1) * pageSize + 1;
@@ -168,19 +193,37 @@ export default function HelpTicketsPage() {
               {pagination.total || rows.length} support requests from members and guests
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setMarkAllConfirmOpen(true)}
-            disabled={markAllBusy || loading}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/5 disabled:opacity-50"
-          >
-            {markAllBusy ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <CheckCheck className="h-4 w-4" />
-            )}
-            Mark all as read
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setMarkAllConfirmOpen(true)}
+              disabled={markAllBusy || deleteAllBusy || loading}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/5 disabled:opacity-50"
+            >
+              {markAllBusy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCheck className="h-4 w-4" />
+              )}
+              Mark all as read
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPageError("");
+                setDeleteAllConfirmOpen(true);
+              }}
+              disabled={deleteAllBusy || markAllBusy || loading || pagination.total === 0}
+              className="inline-flex items-center gap-2 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/20 disabled:opacity-50"
+            >
+              {deleteAllBusy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              Delete all
+            </button>
+          </div>
         </div>
 
         <div className="border-b border-white/10 bg-white/5 px-5 py-4">
@@ -232,7 +275,7 @@ export default function HelpTicketsPage() {
           </div>
         </div>
 
-        {pageError && !selected && !markAllConfirmOpen ? (
+        {pageError && !selected && !markAllConfirmOpen && !deleteAllConfirmOpen ? (
           <div className="border-b border-white/10 px-5 py-3 text-sm text-rose-300">{pageError}</div>
         ) : null}
         {actionMessage ? (
@@ -465,6 +508,23 @@ export default function HelpTicketsPage() {
           }
         }}
         onConfirm={confirmMarkAllRead}
+      />
+
+      <DepositStatusConfirmModal
+        open={deleteAllConfirmOpen}
+        title="Delete all help tickets?"
+        message="This will permanently hard-delete every help ticket from the database. This cannot be undone."
+        confirmLabel="Delete all permanently"
+        confirmClassName="bg-rose-600"
+        busy={deleteAllBusy}
+        error={pageError}
+        onCancel={() => {
+          if (!deleteAllBusy) {
+            setDeleteAllConfirmOpen(false);
+            setPageError("");
+          }
+        }}
+        onConfirm={confirmDeleteAll}
       />
     </div>
   );

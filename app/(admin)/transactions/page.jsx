@@ -626,6 +626,11 @@ function TransactionsContent() {
     userAccount,
     advancedSearchIn,
   } = filters;
+  const [searchDraft, setSearchDraft] = useState(q);
+
+  useEffect(() => {
+    setSearchDraft(q);
+  }, [q]);
 
   const patchActiveFilters = useCallback(
     (patch) => {
@@ -968,9 +973,26 @@ function TransactionsContent() {
     setCurrentAdminKey(user?.name || user?.email || String(user?.id || "admin"));
   }, []);
 
+  const prevDepositFiltersRef = useRef(depositFilters);
+  const prevWithdrawalFiltersRef = useRef(withdrawalFilters);
+
   useEffect(() => {
+    const prev = prevDepositFiltersRef.current;
+    prevDepositFiltersRef.current = depositFilters;
+    const keywordOnlyChange =
+      prev.q !== depositFilters.q &&
+      prev.status === depositFilters.status &&
+      prev.duration === depositFilters.duration &&
+      prev.from === depositFilters.from &&
+      prev.to === depositFilters.to &&
+      prev.txId === depositFilters.txId &&
+      prev.platformId === depositFilters.platformId &&
+      prev.userAccount === depositFilters.userAccount &&
+      prev.advancedSearchIn === depositFilters.advancedSearchIn;
     if (tab !== "deposits" || skipAutoLoadRef.current) return undefined;
     if (skipInitialAutoLoadRef.current) return undefined;
+    // Keyword search is blur/clear only — do not refetch while typing.
+    if (keywordOnlyChange) return undefined;
     const filterValues = {
       duration: depositFilters.duration,
       from: depositFilters.from,
@@ -980,7 +1002,7 @@ function TransactionsContent() {
       userAccount: depositFilters.userAccount,
     };
     const advancedActive = hasAdvancedDepositFilters(filterValues);
-    const debounceMs = depositFilters.q.trim() || advancedActive ? 450 : 0;
+    const debounceMs = advancedActive ? 450 : 0;
     const timer = setTimeout(() => {
       const nextStatus = resolveTransactionListStatus({
         status: depositFilters.status,
@@ -1029,8 +1051,21 @@ function TransactionsContent() {
   ]);
 
   useEffect(() => {
+    const prev = prevWithdrawalFiltersRef.current;
+    prevWithdrawalFiltersRef.current = withdrawalFilters;
+    const keywordOnlyChange =
+      prev.q !== withdrawalFilters.q &&
+      prev.status === withdrawalFilters.status &&
+      prev.duration === withdrawalFilters.duration &&
+      prev.from === withdrawalFilters.from &&
+      prev.to === withdrawalFilters.to &&
+      prev.txId === withdrawalFilters.txId &&
+      prev.platformId === withdrawalFilters.platformId &&
+      prev.userAccount === withdrawalFilters.userAccount &&
+      prev.advancedSearchIn === withdrawalFilters.advancedSearchIn;
     if (tab !== "withdrawals" || skipAutoLoadRef.current) return undefined;
     if (skipInitialAutoLoadRef.current) return undefined;
+    if (keywordOnlyChange) return undefined;
     const filterValues = {
       duration: withdrawalFilters.duration,
       from: withdrawalFilters.from,
@@ -1040,7 +1075,7 @@ function TransactionsContent() {
       userAccount: withdrawalFilters.userAccount,
     };
     const advancedActive = hasAdvancedWithdrawalFilters(filterValues);
-    const debounceMs = withdrawalFilters.q.trim() || advancedActive ? 450 : 0;
+    const debounceMs = advancedActive ? 450 : 0;
     const timer = setTimeout(() => {
       const nextStatus = resolveTransactionListStatus({
         status: withdrawalFilters.status,
@@ -1107,27 +1142,18 @@ function TransactionsContent() {
   const runTransactionSearch = useCallback(
     (event) => {
       event?.preventDefault?.();
-      const filterValues = {
-        duration,
-        from,
-        to,
-        transactionId: txId,
-        platformId,
-        userAccount,
-      };
-      const advancedActive =
-        tab === "withdrawals"
-          ? hasAdvancedWithdrawalFilters(filterValues)
-          : hasAdvancedDepositFilters(filterValues);
+      const submitter = event?.submitter ?? event?.nativeEvent?.submitter;
       const fromAdvancedRow =
         event?.fromAdvancedRow === true ||
-        event?.submitter?.dataset?.searchType === "advanced";
+        submitter?.dataset?.searchType === "advanced";
+      // Keyword box (type + Enter) always stays on the current tab. Only the
+      // advanced Search button / filter-row Enter may jump Pending → Completed.
       const nextStatus =
-        status === "Pending" && (fromAdvancedRow || advancedActive)
+        status === "Pending" && fromAdvancedRow
           ? advancedSearchIn
           : status;
       const clearKeyword = status === "Pending" && nextStatus !== "Pending";
-      const nextKeyword = clearKeyword ? "" : q;
+      const nextKeyword = clearKeyword ? "" : (fromAdvancedRow ? q : searchDraft).trim();
 
       const searchOverrides = {
         page: 1,
@@ -1157,7 +1183,9 @@ function TransactionsContent() {
       skipAutoLoadRef.current = true;
 
       if (tab === "deposits") {
-        const customDateError = validateDepositCustomDate(duration, from, to);
+        const customDateError = fromAdvancedRow
+          ? validateDepositCustomDate(duration, from, to)
+          : null;
         if (customDateError) {
           setFilterError(customDateError);
           skipAutoLoadRef.current = false;
@@ -1177,7 +1205,9 @@ function TransactionsContent() {
       }
 
       if (tab === "withdrawals") {
-        const customDateError = validateWithdrawalCustomDate(duration, from, to);
+        const customDateError = fromAdvancedRow
+          ? validateWithdrawalCustomDate(duration, from, to)
+          : null;
         if (customDateError) {
           setFilterError(customDateError);
           skipAutoLoadRef.current = false;
@@ -1206,6 +1236,7 @@ function TransactionsContent() {
       platformId,
       userAccount,
       q,
+      searchDraft,
       loadDeposits,
       loadWithdrawals,
       buildDepositUrlQuery,
@@ -1214,6 +1245,81 @@ function TransactionsContent() {
       pathname,
     ],
   );
+
+  function applyKeywordSearch(nextKeyword) {
+    const keyword = String(nextKeyword || "").trim();
+    skipAutoLoadRef.current = true;
+    skipUrlHydrationRef.current = true;
+    setSearchDraft(keyword);
+    setQ(keyword);
+    setFilterError("");
+    const searchOverrides = {
+      page: 1,
+      status,
+      keyword: keyword || undefined,
+    };
+    const syncOverrides = {
+      page: 1,
+      status,
+      keyword,
+    };
+    if (tab === "deposits") {
+      setDepositPage(1);
+      loadDeposits(searchOverrides).finally(() => {
+        skipAutoLoadRef.current = false;
+      });
+      const qs = buildDepositUrlQuery(syncOverrides);
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      return;
+    }
+    setWithdrawalPage(1);
+    loadWithdrawals(searchOverrides).finally(() => {
+      skipAutoLoadRef.current = false;
+    });
+    const qs = buildWithdrawalUrlQuery(syncOverrides);
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
+
+  function clearKeywordToDefaultPendings() {
+    skipAutoLoadRef.current = true;
+    skipUrlHydrationRef.current = true;
+    setSearchDraft("");
+    setSelected([]);
+    setFilterError("");
+    const defaults = createDefaultTabFilters();
+    if (tab === "deposits") {
+      setDepositFilters(defaults);
+      setDepositPage(1);
+      router.replace(`${pathname}?tab=deposits&status=Pending&page=1&per_page=${perPage}`, {
+        scroll: false,
+      });
+      loadDeposits({ status: "Pending", page: 1, keyword: "" }).finally(() => {
+        skipAutoLoadRef.current = false;
+      });
+      return;
+    }
+    setWithdrawalFilters(defaults);
+    setWithdrawalPage(1);
+    router.replace(`${pathname}?tab=withdrawals&status=Pending&page=1&per_page=${perPage}`, {
+      scroll: false,
+    });
+    loadWithdrawals({ status: "Pending", page: 1, keyword: "" }).finally(() => {
+      skipAutoLoadRef.current = false;
+    });
+  }
+
+  function commitKeywordFromSearchBox() {
+    const next = searchDraft.trim();
+    if (next === q.trim()) {
+      if (searchDraft !== next) setSearchDraft(next);
+      return;
+    }
+    if (!next) {
+      clearKeywordToDefaultPendings();
+      return;
+    }
+    applyKeywordSearch(next);
+  }
 
   function handleAdvancedFilterKeyDown(event) {
     if (event.key !== "Enter") return;
@@ -2236,23 +2342,23 @@ function TransactionsContent() {
               </span>
               <div className="relative">
                 <input
-                  value={q}
-                  onChange={(e) => {
-                    setQ(e.target.value);
-                    setDepositPage(1);
-                    setWithdrawalPage(1);
+                  value={searchDraft}
+                  type="search"
+                  onChange={(e) => setSearchDraft(e.target.value)}
+                  onBlur={commitKeywordFromSearchBox}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    event.currentTarget.blur();
                   }}
                   placeholder="Search…"
                   className="w-full rounded-xl border border-white/10 bg-admin-surface py-2.5 pl-4 pr-10 text-sm text-white outline-none placeholder:text-slate-500"
                 />
-                {q.trim() ? (
+                {searchDraft.trim() ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      setQ("");
-                      setDepositPage(1);
-                      setWithdrawalPage(1);
-                    }}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={clearKeywordToDefaultPendings}
                     className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 transition hover:bg-white/10 hover:text-white"
                     aria-label="Clear search"
                     title="Clear search"
