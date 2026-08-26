@@ -13,6 +13,11 @@ export const REJECT_REASONS = [
   "Custom",
 ];
 
+function isCustomReason(value) {
+  const key = String(value || "").trim().toLowerCase();
+  return key === "custom" || key === "custom message";
+}
+
 function RejectReasonForm({
   onConfirm,
   onCancel,
@@ -21,12 +26,14 @@ function RejectReasonForm({
   compact = false,
   error = "",
   busy = false,
+  reasons = REJECT_REASONS,
 }) {
-  const [reason, setReason] = useState(REJECT_REASONS[0]);
+  const options = reasons.length ? reasons : REJECT_REASONS;
+  const [reason, setReason] = useState(options[0]);
   const [custom, setCustom] = useState("");
 
   function submit() {
-    const finalReason = reason === "Custom" ? custom.trim() : reason;
+    const finalReason = isCustomReason(reason) ? custom.trim() : reason;
     if (!finalReason) return;
     onConfirm?.(finalReason);
   }
@@ -47,13 +54,13 @@ function RejectReasonForm({
         className="admin-input text-sm"
         aria-label="Rejection reason"
       >
-        {REJECT_REASONS.map((r) => (
+        {options.map((r) => (
           <option key={r} value={r} className="bg-admin-surface text-slate-100">
             {r}
           </option>
         ))}
       </select>
-      {reason === "Custom" ? (
+      {isCustomReason(reason) ? (
         <textarea
           value={custom}
           onChange={(e) => setCustom(e.target.value)}
@@ -71,7 +78,7 @@ function RejectReasonForm({
         <button
           type="button"
           onClick={submit}
-          disabled={busy || (reason === "Custom" && !custom.trim())}
+          disabled={busy || (isCustomReason(reason) && !custom.trim())}
           className="inline-flex items-center gap-1.5 rounded-xl bg-admin-danger px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-40"
         >
           <AlertTriangle className="h-4 w-4" />
@@ -95,6 +102,7 @@ export default function RejectReasonPanel({
   subtitle,
   error = "",
   busy = false,
+  reasons,
 }) {
   if (variant === "modal") {
     if (!open) return null;
@@ -138,6 +146,7 @@ export default function RejectReasonPanel({
               cancelLabel={cancelLabel}
               error={error}
               busy={busy}
+              reasons={reasons}
             />
           </div>
         </div>
@@ -158,6 +167,7 @@ export default function RejectReasonPanel({
         compact
         error={error}
         busy={busy}
+        reasons={reasons}
       />
     </div>
   );

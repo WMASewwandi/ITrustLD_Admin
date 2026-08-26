@@ -4,8 +4,8 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Breadcrumb from "@/components/admin/breadcrumb";
+import { PerformancePeriodControls } from "@/components/admin/performance-period-controls";
 import {
-  PERFORMANCE_PERIODS,
   canViewTeamPerformance,
   fetchTeamPerformance,
   formatPerformanceCommission,
@@ -115,6 +115,8 @@ function CommissionBar({ members, period }) {
 export default function TeamPerformancePage() {
   const router = useRouter();
   const [period, setPeriod] = useState("Weekly");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [expanded, setExpanded] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -125,17 +127,18 @@ export default function TeamPerformancePage() {
 
   const loadTeamPerformance = useCallback(async () => {
     if (!allowed) return;
+    if (period === "Custom" && (!from || !to)) return;
     setLoading(true);
     setError("");
     try {
-      const response = await fetchTeamPerformance(period);
+      const response = await fetchTeamPerformance(period, { from, to });
       setData(response);
     } catch (err) {
       setError(err.message || "Failed to load team performance.");
     } finally {
       setLoading(false);
     }
-  }, [allowed, period]);
+  }, [allowed, period, from, to]);
 
   useEffect(() => {
     if (!allowed) {
@@ -172,34 +175,34 @@ export default function TeamPerformancePage() {
             Super Admin view
           </p>
           <h1 className="text-3xl font-bold tracking-tight text-white">Team Performance</h1>
-          <p className="mt-1 text-sm text-slate-500">Aggregate metrics, leaderboard, and commission overview</p>
+          <p className="mt-1 text-sm text-slate-500">
+            {data?.range
+              ? `${data.range.from} – ${data.range.to}`
+              : "Aggregate metrics, leaderboard, and commission overview"}
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {PERFORMANCE_PERIODS.map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => {
-                setPeriod(p);
-                setExpanded(null);
-              }}
-              className={`rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
-                period === p
-                  ? "bg-gradient-to-r from-admin-teal to-admin-teal-deep text-white shadow-sm"
-                  : "border border-white/10 text-slate-400 hover:border-white/20 hover:text-white"
-              }`}
+        <PerformancePeriodControls
+          period={period}
+          from={from}
+          to={to}
+          onPeriodChange={(nextPeriod) => {
+            setPeriod(nextPeriod);
+            setExpanded(null);
+          }}
+          onRangeChange={(nextFrom, nextTo) => {
+            setFrom(nextFrom);
+            setTo(nextTo);
+          }}
+          extra={
+            <Link
+              href="/performance"
+              className="inline-flex items-center gap-1 rounded-xl border border-white/10 px-3.5 py-2 text-xs text-slate-400 transition hover:border-white/20 hover:text-white"
             >
-              {p}
-            </button>
-          ))}
-          <Link
-            href="/performance"
-            className="inline-flex items-center gap-1 rounded-xl border border-white/10 px-3.5 py-2 text-xs text-slate-400 transition hover:border-white/20 hover:text-white"
-          >
-            My scorecard
-            <ArrowUpRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
+              My scorecard
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          }
+        />
       </div>
 
       {error ? (
@@ -214,8 +217,23 @@ export default function TeamPerformancePage() {
       <div className="grid gap-4 sm:grid-cols-3">
         {[
           { label: "Team Transactions", value: aggregate.transactions, icon: Target, glow: "bg-admin-teal", color: "text-admin-teal" },
-          { label: "Avg Success Rate", value: aggregate.success, icon: Percent, glow: "bg-theme-green-action", color: "text-theme-green-action" },
-          { label: "Total Commission", value: aggregate.commission, icon: Wallet, glow: "bg-[#FBBF24]", color: "text-[#FBBF24]" },
+          {
+            label: "Avg Success Rate",
+            value: aggregate.success,
+            note: aggregate.avgHandleTime ? `Avg handle ${aggregate.avgHandleTime}` : null,
+            noteHint: aggregate.handleTimeDelta || "Create time → status update",
+            icon: Percent,
+            glow: "bg-theme-green-action",
+            color: "text-theme-green-action",
+          },
+          {
+            label: "Total Commission",
+            value: aggregate.commission,
+            note: aggregate.commissionHint || null,
+            icon: Wallet,
+            glow: "bg-[#FBBF24]",
+            color: "text-[#FBBF24]",
+          },
         ].map((metric, index) => (
           <article key={metric.label} className={`admin-card admin-fade-up admin-fade-up-delay-${index + 1} p-5`}>
             <div className={`admin-stat-glow -right-6 -top-8 ${metric.glow}`} />
@@ -230,6 +248,11 @@ export default function TeamPerformancePage() {
                   <div>
                     <p className="text-[11px] uppercase tracking-wide text-slate-400">{metric.label}</p>
                     <p className="mt-2 text-3xl font-bold tabular-nums text-white">{metric.value ?? "—"}</p>
+                    {metric.note ? (
+                      <p className="mt-1 text-[11px] text-slate-400" title={metric.noteHint || undefined}>
+                        {metric.note}
+                      </p>
+                    ) : null}
                   </div>
                   <span className={`flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 ${metric.color}`}>
                     <metric.icon className="h-4 w-4" />
@@ -354,6 +377,11 @@ export default function TeamPerformancePage() {
                             }`}
                           >
                             {member.success}%
+                            {member.avgHandleTime && member.avgHandleTime !== "—" ? (
+                              <span className="mt-0.5 block text-[10px] font-medium text-slate-500">
+                                {member.avgHandleTime}
+                              </span>
+                            ) : null}
                           </span>
                         </td>
                         <td className="px-3 py-3.5 font-semibold tabular-nums text-white">
@@ -400,6 +428,10 @@ export default function TeamPerformancePage() {
                                 <span className="text-slate-300">
                                   ${(member.commission / Math.max(member.handled, 1)).toFixed(2)}
                                 </span>
+                              </span>
+                              <span>
+                                Avg handle:{" "}
+                                <span className="text-slate-300">{member.avgHandleTime || "—"}</span>
                               </span>
                             </div>
                           </td>

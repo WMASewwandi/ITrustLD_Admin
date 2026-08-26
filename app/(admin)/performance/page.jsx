@@ -3,10 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Breadcrumb from "@/components/admin/breadcrumb";
-import {
-  PERFORMANCE_PERIODS,
-  fetchMyPerformance,
-} from "@/lib/performance";
+import { PerformancePeriodControls } from "@/components/admin/performance-period-controls";
+import { fetchMyPerformance } from "@/lib/performance";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -111,22 +109,25 @@ function DeltaBadge({ value }) {
 
 export default function PerformancePage() {
   const [period, setPeriod] = useState("Weekly");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [data, setData] = useState(null);
 
   const loadPerformance = useCallback(async () => {
+    if (period === "Custom" && (!from || !to)) return;
     setLoading(true);
     setError("");
     try {
-      const response = await fetchMyPerformance(period);
+      const response = await fetchMyPerformance(period, { from, to });
       setData(response);
     } catch (err) {
       setError(err.message || "Failed to load performance.");
     } finally {
       setLoading(false);
     }
-  }, [period]);
+  }, [period, from, to]);
 
   useEffect(() => {
     loadPerformance();
@@ -146,6 +147,10 @@ export default function PerformancePage() {
           label: "Success Rate",
           value: data.metrics.successRate,
           delta: data.metrics.successDelta,
+          note: data.metrics.avgHandleTime
+            ? `Avg handle ${data.metrics.avgHandleTime}`
+            : null,
+          noteHint: data.metrics.handleTimeDelta || "Create time → status update",
           icon: Percent,
           glow: "bg-theme-green-action",
           color: "text-theme-green-action",
@@ -154,6 +159,7 @@ export default function PerformancePage() {
           label: "Commission Earned",
           value: data.metrics.commission,
           delta: data.metrics.commissionDelta,
+          note: data.metrics.commissionHint || null,
           icon: Wallet,
           glow: "bg-[#FBBF24]",
           color: "text-[#FBBF24]",
@@ -173,32 +179,30 @@ export default function PerformancePage() {
           </p>
           <h1 className="text-3xl font-bold tracking-tight text-white">My Performance</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Transactions handled, success rate, and commission earned
+            {data?.range
+              ? `${data.range.from} – ${data.range.to}`
+              : "Transactions handled, success rate, and commission earned"}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {PERFORMANCE_PERIODS.map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPeriod(p)}
-              className={`rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
-                period === p
-                  ? "bg-gradient-to-r from-admin-teal to-admin-teal-deep text-white shadow-sm"
-                  : "border border-white/10 text-slate-400 hover:border-white/20 hover:text-white"
-              }`}
+        <PerformancePeriodControls
+          period={period}
+          from={from}
+          to={to}
+          onPeriodChange={setPeriod}
+          onRangeChange={(nextFrom, nextTo) => {
+            setFrom(nextFrom);
+            setTo(nextTo);
+          }}
+          extra={
+            <Link
+              href="/team-performance"
+              className="inline-flex items-center gap-1 rounded-xl border border-white/10 px-3.5 py-2 text-xs text-slate-400 transition hover:border-white/20 hover:text-white"
             >
-              {p}
-            </button>
-          ))}
-          <Link
-            href="/team-performance"
-            className="inline-flex items-center gap-1 rounded-xl border border-white/10 px-3.5 py-2 text-xs text-slate-400 transition hover:border-white/20 hover:text-white"
-          >
-            Team view
-            <ArrowUpRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
+              Team view
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          }
+        />
       </div>
 
       {error ? (
@@ -234,6 +238,11 @@ export default function PerformancePage() {
                   </div>
                   <div className="mt-3 border-t border-white/10 pt-3">
                     <DeltaBadge value={m.delta} />
+                    {m.note ? (
+                      <p className="mt-2 text-[11px] text-slate-400" title={m.noteHint || undefined}>
+                        {m.note}
+                      </p>
+                    ) : null}
                   </div>
                 </>
               )}
