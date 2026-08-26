@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectModal from "@/components/admin/reject-modal";
 import RejectReasonPanel from "@/components/admin/reject-reason-panel";
+import { kycRejectReasonsForField } from "@/lib/kyc-reject-reasons";
 import CopyCell, { FilterField, FormError, inputCls } from "@/components/admin/queue-ui";
 import { fetchCustomers, fetchCustomerKycDocuments, fetchKycDocumentBlob, approveCustomerKyc, rejectCustomerKyc, verifyCustomerMobile, banCustomer, unbanCustomer, banMultipleCustomers, updateCustomerPartner, sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
 import { EmailSendModal, SmsSendModal } from "@/components/admin/customer-message-modals";
@@ -94,7 +95,7 @@ function DetailField({ label, value }) {
   );
 }
 
-function KycBadge({ value, onClick, title }) {
+function KycBadge({ value, onClick, title, disabled = false }) {
   const v = String(value || "");
   let label = "Pending";
   let cls = "bg-amber-500/90 text-white";
@@ -109,7 +110,7 @@ function KycBadge({ value, onClick, title }) {
   const base =
     "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition";
 
-  if (onClick) {
+  if (onClick && !disabled) {
     return (
       <button
         type="button"
@@ -122,7 +123,14 @@ function KycBadge({ value, onClick, title }) {
     );
   }
 
-  return <span className={`${base} ${cls}`}>{label}</span>;
+  return (
+    <span
+      className={`${base} ${cls} ${disabled ? "cursor-not-allowed opacity-45" : ""}`}
+      title={disabled ? title || "No document uploaded" : title}
+    >
+      {label}
+    </span>
+  );
 }
 
 function PartnerBadge({ value, onClick, disabled }) {
@@ -452,6 +460,7 @@ function KycDocsModal({ open, user, field, canActOnKyc, onClose, onApprove, onRe
           {rejectOpen && canReject ? (
             <RejectReasonPanel
               className="mt-3"
+              reasons={kycRejectReasonsForField(field)}
               onCancel={() => setRejectOpen(false)}
               onConfirm={async (reason) => {
                 setActing(true);
@@ -1196,15 +1205,21 @@ function UsersContent() {
                       <td className="px-3 py-3">
                         <KycBadge
                           value={u.nic}
+                          disabled={!u.hasNicDocument}
                           onClick={() => setKycDocs({ user: u, field: "nic" })}
-                          title="View NIC documents"
+                          title={u.hasNicDocument ? "View NIC documents" : "No NIC document uploaded"}
                         />
                       </td>
                       <td className="px-3 py-3">
                         <KycBadge
                           value={u.address}
+                          disabled={!u.hasAddressDocument}
                           onClick={() => setKycDocs({ user: u, field: "address" })}
-                          title="View Address documents"
+                          title={
+                            u.hasAddressDocument
+                              ? "View Address documents"
+                              : "No address document uploaded"
+                          }
                         />
                       </td>
                     </>
