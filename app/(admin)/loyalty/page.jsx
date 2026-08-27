@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocationSearchParams } from "@/lib/location-search";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectModal from "@/components/admin/reject-modal";
 import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
@@ -283,7 +283,7 @@ function LoyaltyDetailModal({
 }
 
 function LoyaltyContent() {
-  const params = useSearchParams();
+  const params = useLocationSearchParams();
   const permissions = useAdminPermissions();
   const visibleTabs = useMemo(
     () => TABS.filter((t) => hasLoyaltyTabRead(permissions, t.id)),
@@ -1869,9 +1869,5 @@ function LoyaltyContent() {
 }
 
 export default function LoyaltyPage() {
-  return (
-    <Suspense fallback={<div className="text-slate-500">Loading loyalty…</div>}>
-      <LoyaltyContent />
-    </Suspense>
-  );
+  return <LoyaltyContent />;
 }

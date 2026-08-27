@@ -48,7 +48,7 @@ function LoginForm() {
     try {
       const result = await loginAdmin(email, password);
       setAdminSession({ token: result.token, user: result.user });
-      router.push(result.redirect_to || "/dashboard");
+      router.replace(result.redirect_to || "/dashboard");
     } catch (err) {
       setError(err.message || "Sign in failed. Please try again.");
     } finally {

@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocationSearchParams } from "@/lib/location-search";
 import {
   Bell,
   Bookmark,
@@ -55,9 +56,9 @@ function itemActive(pathname, search, href) {
   return pathMatches(pathname, search, href);
 }
 
-function NavInner({ user, roleLabel }) {
+export default function AdminMainNav({ user, roleLabel }) {
   const pathname = usePathname();
-  const search = useSearchParams();
+  const search = useLocationSearchParams();
   const router = useRouter();
   const permissions = useAdminPermissions();
   const [navCounts, setNavCounts] = useState(null);
@@ -608,10 +609,3 @@ function NavInner({ user, roleLabel }) {
   );
 }
 
-export default function AdminMainNav({ user, roleLabel }) {
-  return (
-    <Suspense fallback={<div className="admin-topbar h-[104px]" />}>
-      <NavInner user={user} roleLabel={roleLabel} />
-    </Suspense>
-  );
-}
