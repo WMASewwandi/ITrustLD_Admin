@@ -107,15 +107,24 @@ export function PlatformIdCell({ platform, platformId, platformName, platformDet
   );
 }
 
-export function StatusPill({ status, onClick, title }) {
+export function statusToneClass(status) {
   const s = String(status || "");
-  const tone = s.includes("Pending")
-    ? "bg-amber-500 text-white"
-    : s === "Completed" || s === "Claimed"
-      ? "bg-theme-green-action text-white"
-      : s === "Rejected"
-        ? "bg-admin-danger text-white"
-        : "bg-white/10 text-slate-300";
+  if (s.includes("Pending")) return "bg-amber-500 text-white";
+  if (s === "Completed" || s === "Claimed") return "bg-theme-green-action text-white";
+  if (s === "Rejected") return "bg-admin-danger text-white";
+  return "bg-white/10 text-white";
+}
+
+export function statusHeaderToneClass(status) {
+  const s = String(status || "");
+  if (s.includes("Pending")) return "bg-amber-500/50 text-white";
+  if (s === "Completed" || s === "Claimed") return "bg-theme-green-action/50 text-white";
+  if (s === "Rejected") return "bg-admin-danger/50 text-white";
+  return "bg-white/10 text-white";
+}
+
+export function StatusPill({ status, onClick, title }) {
+  const tone = statusToneClass(status);
   const cls = `inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${tone}`;
   if (onClick) {
     return (

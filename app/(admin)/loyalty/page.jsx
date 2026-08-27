@@ -19,6 +19,7 @@ import { useAdminPermissions } from "@/contexts/admin-permissions";
 import { hasLoyaltyTabRead, hasLoyaltyTabUpdate, hasLoyaltyGiftsCatalogUpdate } from "@/lib/loyalty-permissions";
 import LoyaltyManagementPanel from "@/components/admin/loyalty-management-panel";
 import LoyaltyGiftPanel from "@/components/admin/loyalty-gift-panel";
+import { VOUCHER_CLAIM_REJECT_REASONS } from "@/lib/voucher-reject-reasons";
 import { Check, RefreshCw, Search, X } from "lucide-react";
 
 const TABS = [
@@ -1840,6 +1841,7 @@ function LoyaltyContent() {
       <RejectModal
         open={Boolean(rejectId) && tab === "vouchers"}
         title="Reject voucher claim"
+        reasons={VOUCHER_CLAIM_REJECT_REASONS}
         error={voucherActionError}
         busy={voucherStatusBusy}
         onClose={() => {

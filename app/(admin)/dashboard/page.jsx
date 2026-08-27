@@ -448,13 +448,19 @@ export default function DashboardPage() {
   const [withdrawalExportOpen, setWithdrawalExportOpen] = useState(false);
 
   useEffect(() => {
-    if (!canViewDashboard) {
-      const user = getAdminUser();
-      const fallback =
-        getFirstAllowedNavHref(TOP_NAV, permissions) ||
-        resolveAdminLandingPath(user?.roles ?? [], permissions);
-      router.replace(fallback || "/login");
+    if (canViewDashboard) return;
+    // Empty permissions means session is still hydrating — do not bounce to
+    // /dashboard (resolveAdminLandingPath used to default there and loop).
+    if (!permissions.length) return;
+    const user = getAdminUser();
+    const fallback =
+      getFirstAllowedNavHref(TOP_NAV, permissions) ||
+      resolveAdminLandingPath(user?.roles ?? [], permissions);
+    if (!fallback || fallback === "/dashboard" || fallback.startsWith("/dashboard?")) {
+      router.replace("/login");
+      return;
     }
+    router.replace(fallback);
   }, [canViewDashboard, permissions, router]);
 
   const loadRequestRef = useRef(0);
@@ -542,7 +548,7 @@ export default function DashboardPage() {
   if (!canViewDashboard) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center text-sm text-slate-400">
-        Redirecting…
+        {permissions.length ? "Redirecting…" : "Loading…"}
       </div>
     );
   }

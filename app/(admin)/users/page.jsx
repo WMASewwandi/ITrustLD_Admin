@@ -6,6 +6,7 @@ import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectModal from "@/components/admin/reject-modal";
 import RejectReasonPanel from "@/components/admin/reject-reason-panel";
 import { kycRejectReasonsForField } from "@/lib/kyc-reject-reasons";
+import { CUSTOMER_BAN_REASONS } from "@/lib/ban-reasons";
 import CopyCell, { FilterField, FormError, inputCls } from "@/components/admin/queue-ui";
 import { fetchCustomers, fetchCustomerKycDocuments, fetchKycDocumentBlob, approveCustomerKyc, rejectCustomerKyc, verifyCustomerMobile, banCustomer, unbanCustomer, banMultipleCustomers, updateCustomerPartner, sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
 import { EmailSendModal, SmsSendModal } from "@/components/admin/customer-message-modals";
@@ -1458,6 +1459,7 @@ function UsersContent() {
       <RejectModal
         open={!!banOpen}
         title="Ban customer"
+        reasons={CUSTOMER_BAN_REASONS}
         error={banOpen ? error : ""}
         onClose={() => {
           setBanOpen(null);

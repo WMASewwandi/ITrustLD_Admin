@@ -1,16 +1,34 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import AdminMainNav from "@/components/admin/admin-main-nav";
 import AdminIdleTimeout from "@/components/admin/admin-idle-timeout";
 import { AdminPermissionsProvider } from "@/contexts/admin-permissions";
 import { AppDialogProvider } from "@/components/admin/app-dialog";
-import { fetchAdminMe, formatRoleLabel, getAdminUser, hasAdminSession, updateAdminUser } from "@/lib/auth";
+import {
+  clearAdminSession,
+  fetchAdminMe,
+  formatRoleLabel,
+  getAdminUser,
+  hasAdminSession,
+  updateAdminUser,
+} from "@/lib/auth";
+
+function mergeAdminUser(remote, cached) {
+  const remotePerms = Array.isArray(remote?.permissions) ? remote.permissions : null;
+  const cachedPerms = Array.isArray(cached?.permissions) ? cached.permissions : null;
+  const permissions = remotePerms?.length ? remotePerms : cachedPerms ?? remotePerms ?? [];
+  return {
+    ...(cached || {}),
+    ...(remote || {}),
+    roles: remote?.roles?.length ? remote.roles : cached?.roles ?? remote?.roles ?? [],
+    permissions,
+  };
+}
 
 export default function AdminShell({ children }) {
   const router = useRouter();
-  const pathname = usePathname();
   const [ready, setReady] = useState(false);
   const [user, setUser] = useState(null);
   const [roleLabel, setRoleLabel] = useState("Admin");
@@ -25,16 +43,35 @@ export default function AdminShell({ children }) {
         return;
       }
 
-      try {
-        const { user } = await fetchAdminMe();
-        if (cancelled) return;
-        setUser(user);
-        setRoleLabel(formatRoleLabel(user?.roles));
-        setPermissions(user?.permissions ?? []);
-        updateAdminUser(user);
+      const cached = getAdminUser();
+      if (cached) {
+        setUser(cached);
+        if (cached.roles?.length) setRoleLabel(formatRoleLabel(cached.roles));
+        if (cached.permissions?.length) setPermissions(cached.permissions);
         setReady(true);
-      } catch {
+      }
+
+      try {
+        const { user: remote } = await fetchAdminMe();
         if (cancelled) return;
+        const nextUser = mergeAdminUser(remote, cached);
+        setUser(nextUser);
+        setRoleLabel(formatRoleLabel(nextUser?.roles));
+        setPermissions(nextUser?.permissions ?? []);
+        updateAdminUser(nextUser);
+        setReady(true);
+      } catch (error) {
+        if (cancelled) return;
+        if (error?.status === 401) {
+          clearAdminSession();
+          router.replace("/login");
+          return;
+        }
+        // Production API blips must not bounce a valid cached session (reload loop).
+        if (cached) {
+          setReady(true);
+          return;
+        }
         router.replace("/login");
       }
     }
@@ -43,19 +80,8 @@ export default function AdminShell({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [router, pathname]);
-
-  useEffect(() => {
-    const cached = getAdminUser();
-    if (cached) {
-      setUser(cached);
-    }
-    if (cached?.roles?.length) {
-      setRoleLabel(formatRoleLabel(cached.roles));
-    }
-    if (cached?.permissions?.length) {
-      setPermissions(cached.permissions);
-    }
+    // Verify once per mount. Re-running on router/pathname remounts the portal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!ready) {

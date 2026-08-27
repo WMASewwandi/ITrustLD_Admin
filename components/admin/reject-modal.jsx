@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, X } from "lucide-react";
 import { FormError } from "@/components/admin/queue-ui";
 
@@ -13,6 +13,11 @@ const PRESET = [
   "Custom",
 ];
 
+function isCustomReason(value) {
+  const key = String(value || "").trim().toLowerCase();
+  return key === "custom" || key === "custom message" || key === "other";
+}
+
 export default function RejectModal({
   open,
   title = "Reject record",
@@ -20,20 +25,31 @@ export default function RejectModal({
   onConfirm,
   error = "",
   busy = false,
+  reasons,
 }) {
-  const [reason, setReason] = useState(PRESET[0]);
+  const options = reasons?.length ? reasons : PRESET;
+  const [reason, setReason] = useState(options[0] || "");
   const [custom, setCustom] = useState("");
   const [confirming, setConfirming] = useState(false);
 
+  useEffect(() => {
+    if (!open) return;
+    setReason(options[0] || "");
+    setCustom("");
+    setConfirming(false);
+  }, [open, options[0]]);
+
   if (!open) return null;
 
+  const finalReason = isCustomReason(reason) ? custom.trim() : reason;
+  const canContinue = Boolean(finalReason);
+
   async function submit() {
+    if (!canContinue) return;
     if (!confirming) {
       setConfirming(true);
       return;
     }
-    const finalReason = reason === "Custom" ? custom.trim() : reason;
-    if (!finalReason) return;
     await onConfirm?.(finalReason);
   }
 
@@ -66,25 +82,26 @@ export default function RejectModal({
               onChange={(e) => setReason(e.target.value)}
               className="admin-input"
             >
-              {PRESET.map((r) => (
+              {options.map((r) => (
                 <option key={r} value={r}>
                   {r}
                 </option>
               ))}
             </select>
-            {reason === "Custom" ? (
+            {isCustomReason(reason) ? (
               <textarea
                 value={custom}
                 onChange={(e) => setCustom(e.target.value)}
                 rows={3}
-                placeholder="Custom reject message"
+                maxLength={500}
+                placeholder="Enter custom rejection reason…"
                 className="admin-input"
               />
             ) : null}
           </div>
         ) : (
           <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-            Reason: <span className="font-semibold">{reason === "Custom" ? custom : reason}</span>
+            Reason: <span className="font-semibold">{finalReason}</span>
           </div>
         )}
 
@@ -105,7 +122,7 @@ export default function RejectModal({
           <button
             type="button"
             onClick={submit}
-            disabled={busy}
+            disabled={busy || !canContinue}
             className="rounded-xl bg-admin-danger px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-50"
           >
             {busy ? "Please wait…" : confirming ? "Confirm Reject" : "Continue"}

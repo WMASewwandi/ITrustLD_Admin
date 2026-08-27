@@ -160,7 +160,7 @@ function NavInner({ user, roleLabel }) {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("focus", handleFocus);
     };
-  }, [pathname, search]);
+  }, []);
 
   async function logout() {
     await logoutAdmin();

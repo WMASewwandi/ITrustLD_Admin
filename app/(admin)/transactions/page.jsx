@@ -4,9 +4,11 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectReasonPanel from "@/components/admin/reject-reason-panel";
-import DepositProofStatusPanel from "@/components/admin/deposit-proof-status-panel";
+import DepositProofStatusPanel, {
+  DEPOSIT_PROOF_REJECT_REASONS,
+} from "@/components/admin/deposit-proof-status-panel";
 import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
-import CopyCell, { FilterField, StatusPill, inputCls } from "@/components/admin/queue-ui";
+import CopyCell, { FilterField, StatusPill, inputCls, statusHeaderToneClass } from "@/components/admin/queue-ui";
 import AssignDepositsModal from "@/components/admin/assign-deposits-modal";
 import AssignWithdrawalsModal from "@/components/admin/assign-withdrawals-modal";
 import { EmailSendModal, SmsSendModal } from "@/components/admin/customer-message-modals";
@@ -602,6 +604,7 @@ function TransactionsContent() {
   const [viewAll, setViewAll] = useState(false);
   const [livePulse, setLivePulse] = useState(0);
   const skipUrlHydrationRef = useRef(false);
+  const lastHydratedQueryRef = useRef(null);
   const skipAutoLoadRef = useRef(false);
   const skipInitialAutoLoadRef = useRef(true);
   const loadDepositsRef = useRef(null);
@@ -655,6 +658,25 @@ function TransactionsContent() {
         status: typeof value === "function" ? value(prev.status) : value,
       }));
     }
+  };
+
+  /** Status dropdown: open that list cleanly (no leftover Completed/Rejected search). */
+  const applyStatusFilter = (nextStatus) => {
+    const nextFilters = {
+      ...createDefaultTabFilters(),
+      status: nextStatus,
+      advancedSearchIn: nextStatus === "Rejected" ? "Rejected" : "Completed",
+    };
+    if (tab === "deposits") {
+      setDepositFilters(nextFilters);
+    } else {
+      setWithdrawalFilters(nextFilters);
+    }
+    setSearchDraft("");
+    setFilterError("");
+    setViewAll(false);
+    setDepositPage(1);
+    setWithdrawalPage(1);
   };
   const setQ = (value) => patchActiveFilters({ q: value });
   const setDuration = (value) => patchActiveFilters({ duration: value });
@@ -1388,8 +1410,16 @@ function TransactionsContent() {
   useEffect(() => {
     if (skipUrlHydrationRef.current) {
       skipUrlHydrationRef.current = false;
+      lastHydratedQueryRef.current = searchParamsString;
       return;
     }
+    if (
+      lastHydratedQueryRef.current !== null &&
+      normalizeQueryString(lastHydratedQueryRef.current) === normalizeQueryString(searchParamsString)
+    ) {
+      return;
+    }
+    lastHydratedQueryRef.current = searchParamsString;
 
     const urlParams = new URLSearchParams(searchParamsString);
     const nextTab = urlParams.get("tab") === "withdrawals" ? "withdrawals" : "deposits";
@@ -2151,10 +2181,7 @@ function TransactionsContent() {
             <select
               value={status}
               onChange={(e) => {
-                setStatus(e.target.value);
-                setViewAll(false);
-                setDepositPage(1);
-                setWithdrawalPage(1);
+                applyStatusFilter(e.target.value);
               }}
               className={`${inputCls} w-40`}
             >
@@ -2826,6 +2853,7 @@ function TransactionsContent() {
           setRejectId(null);
           setActionError("");
         }}
+        reasons={DEPOSIT_PROOF_REJECT_REASONS}
         onConfirm={(reason) => rejectTransaction(reason, rejectId)}
       />
 
@@ -2927,18 +2955,27 @@ function TransactionsContent() {
             className="admin-card flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden p-0"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between border-b border-white/10 px-5 py-4">
+            <div className={`flex items-start justify-between px-5 py-4 ${statusHeaderToneClass(proof.status)}`}>
               <div>
-                <h3 className="text-lg font-semibold text-white">Transaction Proof</h3>
-                <p className="text-sm text-slate-400">
-                  {proof.id} · {proof.customer}
-                  {proof.todayTxCount ? ` · ${proof.todayTxCount} tx today` : ""}
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-lg font-semibold text-white">Transaction Proof</h3>
+                  <StatusPill status={proof.status} />
+                </div>
+                <p className="flex flex-wrap items-center gap-2 text-sm text-white/80">
+                  <span>
+                    {proof.id} · {proof.customer}
+                  </span>
+                  {proof.todayTxCount > 1 ? (
+                    <span className="inline-flex items-center rounded-full bg-admin-danger px-2 py-0.5 text-[11px] font-semibold text-white">
+                      {proof.todayTxCount - 1}X Today
+                    </span>
+                  ) : null}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={closeProof}
-                className="rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white"
+                className="rounded-lg p-1 text-white/80 hover:bg-white/15 hover:text-white"
               >
                 <X className="h-4 w-4" />
               </button>
