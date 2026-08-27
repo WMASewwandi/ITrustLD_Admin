@@ -426,7 +426,7 @@ export default function TeamPerformancePage() {
                               <span>
                                 Est. per txn:{" "}
                                 <span className="text-slate-300">
-                                  ${(member.commission / Math.max(member.handled, 1)).toFixed(2)}
+                                  LKR {(member.commission / Math.max(member.handled, 1)).toFixed(2)}
                                 </span>
                               </span>
                               <span>

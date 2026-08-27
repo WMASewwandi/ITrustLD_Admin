@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Check, Loader2, Pencil, Plus, Trash2, Truck, X } from "lucide-react";
 import CopyCell, { FilterField, IdNameCell, StatusPill, inputCls } from "@/components/admin/queue-ui";
 import RejectModal from "@/components/admin/reject-modal";
+import { GIFT_CLAIM_REJECT_REASONS } from "@/lib/gift-reject-reasons";
 import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
 import {
   approveGiftClaim,
@@ -908,6 +909,7 @@ export default function LoyaltyGiftPanel({ canMutateClaims = true, canMutateCata
       <RejectModal
         open={Boolean(rejectId)}
         title="Reject gift claim"
+        reasons={GIFT_CLAIM_REJECT_REASONS}
         error={claimsError}
         busy={busy}
         onClose={() => {
