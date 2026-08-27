@@ -2965,7 +2965,7 @@ function TransactionsContent() {
                 Same-day transactions grid
               </h4>
                 <p className="mb-2 text-[11px] text-slate-500">
-                  Same platform method and Plat. ID since today&apos;s business day (from 0:10 AM).
+                  Same platform method and Plat. ID created today (Sri Lanka calendar day).
                 </p>
                 <div className="overflow-x-auto rounded-xl border border-white/10">
                   <table className="min-w-[640px] w-full text-left text-sm">
