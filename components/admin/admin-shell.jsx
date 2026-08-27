@@ -15,6 +15,9 @@ import {
   updateAdminUser,
 } from "@/lib/auth";
 
+let shellSnapshot = null;
+let verifyStarted = false;
+
 function mergeAdminUser(remote, cached) {
   const remotePerms = Array.isArray(remote?.permissions) ? remote.permissions : null;
   const cachedPerms = Array.isArray(cached?.permissions) ? cached.permissions : null;
@@ -27,51 +30,81 @@ function mergeAdminUser(remote, cached) {
   };
 }
 
+function applySnapshot(next) {
+  shellSnapshot = next;
+  return next;
+}
+
 export default function AdminShell({ children }) {
   const router = useRouter();
-  const [ready, setReady] = useState(false);
-  const [user, setUser] = useState(null);
-  const [roleLabel, setRoleLabel] = useState("Admin");
-  const [permissions, setPermissions] = useState([]);
+  const [ready, setReady] = useState(() => Boolean(shellSnapshot));
+  const [user, setUser] = useState(() => shellSnapshot?.user ?? null);
+  const [roleLabel, setRoleLabel] = useState(() => shellSnapshot?.roleLabel ?? "Admin");
+  const [permissions, setPermissions] = useState(() => shellSnapshot?.permissions ?? []);
 
   useEffect(() => {
+    if (shellSnapshot) {
+      setUser(shellSnapshot.user);
+      setRoleLabel(shellSnapshot.roleLabel);
+      setPermissions(shellSnapshot.permissions);
+      setReady(true);
+      return undefined;
+    }
+
+    if (verifyStarted) return undefined;
+    verifyStarted = true;
     let cancelled = false;
 
     async function verify() {
       if (!hasAdminSession()) {
+        verifyStarted = false;
         router.replace("/login");
         return;
       }
 
       const cached = getAdminUser();
       if (cached) {
-        setUser(cached);
-        if (cached.roles?.length) setRoleLabel(formatRoleLabel(cached.roles));
-        if (cached.permissions?.length) setPermissions(cached.permissions);
-        setReady(true);
+        const next = applySnapshot({
+          user: cached,
+          roleLabel: cached.roles?.length ? formatRoleLabel(cached.roles) : "Admin",
+          permissions: cached.permissions ?? [],
+        });
+        if (!cancelled) {
+          setUser(next.user);
+          setRoleLabel(next.roleLabel);
+          setPermissions(next.permissions);
+          setReady(true);
+        }
       }
 
       try {
         const { user: remote } = await fetchAdminMe();
         if (cancelled) return;
         const nextUser = mergeAdminUser(remote, cached);
-        setUser(nextUser);
-        setRoleLabel(formatRoleLabel(nextUser?.roles));
-        setPermissions(nextUser?.permissions ?? []);
+        const next = applySnapshot({
+          user: nextUser,
+          roleLabel: formatRoleLabel(nextUser?.roles),
+          permissions: nextUser?.permissions ?? [],
+        });
+        setUser(next.user);
+        setRoleLabel(next.roleLabel);
+        setPermissions(next.permissions);
         updateAdminUser(nextUser);
         setReady(true);
       } catch (error) {
         if (cancelled) return;
         if (error?.status === 401) {
+          shellSnapshot = null;
+          verifyStarted = false;
           clearAdminSession();
           router.replace("/login");
           return;
         }
-        // Production API blips must not bounce a valid cached session (reload loop).
         if (cached) {
           setReady(true);
           return;
         }
+        verifyStarted = false;
         router.replace("/login");
       }
     }
@@ -79,10 +112,9 @@ export default function AdminShell({ children }) {
     verify();
     return () => {
       cancelled = true;
+      if (!shellSnapshot) verifyStarted = false;
     };
-    // Verify once per mount. Re-running on router/pathname remounts the portal.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [router]);
 
   if (!ready) {
     return (

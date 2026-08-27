@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useLocationSearchString } from "@/lib/location-search";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectReasonPanel from "@/components/admin/reject-reason-panel";
 import DepositProofStatusPanel, {
@@ -518,7 +519,8 @@ function SubmittedProofViewer({ proof, proofs, activeId, onOpenImage, fetchProof
 }
 
 function TransactionsContent() {
-  const params = useSearchParams();
+  const searchParamsString = useLocationSearchString();
+  const params = useMemo(() => new URLSearchParams(searchParamsString), [searchParamsString]);
   const router = useRouter();
   const pathname = usePathname();
   const canUpdateDeposits = useCan("status_update_deposit_data");
@@ -614,7 +616,6 @@ function TransactionsContent() {
   const routerRef = useRef(null);
   const pathnameRef = useRef(null);
   const tabRef = useRef(tab);
-  const searchParamsString = params.toString();
   tabRef.current = tab;
 
   const filters = tab === "deposits" ? depositFilters : withdrawalFilters;
@@ -3125,9 +3126,5 @@ function TransactionsContent() {
 }
 
 export default function TransactionsPage() {
-  return (
-    <Suspense fallback={<div className="text-slate-500">Loading transactions…</div>}>
-      <TransactionsContent />
-    </Suspense>
-  );
+  return <TransactionsContent />;
 }

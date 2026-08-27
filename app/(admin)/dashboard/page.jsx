@@ -457,7 +457,6 @@ export default function DashboardPage() {
       getFirstAllowedNavHref(TOP_NAV, permissions) ||
       resolveAdminLandingPath(user?.roles ?? [], permissions);
     if (!fallback || fallback === "/dashboard" || fallback.startsWith("/dashboard?")) {
-      router.replace("/login");
       return;
     }
     router.replace(fallback);

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useLocationSearchParams } from "@/lib/location-search";
 import { Check, Loader2, Pencil, Plus, Trash2, Truck, X } from "lucide-react";
 import CopyCell, { FilterField, IdNameCell, StatusPill, inputCls } from "@/components/admin/queue-ui";
 import RejectModal from "@/components/admin/reject-modal";
@@ -446,7 +447,7 @@ function GiftCatalogRow({ gift, busy, readOnly = false, onToggleActive, onEdit, 
 export default function LoyaltyGiftPanel({ canMutateClaims = true, canMutateCatalog = true }) {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const searchParams = useLocationSearchParams();
   const { alert } = useAppDialog();
   const audienceFilter = useMemo(
     () => resolveAudienceFilter(searchParams.get("audience")),

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useLocationSearchParams } from "@/lib/location-search";
 import { Loader2, Mail, MessageSquare, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { FilterField, inputCls } from "@/components/admin/queue-ui";
 import { useAppDialog } from "@/components/admin/app-dialog";
@@ -441,7 +442,7 @@ function AmountModal({
 export default function LoyaltyManagementPanel({ canMutate = true }) {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const searchParams = useLocationSearchParams();
   const { confirm } = useAppDialog();
   const audienceOption = resolveAudienceOption(searchParams.get("audience"));
   const audience = audienceOption.label;

@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useLocationSearchParams } from "@/lib/location-search";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectModal from "@/components/admin/reject-modal";
 import RejectReasonPanel from "@/components/admin/reject-reason-panel";
@@ -487,7 +488,7 @@ function KycDocsModal({ open, user, field, canActOnKyc, onClose, onApprove, onRe
 
 function UsersContent() {
   const router = useRouter();
-  const params = useSearchParams();
+  const params = useLocationSearchParams();
   const filter = useMemo(() => resolveFilter(params), [params]);
   const canReadAccounts = useCan(READ_ACCOUNTS_PERMISSION);
   const canReadMobilePending = useCan(READ_MOBILE_PENDING_PERMISSION);
@@ -597,10 +598,9 @@ function UsersContent() {
   useEffect(() => {
     if (canAccessCurrentFilter) return;
     const fallback = allowedFilters[0]?.value;
-    if (fallback) {
-      router.replace(`/users?filter=${encodeURIComponent(fallback)}`);
-    }
-  }, [allowedFilters, canAccessCurrentFilter, router]);
+    if (!fallback || fallback === filter) return;
+    router.replace(`/users?filter=${encodeURIComponent(fallback)}`);
+  }, [allowedFilters, canAccessCurrentFilter, filter, router]);
 
   useEffect(() => {
     if (skipNextEffectLoadRef.current) {
@@ -1486,9 +1486,5 @@ function UsersContent() {
 }
 
 export default function UsersPage() {
-  return (
-    <Suspense fallback={<div className="text-slate-500">Loading users…</div>}>
-      <UsersContent />
-    </Suspense>
-  );
+  return <UsersContent />;
 }
