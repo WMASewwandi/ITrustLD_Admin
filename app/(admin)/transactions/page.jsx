@@ -263,7 +263,7 @@ function ProofSummaryFields({ proof, isDeposit = false }) {
       <dl className="grid gap-2 text-sm">
         <ProofTextField label="Platform" value={proof.platform} />
         <ProofTextField label="Method" value={proof.method} />
-        <ProofField label="Client Pay" value={proof.clientPay} />
+        <ProofTextField label="Client Pay" value={proof.clientPay} />
         <ProofField label="Platform ID" value={proof.platformId} />
         <ProofField
           label="Sending Amount"
@@ -277,7 +277,7 @@ function ProofSummaryFields({ proof, isDeposit = false }) {
     <dl className="grid gap-2 text-sm">
       <ProofTextField label="Platform" value={proof.platform} />
       <ProofTextField label="Method" value={proof.method} />
-      <ProofField
+      <ProofTextField
         label="Client Pay"
         value={proof.cashoutAmt || proof.clientPay}
       />
