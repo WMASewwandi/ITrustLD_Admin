@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -12,7 +12,7 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-import { loginAdmin, setAdminSession } from "@/lib/auth";
+import { loginAdmin, safeAdminPath, setAdminSession } from "@/lib/auth";
 
 const HIGHLIGHTS = [
   { icon: ShieldCheck, title: "Role-based access", body: "Super Admin, Executives, Authorizer" },
@@ -29,7 +29,6 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const inactiveNotice = searchParams.get("reason") === "inactive";
   const [loading, setLoading] = useState(false);
@@ -48,7 +47,10 @@ function LoginForm() {
     try {
       const result = await loginAdmin(email, password);
       setAdminSession({ token: result.token, user: result.user });
-      router.replace(result.redirect_to || "/dashboard");
+      // Full load into the admin layout. Client replace from /login omits the
+      // page slot while the shell checks the session, and production retries
+      // that first landing page forever.
+      window.location.replace(safeAdminPath(result.redirect_to));
     } catch (err) {
       setError(err.message || "Sign in failed. Please try again.");
     } finally {

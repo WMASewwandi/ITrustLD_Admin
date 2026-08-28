@@ -1,6 +1,5 @@
 import "./globals.css";
 import { Poppins } from "next/font/google";
-import MobileViewportFix from "@/components/admin/mobile-viewport-fix";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -20,17 +19,13 @@ export const metadata = {
 export const viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
   viewportFit: "cover",
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className={poppins.variable}>
-      <body className="font-poppins antialiased">
-        <MobileViewportFix />
-        {children}
-      </body>
+      <body className="font-poppins antialiased">{children}</body>
     </html>
   );
 }

@@ -1162,6 +1162,12 @@ function TransactionsContent() {
     return () => clearTimeout(timer);
   }, [tab, syncWithdrawalUrl, withdrawalFilters, withdrawalPage, perPage, resolvedDepositStatus]);
 
+  useEffect(() => {
+    if (resolvedDepositStatus !== "Pending") {
+      setAssignOpen(false);
+    }
+  }, [resolvedDepositStatus, tab]);
+
   const runTransactionSearch = useCallback(
     (event) => {
       event?.preventDefault?.();
@@ -1409,6 +1415,13 @@ function TransactionsContent() {
   }
 
   useEffect(() => {
+    if (
+      !searchParamsString &&
+      typeof window !== "undefined" &&
+      window.location.search.replace(/^\?/, "")
+    ) {
+      return;
+    }
     if (skipUrlHydrationRef.current) {
       skipUrlHydrationRef.current = false;
       lastHydratedQueryRef.current = searchParamsString;
@@ -1613,9 +1626,11 @@ function TransactionsContent() {
           ? tab === "deposits"
             ? "Rejected Deposits"
             : "Rejected Withdrawals"
-          : tab === "deposits"
-            ? "Deposits"
-            : "Withdrawals";
+          : "Transactions";
+
+  const showAssignColumn = resolvedDepositStatus === "Pending" && !isWithdrawalAuthorizer;
+  const canManualAssign =
+    showAssignColumn && (tab === "deposits" ? depositIsAdmin : withdrawalIsAdmin);
 
   function openProof(r) {
     setProof(r);
@@ -1804,9 +1819,9 @@ function TransactionsContent() {
       }
       setPendingConfirmId(null);
       if (proof?.id === id) closeProof();
+      notifyAdminNavCountsRefresh();
       if (tab === "deposits") await loadDeposits();
       else await loadWithdrawals();
-      notifyAdminNavCountsRefresh();
     } catch (err) {
       setActionError(err.message || "Failed to set transaction as pending.");
     } finally {
@@ -1838,9 +1853,9 @@ function TransactionsContent() {
         });
       }
       closeProof();
+      notifyAdminNavCountsRefresh();
       if (tab === "deposits") await loadDeposits();
       else await loadWithdrawals();
-      notifyAdminNavCountsRefresh();
     } catch (err) {
       setActionError(err.message || "Failed to update transaction status.");
     } finally {
@@ -1860,8 +1875,8 @@ function TransactionsContent() {
       });
       setAuthorizeConfirmId(null);
       if (proof?.id === id) closeProof();
-      await loadWithdrawals();
       notifyAdminNavCountsRefresh();
+      await loadWithdrawals();
     } catch (err) {
       setActionError(err.message || "Failed to send withdrawal for authorization.");
     } finally {
@@ -1883,9 +1898,9 @@ function TransactionsContent() {
       }
       setApproveConfirmId(null);
       if (proof?.id === id) closeProof();
+      notifyAdminNavCountsRefresh();
       if (tab === "deposits") await loadDeposits();
       else await loadWithdrawals();
-      notifyAdminNavCountsRefresh();
     } catch (err) {
       setActionError(err.message || "Failed to approve transaction.");
     } finally {
@@ -1917,9 +1932,9 @@ function TransactionsContent() {
       }
       if (proof?.id === targetId) closeProof();
       setRejectId(null);
+      notifyAdminNavCountsRefresh();
       if (tab === "deposits") await loadDeposits();
       else await loadWithdrawals();
-      notifyAdminNavCountsRefresh();
     } catch (err) {
       setActionError(err.message || "Failed to reject transaction.");
     } finally {
@@ -2113,8 +2128,8 @@ function TransactionsContent() {
       if (!loader) {
         throw new Error("Transaction list is not ready yet. Try again.");
       }
-      await loader({ silent: true, cacheBust });
       notifyAdminNavCountsRefresh();
+      await loader({ silent: true, cacheBust });
     } catch (err) {
       setActionError(err.message || "Failed to refresh transactions.");
     } finally {
@@ -2187,7 +2202,9 @@ function TransactionsContent() {
               className={`${inputCls} w-40`}
             >
               {(tab === "withdrawals"
-                ? ["Pending", "Pending Authorization", "Completed", "Rejected", "All"]
+                ? isWithdrawalAuthorizer
+                  ? ["Pending", "Completed", "Rejected", "All"]
+                  : ["Pending", "Pending Authorization", "Completed", "Rejected", "All"]
                 : ["Pending", "Completed", "Rejected", "All"]
               ).map((s) => (
                 <option key={s} value={s} className="bg-admin-surface">
@@ -2297,7 +2314,7 @@ function TransactionsContent() {
                 </button>
               </>
             ) : null}
-            {tab === "deposits" && depositIsAdmin ? (
+            {tab === "deposits" && canManualAssign ? (
               <button
                 type="button"
                 disabled={!selectedDepositDbIds.length}
@@ -2308,7 +2325,7 @@ function TransactionsContent() {
                 Assign {selectedDepositDbIds.length ? `(${selectedDepositDbIds.length})` : ""}
               </button>
             ) : null}
-            {tab === "withdrawals" && withdrawalIsAdmin ? (
+            {tab === "withdrawals" && canManualAssign ? (
               <button
                 type="button"
                 disabled={!selectedWithdrawalDbIds.length}
@@ -2540,7 +2557,7 @@ function TransactionsContent() {
                   {resolvedDepositStatus === "Rejected" ? (
                     <th className="px-3 py-3">Rejected Reason</th>
                   ) : null}
-                  <th className="px-3 py-3">Assign</th>
+                  {showAssignColumn ? <th className="px-3 py-3">Assigned To</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -2627,23 +2644,31 @@ function TransactionsContent() {
                         )}
                       </td>
                     ) : null}
-                    <td className="px-3 py-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelected([r.id]);
-                          setAssignOpen(true);
-                        }}
-                        className="text-xs font-semibold text-admin-teal underline-offset-2 hover:underline"
-                      >
-                        {r.assigned && r.assigned !== "—" ? r.assigned : "Unassigned"}
-                      </button>
-                    </td>
+                    {showAssignColumn ? (
+                      <td className="px-3 py-3">
+                        {canManualAssign ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelected([r.id]);
+                              setAssignOpen(true);
+                            }}
+                            className="text-xs font-semibold text-admin-teal underline-offset-2 hover:underline"
+                          >
+                            {r.assigned && r.assigned !== "—" ? r.assigned : "Unassigned"}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-300">
+                            {r.assigned && r.assigned !== "—" ? r.assigned : "Unassigned"}
+                          </span>
+                        )}
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
                 {shown.length === 0 ? (
                   <tr>
-                    <td colSpan={resolvedDepositStatus === "Rejected" ? 15 : 14} className="px-4 py-14 text-center text-slate-400">
+                    <td colSpan={13 + (resolvedDepositStatus === "Rejected" ? 1 : 0) + (showAssignColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
                       {listLoading
                         ? `Loading ${tab === "deposits" ? "deposits" : "withdrawals"}…`
                         : "No Results Found"}
@@ -2678,7 +2703,7 @@ function TransactionsContent() {
                   {resolvedDepositStatus === "Rejected" ? (
                     <th className="px-3 py-3">Rejected Reason</th>
                   ) : null}
-                  <th className="px-3 py-3">Assign</th>
+                  {showAssignColumn ? <th className="px-3 py-3">Assigned To</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -2753,23 +2778,31 @@ function TransactionsContent() {
                         )}
                       </td>
                     ) : null}
-                    <td className="px-3 py-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelected([r.id]);
-                          setAssignOpen(true);
-                        }}
-                        className="text-xs font-semibold text-admin-teal underline-offset-2 hover:underline"
-                      >
-                        {r.assigned && r.assigned !== "—" ? r.assigned : "Unassigned"}
-                      </button>
-                    </td>
+                    {showAssignColumn ? (
+                      <td className="px-3 py-3">
+                        {canManualAssign ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelected([r.id]);
+                              setAssignOpen(true);
+                            }}
+                            className="text-xs font-semibold text-admin-teal underline-offset-2 hover:underline"
+                          >
+                            {r.assigned && r.assigned !== "—" ? r.assigned : "Unassigned"}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-300">
+                            {r.assigned && r.assigned !== "—" ? r.assigned : "Unassigned"}
+                          </span>
+                        )}
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
                 {shown.length === 0 ? (
                   <tr>
-                    <td colSpan={resolvedDepositStatus === "Rejected" ? 14 : 13} className="px-4 py-14 text-center text-slate-400">
+                    <td colSpan={12 + (resolvedDepositStatus === "Rejected" ? 1 : 0) + (showAssignColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
                       {listLoading
                         ? `Loading ${tab === "deposits" ? "deposits" : "withdrawals"}…`
                         : "No Results Found"}
