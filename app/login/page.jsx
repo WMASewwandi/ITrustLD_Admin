@@ -13,6 +13,8 @@ import {
   EyeOff,
 } from "lucide-react";
 import { loginAdmin, safeAdminPath, setAdminSession } from "@/lib/auth";
+import { TOP_NAV } from "@/lib/mock-data";
+import { resolvePostLoginHref } from "@/lib/permissions";
 
 const HIGHLIGHTS = [
   { icon: ShieldCheck, title: "Role-based access", body: "Super Admin, Executives, Authorizer" },
@@ -47,10 +49,15 @@ function LoginForm() {
     try {
       const result = await loginAdmin(email, password);
       setAdminSession({ token: result.token, user: result.user });
+      const landing = resolvePostLoginHref(
+        result.user?.roles ?? [],
+        result.user?.permissions ?? [],
+        TOP_NAV,
+      );
       // Full load into the admin layout. Client replace from /login omits the
       // page slot while the shell checks the session, and production retries
       // that first landing page forever.
-      window.location.replace(safeAdminPath(result.redirect_to));
+      window.location.replace(safeAdminPath(landing));
     } catch (err) {
       setError(err.message || "Sign in failed. Please try again.");
     } finally {
