@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { SIDEBAR_NAV } from "@/lib/mock-data";
 import { useAdminPermissions } from "@/contexts/admin-permissions";
-import { filterSidebarSections } from "@/lib/permissions";
+import { filterSidebarSections, resolveAdminHomeHref } from "@/lib/permissions";
 
 const ICONS = {
   LayoutDashboard,
@@ -91,6 +91,7 @@ function SidebarInner({ collapsed, onToggle, mobileOpen, onCloseMobile }) {
   const pathname = usePathname();
   const search = useSearchParams();
   const permissions = useAdminPermissions();
+  const homeHref = resolveAdminHomeHref(permissions);
   const sidebarSections = useMemo(
     () => filterSidebarSections(SIDEBAR_NAV, permissions),
     [permissions]
@@ -185,7 +186,7 @@ function SidebarInner({ collapsed, onToggle, mobileOpen, onCloseMobile }) {
           }`}
         >
           {!isCollapsed ? (
-            <Link href="/dashboard" className="inline-flex items-center gap-2" onClick={onCloseMobile}>
+            <Link href={homeHref} className="inline-flex items-center gap-2" onClick={onCloseMobile}>
               <img
                 src="/assets/img/logos/logo-itrustld-wide.png"
                 alt="iTrustLD"
@@ -194,7 +195,7 @@ function SidebarInner({ collapsed, onToggle, mobileOpen, onCloseMobile }) {
             </Link>
           ) : (
             <Link
-              href="/dashboard"
+              href={homeHref}
               className="flex h-9 w-9 items-center justify-center rounded-xl bg-admin-teal/30 text-teal-100 shadow-[0_0_16px_rgba(45,212,191,0.35)]"
               onClick={onCloseMobile}
             >

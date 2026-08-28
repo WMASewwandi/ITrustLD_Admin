@@ -2,12 +2,17 @@
 
 import Link from "next/link";
 import { ChevronRight, Home } from "lucide-react";
+import { useAdminPermissions } from "@/contexts/admin-permissions";
+import { resolveAdminHomeHref } from "@/lib/permissions";
 
 export default function Breadcrumb({ items = [] }) {
+  const permissions = useAdminPermissions();
+  const homeHref = resolveAdminHomeHref(permissions);
+
   return (
     <nav className="mb-5 flex flex-wrap items-center gap-1.5 text-sm" aria-label="Breadcrumb">
       <Link
-        href="/dashboard"
+        href={homeHref}
         className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-slate-400 transition hover:bg-white/10 hover:text-teal-300"
       >
         <Home className="h-3.5 w-3.5" />

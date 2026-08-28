@@ -30,7 +30,7 @@ import {
   buildNotificationItems,
 } from "@/lib/nav-badges";
 import { useAdminPermissions } from "@/contexts/admin-permissions";
-import { filterBookmarksByPermissions, filterNavByPermissions, hasPermission } from "@/lib/permissions";
+import { filterBookmarksByPermissions, filterNavByPermissions, hasPermission, resolveAdminHomeHref } from "@/lib/permissions";
 import { hasAnyLoyaltyRead } from "@/lib/loyalty-permissions";
 import { readStoredBookmarks, writeStoredBookmarks } from "@/lib/admin-bookmarks";
 
@@ -82,6 +82,7 @@ export default function AdminMainNav({ user, roleLabel }) {
   const search = useLocationSearchParams();
   const router = useRouter();
   const permissions = useAdminPermissions();
+  const homeHref = resolveAdminHomeHref(permissions);
   const [navCounts, setNavCounts] = useState(null);
   const navItems = useMemo(
     () => applyNavBadges(filterNavByPermissions(TOP_NAV, permissions), navCounts),
@@ -385,7 +386,7 @@ export default function AdminMainNav({ user, roleLabel }) {
             {mobile ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </button>
 
-          <Link href="/dashboard" className="inline-flex shrink-0 items-center">
+          <Link href={homeHref} className="inline-flex shrink-0 items-center">
             <img
               src="/assets/img/logos/logo-itrustld-wide.png"
               alt="iTrustLD"
@@ -641,7 +642,7 @@ export default function AdminMainNav({ user, roleLabel }) {
             >
               <X className="h-4 w-4" />
             </button>
-            <Link href="/dashboard" onClick={() => setMobile(false)} className="inline-flex items-center">
+            <Link href={homeHref} onClick={() => setMobile(false)} className="inline-flex items-center">
               <img
                 src="/assets/img/logos/logo-itrustld-wide.png"
                 alt="iTrustLD"
