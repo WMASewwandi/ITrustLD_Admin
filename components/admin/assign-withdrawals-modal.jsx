@@ -4,27 +4,34 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { assignWithdrawals, fetchWithdrawalExecutives } from "@/lib/withdrawals";
 
-export default function AssignWithdrawalsModal({ open, withdrawalIds, onClose, onAssigned }) {
+export default function AssignWithdrawalsModal({
+  open,
+  withdrawalIds,
+  assignAuthorizers = false,
+  onClose,
+  onAssigned,
+}) {
   const [loading, setLoading] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const [error, setError] = useState("");
   const [activeShift, setActiveShift] = useState("—");
   const [executives, setExecutives] = useState([]);
   const [executiveId, setExecutiveId] = useState("");
+  const assigneeLabel = assignAuthorizers ? "Authorizer" : "Executive";
 
   useEffect(() => {
     if (!open) return;
     setError("");
     setExecutiveId("");
     setLoading(true);
-    fetchWithdrawalExecutives()
+    fetchWithdrawalExecutives({ authorizers: assignAuthorizers })
       .then((data) => {
         setActiveShift(data.active_shift ? `Shift ${data.active_shift}` : "—");
         setExecutives(data.executives || []);
       })
-      .catch((err) => setError(err.message || "Failed to load executives."))
+      .catch((err) => setError(err.message || `Failed to load ${assigneeLabel.toLowerCase()}s.`))
       .finally(() => setLoading(false));
-  }, [open]);
+  }, [open, assignAuthorizers, assigneeLabel]);
 
   async function handleConfirm() {
     if (!withdrawalIds?.length) {
@@ -52,7 +59,9 @@ export default function AssignWithdrawalsModal({ open, withdrawalIds, onClose, o
   return (
     <div className="admin-modal-overlay z-[80]" onClick={onClose}>
       <div className="admin-card w-full max-w-xl p-5" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-semibold text-white">Assign Withdrawals to Executive</h3>
+        <h3 className="text-lg font-semibold text-white">
+          Assign Withdrawals to {assigneeLabel}
+        </h3>
         <p className="mt-1 text-sm text-slate-400">
           Selected withdrawals: <span className="font-semibold text-white">{withdrawalIds.length}</span>
         </p>
@@ -62,7 +71,7 @@ export default function AssignWithdrawalsModal({ open, withdrawalIds, onClose, o
 
         <label className="mt-4 block">
           <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-            Select Executive
+            Select {assigneeLabel}
           </span>
           <select
             value={executiveId}

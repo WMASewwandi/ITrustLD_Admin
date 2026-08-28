@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import { useAdminPermissions, useCan } from "@/contexts/admin-permissions";
-import { getAdminUser } from "@/lib/auth";
 import { downloadDepositsExport } from "@/lib/deposits";
 import { downloadWithdrawalsExport } from "@/lib/withdrawals";
 import {
@@ -17,8 +16,7 @@ import {
   resolveDashboardDurationLabel,
   resolveDashboardFilterLabel,
 } from "@/lib/dashboard";
-import { TOP_NAV } from "@/lib/mock-data";
-import { resolvePostLoginHref } from "@/lib/permissions";
+import { resolveAdminHomeHref } from "@/lib/permissions";
 import {
   Banknote,
   Briefcase,
@@ -449,13 +447,8 @@ export default function DashboardPage() {
   useEffect(() => {
     if (canViewDashboard || redirectedRef.current) return;
     if (!permissions.length) return;
-    const user = getAdminUser();
-    const fallback = resolvePostLoginHref(user?.roles ?? [], permissions, TOP_NAV);
-    if (!fallback || fallback === "/dashboard" || fallback.startsWith("/dashboard?")) {
-      return;
-    }
     redirectedRef.current = true;
-    window.location.replace(fallback);
+    window.location.replace(resolveAdminHomeHref(permissions));
   }, [canViewDashboard, permissions]);
 
   const loadRequestRef = useRef(0);

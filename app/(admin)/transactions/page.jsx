@@ -24,6 +24,7 @@ import {
   fetchSimilarDeposits,
   getDefaultAdvancedSearchIn,
   hasAdvancedDepositFilters,
+  isPendingQueueStatus,
   mapDurationToFilter,
   resolveStatusFromUrl,
   resolveTransactionListStatus,
@@ -97,6 +98,10 @@ function normalizeQueryString(qs) {
     .join("&");
 }
 
+function tabFromSearch(qs) {
+  return new URLSearchParams(qs).get("tab");
+}
+
 function createDefaultTabFilters() {
   return {
     status: "Pending",
@@ -131,7 +136,7 @@ function parseTabFiltersFromSearchParams(urlParams) {
   const advancedSearchIn = getDefaultAdvancedSearchIn(urlStatus, urlSearchIn);
   const status = resolveStatusFromUrl(urlStatus, urlSearchIn, filterValues);
   const promotedFromUrl = status !== urlStatus;
-  const q = promotedFromUrl && urlStatus === "Pending" ? "" : urlParams.get("keyword") || "";
+  const q = promotedFromUrl && isPendingQueueStatus(urlStatus) ? "" : urlParams.get("keyword") || "";
   return { status, q, duration, from, to, txId, platformId, userAccount, advancedSearchIn };
 }
 
@@ -759,7 +764,7 @@ function TransactionsContent() {
       const keywordOnlyWithinStatus =
         nextKeyword.trim() &&
         !advancedActive &&
-        (resolvedStatus === "Pending" ||
+        (isPendingQueueStatus(resolvedStatus) ||
           resolvedStatus === "Completed" ||
           resolvedStatus === "Rejected");
 
@@ -795,6 +800,8 @@ function TransactionsContent() {
   const syncDepositUrl = useCallback(
     (overrides = {}) => {
       if (tab !== "deposits") return;
+      if (skipInitialAutoLoadRef.current) return;
+      if (tabFromSearch(searchParamsString) === "withdrawals") return;
       const qs = buildDepositUrlQuery(overrides);
       if (normalizeQueryString(qs) === normalizeQueryString(searchParamsString)) return;
       skipUrlHydrationRef.current = true;
@@ -848,7 +855,7 @@ function TransactionsContent() {
       const keywordOnlyWithinStatus =
         nextKeyword.trim() &&
         !advancedActive &&
-        (resolvedStatus === "Pending" ||
+        (isPendingQueueStatus(resolvedStatus) ||
           resolvedStatus === "Completed" ||
           resolvedStatus === "Rejected");
 
@@ -882,6 +889,8 @@ function TransactionsContent() {
   const syncWithdrawalUrl = useCallback(
     (overrides = {}) => {
       if (tab !== "withdrawals") return;
+      if (skipInitialAutoLoadRef.current) return;
+      if (tabFromSearch(searchParamsString) === "deposits") return;
       const qs = buildWithdrawalUrlQuery(overrides);
       if (normalizeQueryString(qs) === normalizeQueryString(searchParamsString)) return;
       skipUrlHydrationRef.current = true;
@@ -1148,22 +1157,29 @@ function TransactionsContent() {
 
   useEffect(() => {
     if (tab !== "deposits") return undefined;
+    if (skipInitialAutoLoadRef.current) return undefined;
+    if (tabFromSearch(searchParamsString) === "withdrawals") return undefined;
     const timer = setTimeout(() => {
       syncDepositUrl();
     }, depositFilters.q.trim() ? 450 : 0);
     return () => clearTimeout(timer);
-  }, [tab, syncDepositUrl, depositFilters, depositPage, perPage, resolvedDepositStatus]);
+  }, [tab, syncDepositUrl, depositFilters, depositPage, perPage, resolvedDepositStatus, searchParamsString]);
 
   useEffect(() => {
     if (tab !== "withdrawals") return undefined;
+    if (skipInitialAutoLoadRef.current) return undefined;
+    if (tabFromSearch(searchParamsString) === "deposits") return undefined;
     const timer = setTimeout(() => {
       syncWithdrawalUrl();
     }, withdrawalFilters.q.trim() ? 450 : 0);
     return () => clearTimeout(timer);
-  }, [tab, syncWithdrawalUrl, withdrawalFilters, withdrawalPage, perPage, resolvedDepositStatus]);
+  }, [tab, syncWithdrawalUrl, withdrawalFilters, withdrawalPage, perPage, resolvedDepositStatus, searchParamsString]);
 
   useEffect(() => {
-    if (resolvedDepositStatus !== "Pending") {
+    if (
+      resolvedDepositStatus !== "Pending" &&
+      !(tab === "withdrawals" && resolvedDepositStatus === "Pending Authorization")
+    ) {
       setAssignOpen(false);
     }
   }, [resolvedDepositStatus, tab]);
@@ -1178,10 +1194,10 @@ function TransactionsContent() {
       // Keyword box (type + Enter) always stays on the current tab. Only the
       // advanced Search button / filter-row Enter may jump Pending → Completed.
       const nextStatus =
-        status === "Pending" && fromAdvancedRow
+        isPendingQueueStatus(status) && fromAdvancedRow
           ? advancedSearchIn
           : status;
-      const clearKeyword = status === "Pending" && nextStatus !== "Pending";
+      const clearKeyword = isPendingQueueStatus(status) && nextStatus !== status;
       const nextKeyword = clearKeyword ? "" : (fromAdvancedRow ? q : searchDraft).trim();
 
       const searchOverrides = {
@@ -1423,9 +1439,16 @@ function TransactionsContent() {
       return;
     }
     if (skipUrlHydrationRef.current) {
+      const incomingTab = tabFromSearch(searchParamsString);
+      const isTabSwitch =
+        (incomingTab === "deposits" || incomingTab === "withdrawals") &&
+        incomingTab !== tabRef.current;
+      if (!isTabSwitch) {
+        skipUrlHydrationRef.current = false;
+        lastHydratedQueryRef.current = searchParamsString;
+        return;
+      }
       skipUrlHydrationRef.current = false;
-      lastHydratedQueryRef.current = searchParamsString;
-      return;
     }
     if (
       lastHydratedQueryRef.current !== null &&
@@ -1628,9 +1651,13 @@ function TransactionsContent() {
             : "Rejected Withdrawals"
           : "Transactions";
 
-  const showAssignColumn = resolvedDepositStatus === "Pending" && !isWithdrawalAuthorizer;
+  const showAssignColumn =
+    resolvedDepositStatus === "Pending" ||
+    (tab === "withdrawals" && resolvedDepositStatus === "Pending Authorization");
   const canManualAssign =
-    showAssignColumn && (tab === "deposits" ? depositIsAdmin : withdrawalIsAdmin);
+    showAssignColumn &&
+    !isWithdrawalAuthorizer &&
+    (tab === "deposits" ? depositIsAdmin : withdrawalIsAdmin);
 
   function openProof(r) {
     setProof(r);
@@ -2202,9 +2229,7 @@ function TransactionsContent() {
               className={`${inputCls} w-40`}
             >
               {(tab === "withdrawals"
-                ? isWithdrawalAuthorizer
-                  ? ["Pending", "Completed", "Rejected", "All"]
-                  : ["Pending", "Pending Authorization", "Completed", "Rejected", "All"]
+                ? ["Pending", "Pending Authorization", "Completed", "Rejected", "All"]
                 : ["Pending", "Completed", "Rejected", "All"]
               ).map((s) => (
                 <option key={s} value={s} className="bg-admin-surface">
@@ -2412,7 +2437,7 @@ function TransactionsContent() {
                   </button>
                 ) : null}
               </div>
-              {status === "Pending" ? (
+              {isPendingQueueStatus(status) ? (
                 <p className="mt-1.5 text-[11px] text-slate-500">
                   Keyword search filters pending {tab === "deposits" ? "deposits" : "withdrawals"} only. Use
                   filters below and Search for completed or rejected.
@@ -2434,7 +2459,7 @@ function TransactionsContent() {
               className="flex w-full flex-wrap items-end gap-3 lg:flex-nowrap"
               onKeyDown={handleAdvancedFilterKeyDown}
             >
-              {status === "Pending" ? (
+              {isPendingQueueStatus(status) ? (
                 <FilterField label="Search in" className="min-w-0 flex-1 basis-[8rem]">
                   <select
                     value={advancedSearchIn}
@@ -2646,22 +2671,15 @@ function TransactionsContent() {
                     ) : null}
                     {showAssignColumn ? (
                       <td className="px-3 py-3">
-                        {canManualAssign ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelected([r.id]);
-                              setAssignOpen(true);
-                            }}
-                            className="text-xs font-semibold text-admin-teal underline-offset-2 hover:underline"
-                          >
-                            {r.assigned && r.assigned !== "—" ? r.assigned : "Unassigned"}
-                          </button>
-                        ) : (
-                          <span className="text-xs text-slate-300">
-                            {r.assigned && r.assigned !== "—" ? r.assigned : "Unassigned"}
-                          </span>
-                        )}
+                        <span
+                          className={
+                            r.assigned && r.assigned !== "—"
+                              ? "text-xs font-semibold text-admin-teal"
+                              : "text-xs text-slate-400"
+                          }
+                        >
+                          {r.assigned && r.assigned !== "—" ? r.assigned : "Unassigned"}
+                        </span>
                       </td>
                     ) : null}
                   </tr>
@@ -2780,22 +2798,15 @@ function TransactionsContent() {
                     ) : null}
                     {showAssignColumn ? (
                       <td className="px-3 py-3">
-                        {canManualAssign ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelected([r.id]);
-                              setAssignOpen(true);
-                            }}
-                            className="text-xs font-semibold text-admin-teal underline-offset-2 hover:underline"
-                          >
-                            {r.assigned && r.assigned !== "—" ? r.assigned : "Unassigned"}
-                          </button>
-                        ) : (
-                          <span className="text-xs text-slate-300">
-                            {r.assigned && r.assigned !== "—" ? r.assigned : "Unassigned"}
-                          </span>
-                        )}
+                        <span
+                          className={
+                            r.assigned && r.assigned !== "—"
+                              ? "text-xs font-semibold text-admin-teal"
+                              : "text-xs text-slate-400"
+                          }
+                        >
+                          {r.assigned && r.assigned !== "—" ? r.assigned : "Unassigned"}
+                        </span>
                       </td>
                     ) : null}
                   </tr>
@@ -2863,6 +2874,7 @@ function TransactionsContent() {
       <AssignWithdrawalsModal
         open={assignOpen && tab === "withdrawals"}
         withdrawalIds={selectedWithdrawalDbIds}
+        assignAuthorizers={resolvedDepositStatus === "Pending Authorization"}
         onClose={() => setAssignOpen(false)}
         onAssigned={() => {
           setSelected([]);
