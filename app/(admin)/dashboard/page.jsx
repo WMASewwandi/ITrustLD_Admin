@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import { useAdminPermissions, useCan } from "@/contexts/admin-permissions";
 import { getAdminUser } from "@/lib/auth";
@@ -423,7 +422,6 @@ function StatCardMenu({ canExport, exportOpen, onToggleExport, onCloseMenus, onE
 }
 
 export default function DashboardPage() {
-  const router = useRouter();
   const permissions = useAdminPermissions();
   const canViewDashboard = useCan("view_admin_dashboard");
   const canFilterDeposits = useCan("read_deposit_data");
@@ -447,10 +445,9 @@ export default function DashboardPage() {
   const [depositExportOpen, setDepositExportOpen] = useState(false);
   const [withdrawalExportOpen, setWithdrawalExportOpen] = useState(false);
 
+  const redirectedRef = useRef(false);
   useEffect(() => {
-    if (canViewDashboard) return;
-    // Empty permissions means session is still hydrating — do not bounce to
-    // /dashboard (resolveAdminLandingPath used to default there and loop).
+    if (canViewDashboard || redirectedRef.current) return;
     if (!permissions.length) return;
     const user = getAdminUser();
     const fallback =
@@ -459,8 +456,9 @@ export default function DashboardPage() {
     if (!fallback || fallback === "/dashboard" || fallback.startsWith("/dashboard?")) {
       return;
     }
-    router.replace(fallback);
-  }, [canViewDashboard, permissions, router]);
+    redirectedRef.current = true;
+    window.location.replace(fallback);
+  }, [canViewDashboard, permissions]);
 
   const loadRequestRef = useRef(0);
 

@@ -17,9 +17,12 @@ import { DEFAULT_BOOKMARKS, TOP_NAV } from "@/lib/mock-data";
 import { logoutAdmin } from "@/lib/auth";
 import {
   fetchNavCounts,
+  fetchNavCountsRevision,
   ADMIN_NAV_COUNTS_REFRESH_EVENT,
   NAV_COUNTS_POLL_MS,
+  NAV_COUNTS_REVISION_POLL_MS,
   mergeNavCounts,
+  notifyAdminNavCountsRefresh,
 } from "@/lib/notifications";
 import {
   applyBookmarkBadges,
@@ -29,6 +32,7 @@ import {
 import { useAdminPermissions } from "@/contexts/admin-permissions";
 import { filterBookmarksByPermissions, filterNavByPermissions, hasPermission } from "@/lib/permissions";
 import { hasAnyLoyaltyRead } from "@/lib/loyalty-permissions";
+import { readStoredBookmarks, writeStoredBookmarks } from "@/lib/admin-bookmarks";
 
 function pathMatches(pathname, search, href) {
   if (!href) return false;
@@ -56,6 +60,23 @@ function itemActive(pathname, search, href) {
   return pathMatches(pathname, search, href);
 }
 
+function normalizeBookmarkHref(href) {
+  const raw = String(href || "");
+  const [path, query = ""] = raw.split("?");
+  if (!path) return raw;
+  const params = new URLSearchParams(query);
+  params.delete("page");
+  params.delete("per_page");
+  params.delete("_");
+  const qs = params.toString();
+  return `${path}${qs ? `?${qs}` : ""}`;
+}
+
+function isDefaultBookmarkHref(href) {
+  const key = normalizeBookmarkHref(href);
+  return DEFAULT_BOOKMARKS.some((item) => normalizeBookmarkHref(item.href) === key);
+}
+
 export default function AdminMainNav({ user, roleLabel }) {
   const pathname = usePathname();
   const search = useLocationSearchParams();
@@ -64,10 +85,6 @@ export default function AdminMainNav({ user, roleLabel }) {
   const [navCounts, setNavCounts] = useState(null);
   const navItems = useMemo(
     () => applyNavBadges(filterNavByPermissions(TOP_NAV, permissions), navCounts),
-    [permissions, navCounts]
-  );
-  const defaultBookmarks = useMemo(
-    () => applyBookmarkBadges(filterBookmarksByPermissions(DEFAULT_BOOKMARKS, permissions), navCounts),
     [permissions, navCounts]
   );
   const notifItems = useMemo(() => {
@@ -84,8 +101,20 @@ export default function AdminMainNav({ user, roleLabel }) {
   const [mobile, setMobile] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
-  const [bookmarks, setBookmarks] = useState(defaultBookmarks);
+  const [bookmarks, setBookmarks] = useState([]);
+  const [bookmarksReady, setBookmarksReady] = useState(false);
+  const bookmarksHydratedRef = useRef(false);
   const wrapRef = useRef(null);
+  const visibleBookmarks = useMemo(() => {
+    const allowed = filterBookmarksByPermissions(bookmarks, permissions);
+    const seen = new Set();
+    return allowed.filter((item) => {
+      const key = normalizeBookmarkHref(item.href);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [bookmarks, permissions]);
 
   useEffect(() => {
     setOpen(null);
@@ -107,30 +136,73 @@ export default function AdminMainNav({ user, roleLabel }) {
   }, []);
 
   useEffect(() => {
-    setBookmarks((prev) => {
-      if (prev.length === 0) return defaultBookmarks;
-      const badgeByHref = Object.fromEntries(defaultBookmarks.map((b) => [b.href, b.badge]));
-      return prev.map((b) => ({
-        ...b,
-        badge: badgeByHref[b.href] ?? b.badge,
-      }));
-    });
-  }, [defaultBookmarks]);
+    if (bookmarksHydratedRef.current) return;
+    const stored = readStoredBookmarks();
+    if (stored) {
+      setBookmarks(stored);
+      bookmarksHydratedRef.current = true;
+      setBookmarksReady(true);
+      return;
+    }
+    if (!permissions.length) return;
+    setBookmarks(filterBookmarksByPermissions(DEFAULT_BOOKMARKS, permissions));
+    bookmarksHydratedRef.current = true;
+    setBookmarksReady(true);
+  }, [permissions]);
+
+  useEffect(() => {
+    if (!bookmarksReady) return;
+    writeStoredBookmarks(bookmarks);
+  }, [bookmarks, bookmarksReady]);
+
+  useEffect(() => {
+    if (!bookmarksReady) return;
+    setBookmarks((prev) => applyBookmarkBadges(prev, navCounts));
+  }, [navCounts, bookmarksReady]);
 
   useEffect(() => {
     let cancelled = false;
+    let controller = null;
+    let revisionController = null;
+    let requestId = 0;
+    let lastRevision = null;
 
     async function loadCounts() {
+      const id = ++requestId;
+      controller?.abort();
+      controller = new AbortController();
       try {
-        const res = await fetchNavCounts();
-        if (!cancelled) setNavCounts(res.counts ?? null);
-      } catch {
-        if (!cancelled) setNavCounts(null);
+        const res = await fetchNavCounts({ signal: controller.signal });
+        if (!cancelled && id === requestId) {
+          if (typeof res.revision === "number") lastRevision = res.revision;
+          setNavCounts(res.counts ?? null);
+        }
+      } catch (err) {
+        if (err?.name === "AbortError") return;
+        if (!cancelled && id === requestId) setNavCounts(null);
+      }
+    }
+
+    async function pollRevision() {
+      revisionController?.abort();
+      revisionController = new AbortController();
+      try {
+        const res = await fetchNavCountsRevision({ signal: revisionController.signal });
+        const nextRevision = res?.revision;
+        if (cancelled || typeof nextRevision !== "number") return;
+        if (lastRevision == null) return;
+        if (nextRevision !== lastRevision) {
+          lastRevision = nextRevision;
+          loadCounts();
+        }
+      } catch (err) {
+        if (err?.name === "AbortError") return;
       }
     }
 
     loadCounts();
     const intervalId = window.setInterval(loadCounts, NAV_COUNTS_POLL_MS);
+    const revisionIntervalId = window.setInterval(pollRevision, NAV_COUNTS_REVISION_POLL_MS);
 
     function handleVisibilityChange() {
       if (document.visibilityState === "visible") {
@@ -156,7 +228,10 @@ export default function AdminMainNav({ user, roleLabel }) {
 
     return () => {
       cancelled = true;
+      controller?.abort();
+      revisionController?.abort();
       window.clearInterval(intervalId);
+      window.clearInterval(revisionIntervalId);
       window.removeEventListener(ADMIN_NAV_COUNTS_REFRESH_EVENT, handleNavCountsRefresh);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("focus", handleFocus);
@@ -168,21 +243,38 @@ export default function AdminMainNav({ user, roleLabel }) {
     router.replace("/login");
   }
 
-  function toggleBookmark() {
-    const href = `${pathname}${search.toString() ? `?${search}` : ""}`;
-    const exists = bookmarks.some((b) => b.href === href);
-    if (exists) {
-      setBookmarks((prev) => prev.filter((b) => b.href !== href));
-      return;
-    }
-    const label =
-      navItems.find((c) => categoryActive(pathname, search, c))?.label || "Page";
-    setBookmarks((prev) => [...prev, { label, href, badge: null }]);
+  function currentPageHref() {
+    return normalizeBookmarkHref(`${pathname}${search.toString() ? `?${search}` : ""}`);
   }
 
+  function unpinBookmark(href) {
+    if (isDefaultBookmarkHref(href)) return;
+    const key = normalizeBookmarkHref(href);
+    setBookmarks((prev) => prev.filter((b) => normalizeBookmarkHref(b.href) !== key));
+  }
+
+  function toggleBookmark() {
+    const href = currentPageHref();
+    setBookmarks((prev) => {
+      if (prev.some((b) => normalizeBookmarkHref(b.href) === href)) {
+        if (isDefaultBookmarkHref(href)) return prev;
+        return prev.filter((b) => normalizeBookmarkHref(b.href) !== href);
+      }
+      const preset = DEFAULT_BOOKMARKS.find((b) => normalizeBookmarkHref(b.href) === href);
+      const label =
+        preset?.label ||
+        navItems.find((c) => categoryActive(pathname, search, c))?.label ||
+        "Page";
+      return [...prev, { label, href, permission: preset?.permission, badge: null }];
+    });
+  }
+
+  const currentHref = currentPageHref();
   const currentBookmarked = bookmarks.some(
-    (b) => b.href === `${pathname}${search.toString() ? `?${search}` : ""}`
+    (b) => normalizeBookmarkHref(b.href) === currentHref
   );
+  const currentIsDefaultPin = isDefaultBookmarkHref(currentHref);
+  const canUnpinCurrent = currentBookmarked && !currentIsDefaultPin;
 
   return (
     <header className="admin-topbar z-40 border-b border-white/10 text-white" ref={wrapRef}>
@@ -201,21 +293,19 @@ export default function AdminMainNav({ user, roleLabel }) {
         </div>
 
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2 py-1.5 sm:px-3">
-          {bookmarks.length === 0 ? (
+          {visibleBookmarks.length === 0 ? (
             <p className="px-2 text-[11px] text-white/40">No bookmarks yet — pin a page to jump back fast.</p>
           ) : (
-            bookmarks.map((b) => {
-              const active = `${pathname}${search.toString() ? `?${search}` : ""}` === b.href;
-              return (
-                <Link
-                  key={b.href}
-                  href={b.href}
-                  className={`group inline-flex shrink-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition ${
-                    active
-                      ? "bg-white/12 text-white/90"
-                      : "text-white/70 hover:bg-white/[0.07] hover:text-white"
-                  }`}
-                >
+            visibleBookmarks.map((b) => {
+              const active = currentHref === normalizeBookmarkHref(b.href);
+              const canUnpin = !isDefaultBookmarkHref(b.href);
+              const chipClass = `group inline-flex shrink-0 items-center gap-2 rounded-lg py-1 text-[12px] font-medium transition ${
+                active
+                  ? "bg-white/12 text-white/90"
+                  : "text-white/70 hover:bg-white/[0.07] hover:text-white"
+              } ${canUnpin ? "pl-2.5 pr-1" : "px-2.5"}`;
+              const chipInner = (
+                <>
                   <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-white/90" : "bg-white/30 group-hover:bg-white/60"}`} />
                   <span>{b.label}</span>
                   {b.badge ? (
@@ -223,7 +313,30 @@ export default function AdminMainNav({ user, roleLabel }) {
                       {b.badge}
                     </span>
                   ) : null}
-                </Link>
+                </>
+              );
+              if (!canUnpin) {
+                return (
+                  <Link key={b.href} href={b.href} className={chipClass}>
+                    {chipInner}
+                  </Link>
+                );
+              }
+              return (
+                <span key={b.href} className={chipClass}>
+                  <Link href={b.href} className="inline-flex items-center gap-2">
+                    {chipInner}
+                  </Link>
+                  <button
+                    type="button"
+                    title={`Unpin ${b.label}`}
+                    aria-label={`Unpin ${b.label}`}
+                    onClick={() => unpinBookmark(b.href)}
+                    className="rounded-md p-1 text-white/40 transition hover:bg-white/10 hover:text-white"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
               );
             })
           )}
@@ -233,15 +346,24 @@ export default function AdminMainNav({ user, roleLabel }) {
           <button
             type="button"
             onClick={toggleBookmark}
-            title={currentBookmarked ? "Remove bookmark" : "Bookmark this page"}
+            disabled={currentBookmarked && currentIsDefaultPin}
+            title={
+              canUnpinCurrent
+                ? "Unpin this page"
+                : currentBookmarked
+                  ? "Default bookmark"
+                  : "Pin this page"
+            }
             className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition ${
               currentBookmarked
                 ? "bg-white/12 text-white/90"
                 : "text-white/55 hover:bg-white/[0.07] hover:text-white"
-            }`}
+            } ${currentBookmarked && currentIsDefaultPin ? "cursor-default" : ""}`}
           >
             <Bookmark className={`h-3.5 w-3.5 ${currentBookmarked ? "fill-white/90" : ""}`} />
-            <span className="hidden sm:inline">{currentBookmarked ? "Pinned" : "Pin page"}</span>
+            <span className="hidden sm:inline">
+              {canUnpinCurrent ? "Unpin" : currentBookmarked ? "Pinned" : "Pin page"}
+            </span>
           </button>
         </div>
       </div>
@@ -250,7 +372,13 @@ export default function AdminMainNav({ user, roleLabel }) {
         <div className="relative z-10 flex shrink-0 items-center gap-3">
           <button
             type="button"
-            onClick={() => setMobile((v) => !v)}
+            onClick={() => {
+              setMobile((v) => {
+                const next = !v;
+                if (next) notifyAdminNavCountsRefresh();
+                return next;
+              });
+            }}
             className="rounded-xl border border-white/15 bg-black/25 p-2.5 text-white nav:hidden"
             aria-label="Open menu"
           >
@@ -294,7 +422,11 @@ export default function AdminMainNav({ user, roleLabel }) {
                 <div key={cat.id} className="relative">
                   <button
                     type="button"
-                    onClick={() => setOpen(isOpen ? null : cat.id)}
+                    onClick={() => {
+                      const nextOpen = isOpen ? null : cat.id;
+                      setOpen(nextOpen);
+                      if (nextOpen) notifyAdminNavCountsRefresh();
+                    }}
                     className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 py-2 text-[12.5px] font-medium transition ${
                       active
                         ? "bg-white/10 font-semibold text-white/90 shadow-[inset_0_-2px_0_0_rgba(255,255,255,0.9)]"
@@ -363,7 +495,11 @@ export default function AdminMainNav({ user, roleLabel }) {
             <button
               type="button"
               onClick={() => {
-                setNotifOpen((v) => !v);
+                setNotifOpen((v) => {
+                  const next = !v;
+                  if (next) notifyAdminNavCountsRefresh();
+                  return next;
+                });
                 setProfileOpen(false);
                 setOpen(null);
               }}
