@@ -18,7 +18,7 @@ import {
   resolveDashboardFilterLabel,
 } from "@/lib/dashboard";
 import { TOP_NAV } from "@/lib/mock-data";
-import { getFirstAllowedNavHref, resolveAdminLandingPath } from "@/lib/permissions";
+import { resolvePostLoginHref } from "@/lib/permissions";
 import {
   Banknote,
   Briefcase,
@@ -450,9 +450,7 @@ export default function DashboardPage() {
     if (canViewDashboard || redirectedRef.current) return;
     if (!permissions.length) return;
     const user = getAdminUser();
-    const fallback =
-      getFirstAllowedNavHref(TOP_NAV, permissions) ||
-      resolveAdminLandingPath(user?.roles ?? [], permissions);
+    const fallback = resolvePostLoginHref(user?.roles ?? [], permissions, TOP_NAV);
     if (!fallback || fallback === "/dashboard" || fallback.startsWith("/dashboard?")) {
       return;
     }

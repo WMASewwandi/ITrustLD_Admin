@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getAdminUser, hasAdminSession } from "@/lib/auth";
-import { getFirstAllowedNavHref, resolveAdminLandingPath } from "@/lib/permissions";
+import { resolvePostLoginHref } from "@/lib/permissions";
 import { TOP_NAV } from "@/lib/mock-data";
 
 export default function HomePage() {
@@ -17,9 +17,7 @@ export default function HomePage() {
     const user = getAdminUser();
     const permissions = user?.permissions ?? [];
     const roles = user?.roles ?? [];
-    const landing =
-      getFirstAllowedNavHref(TOP_NAV, permissions) ||
-      resolveAdminLandingPath(roles, permissions);
+    const landing = resolvePostLoginHref(roles, permissions, TOP_NAV);
     router.replace(landing || "/login");
   }, [router]);
 
