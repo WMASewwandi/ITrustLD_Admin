@@ -61,6 +61,21 @@ function itemActive(pathname, search, href) {
   return pathMatches(pathname, search, href);
 }
 
+function prefetchAdminHref(router, href) {
+  const path = String(href || "").split("?")[0];
+  if (!path) return;
+  router.prefetch(path);
+}
+
+function prefetchNavCategory(router, cat) {
+  if (cat?.href) prefetchAdminHref(router, cat.href);
+  for (const group of cat?.groups || []) {
+    for (const item of group.items || []) {
+      prefetchAdminHref(router, item.href);
+    }
+  }
+}
+
 function normalizeBookmarkHref(href) {
   const raw = String(href || "");
   const [path, query = ""] = raw.split("?");
@@ -378,7 +393,10 @@ export default function AdminMainNav({ user, roleLabel }) {
             onClick={() => {
               setMobile((v) => {
                 const next = !v;
-                if (next) notifyAdminNavCountsRefresh();
+                if (next) {
+                  navItems.forEach((cat) => prefetchNavCategory(router, cat));
+                  notifyAdminNavCountsRefresh();
+                }
                 return next;
               });
             }}
@@ -428,7 +446,10 @@ export default function AdminMainNav({ user, roleLabel }) {
                     onClick={() => {
                       const nextOpen = isOpen ? null : cat.id;
                       setOpen(nextOpen);
-                      if (nextOpen) notifyAdminNavCountsRefresh();
+                      if (nextOpen) {
+                        prefetchNavCategory(router, cat);
+                        notifyAdminNavCountsRefresh();
+                      }
                     }}
                     className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 py-2 text-[12.5px] font-medium transition ${
                       active
