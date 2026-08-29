@@ -306,10 +306,30 @@ function ProofSummaryFields({ proof, isDeposit = false }) {
       ) : (
         <ProofTextField label="Account" value={proof.account} />
       )}
-      {proof.status === "Pending Authorization" ? (
+      {proof.status === "Pending Authorization" ||
+      proof.status === "Completed" ||
+      proof.status === "Rejected" ? (
         <ProofTextField
           label="Updated By"
-          value={proof.admin && proof.admin !== "NA" ? proof.admin : "—"}
+          value={
+            proof.updatedBy && proof.updatedBy !== "—"
+              ? proof.updatedBy
+              : proof.admin && proof.admin !== "NA"
+                ? proof.admin
+                : "—"
+          }
+        />
+      ) : null}
+      {proof.status === "Completed" || proof.status === "Rejected" ? (
+        <ProofTextField
+          label="Authorized By"
+          value={
+            proof.authorizedBy && proof.authorizedBy !== "—"
+              ? proof.authorizedBy
+              : proof.admin && proof.admin !== "NA"
+                ? proof.admin
+                : "—"
+          }
         />
       ) : null}
     </dl>
@@ -1666,9 +1686,16 @@ function TransactionsContent() {
     resolvedDepositStatus === "Pending" ||
     (tab === "withdrawals" && resolvedDepositStatus === "Pending Authorization");
   const showUpdatedByColumn =
-    tab === "withdrawals" && resolvedDepositStatus === "Pending Authorization";
+    tab === "withdrawals" &&
+    (resolvedDepositStatus === "Pending Authorization" ||
+      resolvedDepositStatus === "Completed" ||
+      resolvedDepositStatus === "Rejected");
+  const showAuthorizedByColumn =
+    tab === "withdrawals" &&
+    (resolvedDepositStatus === "Completed" || resolvedDepositStatus === "Rejected");
   const showAdminColumn =
-    resolvedDepositStatus === "Completed" || resolvedDepositStatus === "Rejected";
+    tab === "deposits" &&
+    (resolvedDepositStatus === "Completed" || resolvedDepositStatus === "Rejected");
   const canManualAssign =
     showAssignColumn &&
     !isWithdrawalAuthorizer &&
@@ -2602,6 +2629,7 @@ function TransactionsContent() {
                   ) : null}
                   {showAssignColumn ? <th className="px-3 py-3">Assigned To</th> : null}
                   {showUpdatedByColumn ? <th className="px-3 py-3">Updated By</th> : null}
+                  {showAuthorizedByColumn ? <th className="px-3 py-3">Authorized By</th> : null}
                   {showAdminColumn ? <th className="px-3 py-3">Admin</th> : null}
                 </tr>
               </thead>
@@ -2705,7 +2733,22 @@ function TransactionsContent() {
                     {showUpdatedByColumn ? (
                       <td className="px-3 py-3">
                         <span className="text-xs text-slate-200">
-                          {r.admin && r.admin !== "NA" ? r.admin : "—"}
+                          {r.updatedBy && r.updatedBy !== "—"
+                            ? r.updatedBy
+                            : r.admin && r.admin !== "NA"
+                              ? r.admin
+                              : "—"}
+                        </span>
+                      </td>
+                    ) : null}
+                    {showAuthorizedByColumn ? (
+                      <td className="px-3 py-3">
+                        <span className="text-xs text-slate-200">
+                          {r.authorizedBy && r.authorizedBy !== "—"
+                            ? r.authorizedBy
+                            : r.admin && r.admin !== "NA"
+                              ? r.admin
+                              : "—"}
                         </span>
                       </td>
                     ) : null}
@@ -2720,7 +2763,7 @@ function TransactionsContent() {
                 ))}
                 {shown.length === 0 ? (
                   <tr>
-                    <td colSpan={13 + (resolvedDepositStatus === "Rejected" ? 1 : 0) + (showAssignColumn ? 1 : 0) + (showUpdatedByColumn ? 1 : 0) + (showAdminColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
+                    <td colSpan={13 + (resolvedDepositStatus === "Rejected" ? 1 : 0) + (showAssignColumn ? 1 : 0) + (showUpdatedByColumn ? 1 : 0) + (showAuthorizedByColumn ? 1 : 0) + (showAdminColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
                       {listLoading
                         ? `Loading ${tab === "deposits" ? "deposits" : "withdrawals"}…`
                         : "No Results Found"}
@@ -3093,9 +3136,10 @@ function TransactionsContent() {
                   Same platform method and Plat. ID created today (Sri Lanka calendar day).
                 </p>
                 <div className="overflow-x-auto rounded-xl border border-white/10">
-                  <table className="min-w-[640px] w-full text-left text-sm">
+                  <table className="min-w-[760px] w-full text-left text-sm">
                     <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                       <tr>
+                        <th className="px-3 py-2">Date</th>
                         <th className="px-3 py-2">Tran. ID</th>
                         <th className="px-3 py-2">Platform ID</th>
                         <th className="px-3 py-2">Amount</th>
@@ -3107,13 +3151,16 @@ function TransactionsContent() {
                     <tbody>
                       {similarTodayLoading ? (
                         <tr>
-                          <td colSpan={6} className="px-3 py-6 text-center text-slate-400">
+                          <td colSpan={7} className="px-3 py-6 text-center text-slate-400">
                             Loading same-day transactions…
                           </td>
                         </tr>
                       ) : similarToday.length ? (
                         similarToday.map((r) => (
                           <tr key={r.id} className="border-t border-white/10 text-slate-300">
+                            <td className="whitespace-nowrap px-3 py-2">
+                              <DateTimeCell value={r.createdAt || r.date} />
+                            </td>
                             <td className="px-3 py-2">
                               <CopyCell value={r.id} />
                             </td>
@@ -3121,7 +3168,7 @@ function TransactionsContent() {
                               <CopyCell value={r.platformId} />
                             </td>
                             <td className="whitespace-nowrap px-3 py-2">
-                              {r.cashoutAmt || r.deposited || r.amount}
+                              {r.clientPay || r.cashoutAmt || r.amount}
                             </td>
                             <td className="whitespace-nowrap px-3 py-2">{r.method}</td>
                             <td className="px-3 py-2">
@@ -3145,7 +3192,7 @@ function TransactionsContent() {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={6} className="px-3 py-6 text-center text-slate-400">
+                          <td colSpan={7} className="px-3 py-6 text-center text-slate-400">
                             No same-day transactions for this platform ID.
                           </td>
                         </tr>
