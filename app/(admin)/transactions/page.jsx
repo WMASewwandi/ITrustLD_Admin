@@ -1667,6 +1667,8 @@ function TransactionsContent() {
     (tab === "withdrawals" && resolvedDepositStatus === "Pending Authorization");
   const showUpdatedByColumn =
     tab === "withdrawals" && resolvedDepositStatus === "Pending Authorization";
+  const showAdminColumn =
+    resolvedDepositStatus === "Completed" || resolvedDepositStatus === "Rejected";
   const canManualAssign =
     showAssignColumn &&
     !isWithdrawalAuthorizer &&
@@ -2182,7 +2184,10 @@ function TransactionsContent() {
       <Breadcrumb
         items={[
           { label: "Transactions", href: "/transactions?tab=deposits&status=Pending" },
-          { label: tab === "deposits" ? "Deposits" : "Withdrawals", href: `/transactions?tab=${tab}&status=${status}` },
+          {
+            label: tab === "deposits" ? "Deposits" : "Withdrawals",
+            href: `/transactions?tab=${tab}&status=${encodeURIComponent(status || "Pending")}`,
+          },
           { label: title },
         ]}
       />
@@ -2597,6 +2602,7 @@ function TransactionsContent() {
                   ) : null}
                   {showAssignColumn ? <th className="px-3 py-3">Assigned To</th> : null}
                   {showUpdatedByColumn ? <th className="px-3 py-3">Updated By</th> : null}
+                  {showAdminColumn ? <th className="px-3 py-3">Admin</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -2703,11 +2709,18 @@ function TransactionsContent() {
                         </span>
                       </td>
                     ) : null}
+                    {showAdminColumn ? (
+                      <td className="px-3 py-3">
+                        <span className="text-xs text-slate-200">
+                          {r.admin && r.admin !== "NA" ? r.admin : "—"}
+                        </span>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
                 {shown.length === 0 ? (
                   <tr>
-                    <td colSpan={13 + (resolvedDepositStatus === "Rejected" ? 1 : 0) + (showAssignColumn ? 1 : 0) + (showUpdatedByColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
+                    <td colSpan={13 + (resolvedDepositStatus === "Rejected" ? 1 : 0) + (showAssignColumn ? 1 : 0) + (showUpdatedByColumn ? 1 : 0) + (showAdminColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
                       {listLoading
                         ? `Loading ${tab === "deposits" ? "deposits" : "withdrawals"}…`
                         : "No Results Found"}
@@ -2743,6 +2756,7 @@ function TransactionsContent() {
                     <th className="px-3 py-3">Rejected Reason</th>
                   ) : null}
                   {showAssignColumn ? <th className="px-3 py-3">Assigned To</th> : null}
+                  {showAdminColumn ? <th className="px-3 py-3">Admin</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -2830,11 +2844,18 @@ function TransactionsContent() {
                         </span>
                       </td>
                     ) : null}
+                    {showAdminColumn ? (
+                      <td className="px-3 py-3">
+                        <span className="text-xs text-slate-200">
+                          {r.admin && r.admin !== "NA" ? r.admin : "—"}
+                        </span>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
                 {shown.length === 0 ? (
                   <tr>
-                    <td colSpan={12 + (resolvedDepositStatus === "Rejected" ? 1 : 0) + (showAssignColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
+                    <td colSpan={12 + (resolvedDepositStatus === "Rejected" ? 1 : 0) + (showAssignColumn ? 1 : 0) + (showAdminColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
                       {listLoading
                         ? `Loading ${tab === "deposits" ? "deposits" : "withdrawals"}…`
                         : "No Results Found"}
