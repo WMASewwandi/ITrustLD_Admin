@@ -306,6 +306,12 @@ function ProofSummaryFields({ proof, isDeposit = false }) {
       ) : (
         <ProofTextField label="Account" value={proof.account} />
       )}
+      {proof.status === "Pending Authorization" ? (
+        <ProofTextField
+          label="Updated By"
+          value={proof.admin && proof.admin !== "NA" ? proof.admin : "—"}
+        />
+      ) : null}
     </dl>
   );
 }
@@ -1659,6 +1665,8 @@ function TransactionsContent() {
   const showAssignColumn =
     resolvedDepositStatus === "Pending" ||
     (tab === "withdrawals" && resolvedDepositStatus === "Pending Authorization");
+  const showUpdatedByColumn =
+    tab === "withdrawals" && resolvedDepositStatus === "Pending Authorization";
   const canManualAssign =
     showAssignColumn &&
     !isWithdrawalAuthorizer &&
@@ -2588,6 +2596,7 @@ function TransactionsContent() {
                     <th className="px-3 py-3">Rejected Reason</th>
                   ) : null}
                   {showAssignColumn ? <th className="px-3 py-3">Assigned To</th> : null}
+                  {showUpdatedByColumn ? <th className="px-3 py-3">Updated By</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -2687,11 +2696,18 @@ function TransactionsContent() {
                         </span>
                       </td>
                     ) : null}
+                    {showUpdatedByColumn ? (
+                      <td className="px-3 py-3">
+                        <span className="text-xs text-slate-200">
+                          {r.admin && r.admin !== "NA" ? r.admin : "—"}
+                        </span>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
                 {shown.length === 0 ? (
                   <tr>
-                    <td colSpan={13 + (resolvedDepositStatus === "Rejected" ? 1 : 0) + (showAssignColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
+                    <td colSpan={13 + (resolvedDepositStatus === "Rejected" ? 1 : 0) + (showAssignColumn ? 1 : 0) + (showUpdatedByColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
                       {listLoading
                         ? `Loading ${tab === "deposits" ? "deposits" : "withdrawals"}…`
                         : "No Results Found"}
