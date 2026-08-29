@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useLocationSearchParams } from "@/lib/location-search";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectModal from "@/components/admin/reject-modal";
@@ -131,6 +132,9 @@ function LoyaltyDetailModal({
                     platformDetail={record.platformDetail}
                   />
                 </DetailField>
+                {record.status === "Completed" || record.status === "Rejected" ? (
+                  <DetailField label="Admin">{record.admin || "—"}</DetailField>
+                ) : null}
               </>
             ) : null}
             {tab === "bonus" ? (
@@ -284,6 +288,7 @@ function LoyaltyDetailModal({
 
 function LoyaltyContent() {
   const params = useLocationSearchParams();
+  const router = useRouter();
   const permissions = useAdminPermissions();
   const visibleTabs = useMemo(
     () => TABS.filter((t) => hasLoyaltyTabRead(permissions, t.id)),
@@ -374,6 +379,15 @@ function LoyaltyContent() {
     setTab(nextTab);
     setStatus(params.get("status") || (nextTab === "management" || nextTab === "gifts" ? "All" : "Pending"));
   }, [params]);
+
+  function writeLoyaltyUrl(nextTab, nextStatus) {
+    const params = new URLSearchParams();
+    params.set("tab", nextTab);
+    if (nextStatus && nextStatus !== "All") {
+      params.set("status", nextStatus);
+    }
+    router.replace(`/loyalty?${params.toString()}`, { scroll: false });
+  }
 
   const loadOrders = useCallback(async () => {
     setOrdersLoading(true);
@@ -606,6 +620,9 @@ function LoyaltyContent() {
             ? "Gift Management"
           : "Loyalty Management";
 
+  const showLoyaltyAdminColumn =
+    status === "Completed" || status === "Rejected" || status === "Claimed";
+
   async function handleOrderStatusUpdate(id, nextStatus) {
     setOrderStatusBusy(true);
     setOrderActionError("");
@@ -834,8 +851,10 @@ function LoyaltyContent() {
             key={t.id}
             type="button"
             onClick={() => {
+              const nextStatus = t.id === "management" || t.id === "gifts" ? "All" : "Pending";
               setTab(t.id);
-              setStatus(t.id === "management" || t.id === "gifts" ? "All" : "Pending");
+              setStatus(nextStatus);
+              writeLoyaltyUrl(t.id, nextStatus);
             }}
             className={`rounded-lg px-3.5 py-2.5 text-sm font-semibold transition ${
               tab === t.id
@@ -889,7 +908,10 @@ function LoyaltyContent() {
                     <button
                       key={value}
                       type="button"
-                      onClick={() => setStatus(value)}
+                      onClick={() => {
+                        setStatus(value);
+                        writeLoyaltyUrl(tab, value);
+                      }}
                       className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                         status === value
                           ? "bg-teal-600 text-white"
@@ -1062,6 +1084,7 @@ function LoyaltyContent() {
                     <th className="px-3 py-3">Plat. ID / Email</th>
                     <th className="px-3 py-3">Action</th>
                     <th className="px-3 py-3">Status</th>
+                    {showLoyaltyAdminColumn ? <th className="px-3 py-3">Admin</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -1188,11 +1211,16 @@ function LoyaltyContent() {
                           title="View details and approve / reject"
                         />
                       </td>
+                      {showLoyaltyAdminColumn ? (
+                        <td className="px-3 py-3 text-xs text-slate-200">
+                          {r.admin && r.admin !== "NA" ? r.admin : "—"}
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="px-4 py-14 text-center text-slate-400">
+                      <td colSpan={10 + (showLoyaltyAdminColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
                         No Results Found
                       </td>
                     </tr>
@@ -1365,7 +1393,7 @@ function LoyaltyContent() {
                     <th className="px-3 py-3">Voucher Token</th>
                     <th className="px-3 py-3">Rejection Reason</th>
                     <th className="px-3 py-3">Rejected Date</th>
-                    <th className="px-3 py-3">Rejected By</th>
+                    <th className="px-3 py-3">Admin</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1436,7 +1464,7 @@ function LoyaltyContent() {
                     <th className="px-3 py-3">Payment Method</th>
                     <th className="px-3 py-3">Voucher Token</th>
                     <th className="px-3 py-3">Claimed Date</th>
-                    <th className="px-3 py-3">Claimed By</th>
+                    <th className="px-3 py-3">Admin</th>
                   </tr>
                 </thead>
                 <tbody>
