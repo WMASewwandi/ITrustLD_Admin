@@ -6,9 +6,10 @@ import { useLocationSearchParams } from "@/lib/location-search";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectModal from "@/components/admin/reject-modal";
 import RejectReasonPanel from "@/components/admin/reject-reason-panel";
-import { kycRejectReasonsForField } from "@/lib/kyc-reject-reasons";
+import { useRejectReasonOptions } from "@/lib/reject-reasons";
 import { CUSTOMER_BAN_REASONS } from "@/lib/ban-reasons";
 import CopyCell, { FilterField, FormError, inputCls } from "@/components/admin/queue-ui";
+import AdminPagination from "@/components/admin/admin-pagination";
 import { fetchCustomers, fetchCustomerKycDocuments, fetchKycDocumentBlob, approveCustomerKyc, rejectCustomerKyc, verifyCustomerMobile, banCustomer, unbanCustomer, banMultipleCustomers, updateCustomerPartner, sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
 import { EmailSendModal, SmsSendModal } from "@/components/admin/customer-message-modals";
 import { notifyAdminNavCountsRefresh } from "@/lib/notifications";
@@ -16,8 +17,6 @@ import { useCan } from "@/contexts/admin-permissions";
 import {
   Ban,
   Check,
-  ChevronLeft,
-  ChevronRight,
   FileImage,
   FileText,
   Loader2,
@@ -214,6 +213,9 @@ function KycDocsModal({ open, user, field, canActOnKyc, onClose, onApprove, onRe
   const canApprove = canActOnKyc && (status === "Pending" || status === "Rejected");
   const canReject = canActOnKyc && (status === "Pending" || status === "Verified");
   const canAct = canApprove || canReject;
+  const { reasons: kycRejectReasons } = useRejectReasonOptions(
+    field === "address" ? "kyc_address" : "kyc_nic",
+  );
 
   useEffect(() => {
     if (!open || !user?.accountHolderId || !field) {
@@ -462,7 +464,7 @@ function KycDocsModal({ open, user, field, canActOnKyc, onClose, onApprove, onRe
           {rejectOpen && canReject ? (
             <RejectReasonPanel
               className="mt-3"
-              reasons={kycRejectReasonsForField(field)}
+              reasons={kycRejectReasons}
               onCancel={() => setRejectOpen(false)}
               onConfirm={async (reason) => {
                 setActing(true);
@@ -1295,40 +1297,7 @@ function UsersContent() {
             Showing {filtered.length === 0 ? 0 : start + 1} to {Math.min(start + perPage, filtered.length)} of{" "}
             {filtered.length} entries
           </p>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-400 disabled:opacity-35"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              Previous
-            </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .slice(0, 5)
-              .map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setPage(n)}
-                  className={`min-w-8 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
-                    page === n ? "bg-admin-teal text-white" : "border border-white/10 text-slate-400"
-                  }`}
-                >
-                  {n}
-                </button>
-              ))}
-            <button
-              type="button"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-400 disabled:opacity-35"
-            >
-              Next
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
+          <AdminPagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </div>
       </section>
 

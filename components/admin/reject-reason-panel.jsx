@@ -1,22 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, X } from "lucide-react";
 import { FormError } from "@/components/admin/queue-ui";
-
-export const REJECT_REASONS = [
-  "Payment slip unclear",
-  "Account ID mismatch",
-  "Insufficient funds / points",
-  "Duplicate request",
-  "Fraud suspected",
-  "Custom",
-];
-
-function isCustomReason(value) {
-  const key = String(value || "").trim().toLowerCase();
-  return key === "custom" || key === "custom message";
-}
+import {
+  CUSTOM_REJECT_REASON,
+  isCustomRejectReason,
+  withCustomRejectOption,
+} from "@/lib/reject-reasons";
 
 function RejectReasonForm({
   onConfirm,
@@ -26,14 +17,19 @@ function RejectReasonForm({
   compact = false,
   error = "",
   busy = false,
-  reasons = REJECT_REASONS,
+  reasons,
 }) {
-  const options = reasons.length ? reasons : REJECT_REASONS;
-  const [reason, setReason] = useState(options[0]);
+  const options = withCustomRejectOption(reasons);
+  const [reason, setReason] = useState(options[0] || CUSTOM_REJECT_REASON);
   const [custom, setCustom] = useState("");
 
+  useEffect(() => {
+    setReason(options[0] || CUSTOM_REJECT_REASON);
+    setCustom("");
+  }, [options[0]]);
+
   function submit() {
-    const finalReason = isCustomReason(reason) ? custom.trim() : reason;
+    const finalReason = isCustomRejectReason(reason) ? custom.trim() : reason;
     if (!finalReason) return;
     onConfirm?.(finalReason);
   }
@@ -60,7 +56,7 @@ function RejectReasonForm({
           </option>
         ))}
       </select>
-      {isCustomReason(reason) ? (
+      {isCustomRejectReason(reason) ? (
         <textarea
           value={custom}
           onChange={(e) => setCustom(e.target.value)}
@@ -78,7 +74,7 @@ function RejectReasonForm({
         <button
           type="button"
           onClick={submit}
-          disabled={busy || (isCustomReason(reason) && !custom.trim())}
+          disabled={busy || (isCustomRejectReason(reason) && !custom.trim())}
           className="inline-flex items-center gap-1.5 rounded-xl bg-admin-danger px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-40"
         >
           <AlertTriangle className="h-4 w-4" />

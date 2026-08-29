@@ -8,6 +8,7 @@ import RejectModal from "@/components/admin/reject-modal";
 import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
 import RejectReasonPanel from "@/components/admin/reject-reason-panel";
 import CopyCell, { FilterField, IdNameCell, PlatformIdCell, StatusPill, inputCls } from "@/components/admin/queue-ui";
+import AdminPagination from "@/components/admin/admin-pagination";
 import { fetchLoyaltyOrders, updateLoyaltyOrderStatus } from "@/lib/loyalty-orders";
 import { fetchBonusClaims, updateBonusClaimStatus } from "@/lib/loyalty-bonus-claims";
 import {
@@ -20,7 +21,7 @@ import { useAdminPermissions } from "@/contexts/admin-permissions";
 import { hasLoyaltyTabRead, hasLoyaltyTabUpdate, hasLoyaltyGiftsCatalogUpdate } from "@/lib/loyalty-permissions";
 import LoyaltyManagementPanel from "@/components/admin/loyalty-management-panel";
 import LoyaltyGiftPanel from "@/components/admin/loyalty-gift-panel";
-import { VOUCHER_CLAIM_REJECT_REASONS } from "@/lib/voucher-reject-reasons";
+import { useRejectReasonOptions } from "@/lib/reject-reasons";
 import { Check, RefreshCw, Search, X } from "lucide-react";
 
 const TABS = [
@@ -295,6 +296,7 @@ function LoyaltyContent() {
     [permissions],
   );
   const [tab, setTab] = useState(params.get("tab") || "orders");
+  const { reasons: voucherRejectReasons } = useRejectReasonOptions("voucher_claim");
   const [status, setStatus] = useState(params.get("status") || "Pending");
   const [q, setQ] = useState("");
   const [duration, setDuration] = useState("");
@@ -1665,26 +1667,12 @@ function LoyaltyContent() {
                     ))}
                   </select>
                 </label>
-                {ordersPagination.total_pages > 1 ? (
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={ordersPagination.page <= 1 || ordersLoading}
-                      onClick={() => setOrdersPage((p) => Math.max(1, p - 1))}
-                      className="admin-btn-secondary disabled:opacity-50"
-                    >
-                      Previous
-                    </button>
-                    <button
-                      type="button"
-                      disabled={ordersPagination.page >= ordersPagination.total_pages || ordersLoading}
-                      onClick={() => setOrdersPage((p) => p + 1)}
-                      className="admin-btn-secondary disabled:opacity-50"
-                    >
-                      Next
-                    </button>
-                  </div>
-                ) : null}
+                <AdminPagination
+                  page={ordersPagination.page}
+                  totalPages={ordersPagination.total_pages}
+                  disabled={ordersLoading}
+                  onPageChange={setOrdersPage}
+                />
               </div>
             </div>
           ) : tab === "bonus" ? (
@@ -1716,26 +1704,12 @@ function LoyaltyContent() {
                     ))}
                   </select>
                 </label>
-                {bonusPagination.total_pages > 1 ? (
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={bonusPagination.page <= 1 || bonusLoading}
-                      onClick={() => setBonusPage((p) => Math.max(1, p - 1))}
-                      className="admin-btn-secondary disabled:opacity-50"
-                    >
-                      Previous
-                    </button>
-                    <button
-                      type="button"
-                      disabled={bonusPagination.page >= bonusPagination.total_pages || bonusLoading}
-                      onClick={() => setBonusPage((p) => p + 1)}
-                      className="admin-btn-secondary disabled:opacity-50"
-                    >
-                      Next
-                    </button>
-                  </div>
-                ) : null}
+                <AdminPagination
+                  page={bonusPagination.page}
+                  totalPages={bonusPagination.total_pages}
+                  disabled={bonusLoading}
+                  onPageChange={setBonusPage}
+                />
               </div>
             </div>
           ) : tab === "vouchers" ? (
@@ -1767,26 +1741,12 @@ function LoyaltyContent() {
                     ))}
                   </select>
                 </label>
-                {voucherPagination.total_pages > 1 ? (
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={voucherPagination.page <= 1 || voucherLoading}
-                      onClick={() => setVoucherPage((p) => Math.max(1, p - 1))}
-                      className="admin-btn-secondary disabled:opacity-50"
-                    >
-                      Previous
-                    </button>
-                    <button
-                      type="button"
-                      disabled={voucherPagination.page >= voucherPagination.total_pages || voucherLoading}
-                      onClick={() => setVoucherPage((p) => p + 1)}
-                      className="admin-btn-secondary disabled:opacity-50"
-                    >
-                      Next
-                    </button>
-                  </div>
-                ) : null}
+                <AdminPagination
+                  page={voucherPagination.page}
+                  totalPages={voucherPagination.total_pages}
+                  disabled={voucherLoading}
+                  onPageChange={setVoucherPage}
+                />
               </div>
             </div>
           ) : null}
@@ -1869,7 +1829,7 @@ function LoyaltyContent() {
       <RejectModal
         open={Boolean(rejectId) && tab === "vouchers"}
         title="Reject voucher claim"
-        reasons={VOUCHER_CLAIM_REJECT_REASONS}
+        reasons={voucherRejectReasons}
         error={voucherActionError}
         busy={voucherStatusBusy}
         onClose={() => {

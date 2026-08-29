@@ -11,6 +11,10 @@ import {
   fetchBlogs,
   getBlogBannerUrl,
   updateBlog,
+  BLOG_BANNER_HEIGHT,
+  BLOG_BANNER_WIDTH,
+  blogBannerSizeError,
+  readImageDimensions,
 } from "@/lib/blogs";
 
 function FieldLabel({ children, required }) {
@@ -31,7 +35,7 @@ function BannerThumb({ blog, onView }) {
       <button
         type="button"
         onClick={() => onView(bannerUrl)}
-        className="block h-10 w-16 overflow-hidden rounded-lg border border-white/15 bg-white/5 transition hover:ring-2 hover:ring-admin-accent/50"
+        className="block h-14 w-11 overflow-hidden rounded-lg border border-white/15 bg-white/5 transition hover:ring-2 hover:ring-admin-accent/50"
         title="View banner"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -49,7 +53,7 @@ function BannerThumb({ blog, onView }) {
     <button
       type="button"
       onClick={() => onView(null)}
-      className="flex h-10 w-16 items-center justify-center overflow-hidden rounded-lg border border-white/15 bg-white/5 text-white/35 transition hover:ring-2 hover:ring-admin-accent/50"
+      className="flex h-14 w-11 items-center justify-center overflow-hidden rounded-lg border border-white/15 bg-white/5 text-white/35 transition hover:ring-2 hover:ring-admin-accent/50"
       title="No banner image"
     >
       <ImageOff className="h-4 w-4" aria-hidden />
@@ -71,7 +75,7 @@ function ImageViewerModal({ open, imageUrl, onClose }) {
   return (
     <div className="admin-modal-overlay z-[90]" onClick={onClose} role="dialog" aria-modal="true">
       <div
-        className="admin-card relative max-h-[90vh] w-full max-w-3xl overflow-hidden p-0"
+        className="admin-card relative max-h-[90vh] w-full max-w-md overflow-hidden p-0"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -125,20 +129,24 @@ function BannerPreview({ src }) {
 
   if (!src || failed) {
     return (
-      <div className="relative flex h-36 items-center justify-center bg-[#141A2E]">
-        <ImageOff className="h-10 w-10 text-white/30" aria-hidden />
+      <div className="flex justify-center bg-[#141A2E] px-4 py-5">
+        <div className="flex aspect-[4/5] w-36 items-center justify-center sm:w-44">
+          <ImageOff className="h-10 w-10 text-white/30" aria-hidden />
+        </div>
       </div>
     );
   }
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={src}
-      alt=""
-      className="h-36 w-full object-cover"
-      onError={() => setFailed(true)}
-    />
+    <div className="flex justify-center bg-[#141A2E] px-4 py-5">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt=""
+        className="aspect-[4/5] w-36 object-cover sm:w-44"
+        onError={() => setFailed(true)}
+      />
+    </div>
   );
 }
 
@@ -179,14 +187,48 @@ function BlogFormModal({ open, mode, blog, saving, error, onClose, onSave }) {
     setLocalError("");
   }
 
-  function onBannerChange(e) {
-    const file = e.target.files?.[0] ?? null;
+  async function onBannerChange(e) {
+    const input = e.target;
+    const file = input.files?.[0] ?? null;
+    setLocalError("");
+    if (!file) {
+      setBannerFile(null);
+      setPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      return;
+    }
+
+    try {
+      const { width, height } = await readImageDimensions(file);
+      const sizeError = blogBannerSizeError(width, height);
+      if (sizeError) {
+        setBannerFile(null);
+        setPreviewUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return null;
+        });
+        input.value = "";
+        setLocalError(sizeError);
+        return;
+      }
+    } catch (err) {
+      setBannerFile(null);
+      setPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      input.value = "";
+      setLocalError(err.message || "Could not read the image file.");
+      return;
+    }
+
     setBannerFile(file);
     setPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
-      return file ? URL.createObjectURL(file) : null;
+      return URL.createObjectURL(file);
     });
-    setLocalError("");
   }
 
   function handleSubmit(e) {
@@ -251,6 +293,9 @@ function BlogFormModal({ open, mode, blog, saving, error, onClose, onSave }) {
               className={`${inputCls} file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-slate-300`}
               disabled={saving}
             />
+            <p className="mt-1.5 text-xs text-slate-500">
+              Standard size: {BLOG_BANNER_WIDTH} × {BLOG_BANNER_HEIGHT} px (portrait 4:5).
+            </p>
           </label>
 
           {mode === "edit" ? (

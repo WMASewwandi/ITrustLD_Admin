@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
 import CopyCell, { FilterField, FormError, inputCls } from "@/components/admin/queue-ui";
+import AdminPagination from "@/components/admin/admin-pagination";
 import { useCan } from "@/contexts/admin-permissions";
 import {
   deleteAllHelpTickets,
@@ -384,31 +385,12 @@ export default function HelpTicketsPage() {
                 Showing {rangeStart} to {rangeEnd} of {pagination.total}
               </span>
             </div>
-            {pagination.total_pages > 1 ? (
-              <div className="flex items-center gap-3">
-                <span>
-                  Page {pagination.page} of {pagination.total_pages}
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    disabled={pagination.page <= 1 || loading}
-                    onClick={() => loadTickets(pagination.page - 1)}
-                    className="rounded-lg border border-white/15 px-3 py-1.5 disabled:opacity-40"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    type="button"
-                    disabled={pagination.page >= pagination.total_pages || loading}
-                    onClick={() => loadTickets(pagination.page + 1)}
-                    className="rounded-lg border border-white/15 px-3 py-1.5 disabled:opacity-40"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            ) : null}
+            <AdminPagination
+                page={pagination.page}
+                totalPages={pagination.total_pages}
+                disabled={loading}
+                onPageChange={loadTickets}
+              />
           </div>
         ) : null}
       </section>
