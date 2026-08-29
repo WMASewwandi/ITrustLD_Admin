@@ -3,20 +3,11 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, X } from "lucide-react";
 import { FormError } from "@/components/admin/queue-ui";
-
-const PRESET = [
-  "Payment slip unclear",
-  "Account ID mismatch",
-  "Insufficient funds / points",
-  "Duplicate request",
-  "Fraud suspected",
-  "Custom",
-];
-
-function isCustomReason(value) {
-  const key = String(value || "").trim().toLowerCase();
-  return key === "custom" || key === "custom message" || key === "other";
-}
+import {
+  CUSTOM_REJECT_REASON,
+  isCustomRejectReason,
+  withCustomRejectOption,
+} from "@/lib/reject-reasons";
 
 export default function RejectModal({
   open,
@@ -27,21 +18,21 @@ export default function RejectModal({
   busy = false,
   reasons,
 }) {
-  const options = reasons?.length ? reasons : PRESET;
-  const [reason, setReason] = useState(options[0] || "");
+  const options = withCustomRejectOption(reasons);
+  const [reason, setReason] = useState(options[0] || CUSTOM_REJECT_REASON);
   const [custom, setCustom] = useState("");
   const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setReason(options[0] || "");
+    setReason(options[0] || CUSTOM_REJECT_REASON);
     setCustom("");
     setConfirming(false);
   }, [open, options[0]]);
 
   if (!open) return null;
 
-  const finalReason = isCustomReason(reason) ? custom.trim() : reason;
+  const finalReason = isCustomRejectReason(reason) ? custom.trim() : reason;
   const canContinue = Boolean(finalReason);
 
   async function submit() {
@@ -88,7 +79,7 @@ export default function RejectModal({
                 </option>
               ))}
             </select>
-            {isCustomReason(reason) ? (
+            {isCustomRejectReason(reason) ? (
               <textarea
                 value={custom}
                 onChange={(e) => setCustom(e.target.value)}

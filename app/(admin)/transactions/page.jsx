@@ -5,11 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { useLocationSearchString } from "@/lib/location-search";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectReasonPanel from "@/components/admin/reject-reason-panel";
-import DepositProofStatusPanel, {
-  DEPOSIT_PROOF_REJECT_REASONS,
-} from "@/components/admin/deposit-proof-status-panel";
+import DepositProofStatusPanel from "@/components/admin/deposit-proof-status-panel";
+import { useRejectReasonOptions } from "@/lib/reject-reasons";
 import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
 import CopyCell, { FilterField, StatusPill, inputCls, statusHeaderToneClass } from "@/components/admin/queue-ui";
+import AdminPagination from "@/components/admin/admin-pagination";
 import AssignDepositsModal from "@/components/admin/assign-deposits-modal";
 import AssignWithdrawalsModal from "@/components/admin/assign-withdrawals-modal";
 import { EmailSendModal, SmsSendModal } from "@/components/admin/customer-message-modals";
@@ -552,6 +552,9 @@ function TransactionsContent() {
   const canAuthorizeWithdrawalPerm = useCan("authorize_withdrawal_data");
   const [currentAdminKey, setCurrentAdminKey] = useState("admin");
   const [tab, setTab] = useState(params.get("tab") === "withdrawals" ? "withdrawals" : "deposits");
+  const { reasons: transactionRejectReasons } = useRejectReasonOptions(
+    tab === "withdrawals" ? "withdrawal" : "deposit",
+  );
   const [depositFilters, setDepositFilters] = useState(() =>
     params.get("tab") === "withdrawals"
       ? createDefaultTabFilters()
@@ -2910,39 +2913,20 @@ function TransactionsContent() {
           )}
         </div>
 
-        {/* Progressive disclosure — concept 3.3 */}
-        {activePagination.total_pages > 1 ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4">
-            <p className="text-xs text-slate-500">
-              Page {activePagination.current_page} of {activePagination.total_pages} ·{" "}
-              {activePagination.total_count} total
-            </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={!activePagination.has_prev || listLoading}
-                onClick={() =>
-                  tab === "deposits"
-                    ? setDepositPage((p) => Math.max(1, p - 1))
-                    : setWithdrawalPage((p) => Math.max(1, p - 1))
-                }
-                className="admin-btn-secondary disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                disabled={!activePagination.has_next || listLoading}
-                onClick={() =>
-                  tab === "deposits" ? setDepositPage((p) => p + 1) : setWithdrawalPage((p) => p + 1)
-                }
-                className="admin-btn-secondary disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        ) : null}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4">
+          <p className="text-xs text-slate-500">
+            Page {activePagination.current_page || 1} of {Math.max(1, activePagination.total_pages || 1)} ·{" "}
+            {activePagination.total_count || 0} total
+          </p>
+          <AdminPagination
+            page={activePagination.current_page}
+            totalPages={activePagination.total_pages}
+            disabled={listLoading}
+            onPageChange={(next) =>
+              tab === "deposits" ? setDepositPage(next) : setWithdrawalPage(next)
+            }
+          />
+        </div>
       </section>
 
       <AssignDepositsModal
@@ -2984,7 +2968,7 @@ function TransactionsContent() {
           setRejectId(null);
           setActionError("");
         }}
-        reasons={DEPOSIT_PROOF_REJECT_REASONS}
+        reasons={transactionRejectReasons}
         onConfirm={(reason) => rejectTransaction(reason, rejectId)}
       />
 
@@ -3247,6 +3231,7 @@ function TransactionsContent() {
                   saving={proofSaving}
                   includeAuthorization={tab === "withdrawals"}
                   error={actionError}
+                  reasons={transactionRejectReasons}
                   onCancel={closeProof}
                   onSave={saveProofStatus}
                 />

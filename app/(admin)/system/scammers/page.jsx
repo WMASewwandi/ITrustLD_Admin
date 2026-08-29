@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
 import CopyCell, { FilterField, FormError, inputCls } from "@/components/admin/queue-ui";
+import AdminPagination from "@/components/admin/admin-pagination";
 import { useCan } from "@/contexts/admin-permissions";
 import {
   addScammer,
@@ -270,31 +271,17 @@ export default function ScammersPage() {
           </table>
         </div>
 
-        {pagination.total_pages > 1 ? (
-          <div className="flex items-center justify-between border-t border-white/10 px-5 py-4">
-            <p className="text-xs text-slate-500">
-              Page {pagination.page} of {pagination.total_pages}
-            </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={pagination.page <= 1 || loading}
-                onClick={() => loadScammers(pagination.page - 1)}
-                className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 disabled:opacity-40"
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                disabled={pagination.page >= pagination.total_pages || loading}
-                onClick={() => loadScammers(pagination.page + 1)}
-                className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 disabled:opacity-40"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        ) : null}
+        <div className="flex items-center justify-between border-t border-white/10 px-5 py-4">
+          <p className="text-xs text-slate-500">
+            Page {pagination.page || 1} of {Math.max(1, pagination.total_pages || 1)}
+          </p>
+          <AdminPagination
+            page={pagination.page}
+            totalPages={pagination.total_pages}
+            disabled={loading}
+            onPageChange={loadScammers}
+          />
+        </div>
       </section>
 
       {addOpen ? (

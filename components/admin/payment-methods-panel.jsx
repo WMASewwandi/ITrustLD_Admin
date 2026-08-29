@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CreditCard, ChevronLeft, ChevronRight, Loader2, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { CreditCard, Loader2, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { inputCls } from "@/components/admin/queue-ui";
+import AdminPagination from "@/components/admin/admin-pagination";
 import { useAppDialog } from "@/components/admin/app-dialog";
 import {
   createPaymentMethod,
@@ -423,38 +424,7 @@ export default function PaymentMethodsPanel() {
               </label>
             </div>
             <div className="flex items-center gap-1">
-              <button
-                type="button"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-400 disabled:opacity-35"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-                Previous
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1)
-                .slice(0, 5)
-                .map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setPage(n)}
-                    className={`min-w-8 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
-                      page === n ? "bg-admin-teal text-white" : "border border-white/10 text-slate-400"
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              <button
-                type="button"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-400 disabled:opacity-35"
-              >
-                Next
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
+              <AdminPagination page={page} totalPages={totalPages} onPageChange={setPage} />
             </div>
           </div>
         ) : null}

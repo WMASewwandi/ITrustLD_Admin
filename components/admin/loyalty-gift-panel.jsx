@@ -7,7 +7,7 @@ import { useLocationSearchParams } from "@/lib/location-search";
 import { Check, Loader2, Pencil, Plus, Trash2, Truck, X } from "lucide-react";
 import CopyCell, { FilterField, IdNameCell, StatusPill, inputCls } from "@/components/admin/queue-ui";
 import RejectModal from "@/components/admin/reject-modal";
-import { GIFT_CLAIM_REJECT_REASONS } from "@/lib/gift-reject-reasons";
+import { useRejectReasonOptions } from "@/lib/reject-reasons";
 import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
 import {
   approveGiftClaim,
@@ -470,6 +470,7 @@ export default function LoyaltyGiftPanel({ canMutateClaims = true, canMutateCata
   const [rejectId, setRejectId] = useState(null);
   const [deliverId, setDeliverId] = useState(null);
   const [detail, setDetail] = useState(null);
+  const { reasons: giftRejectReasons } = useRejectReasonOptions("gift_claim");
 
   const syncUrl = useCallback(
     (next) => {
@@ -910,7 +911,7 @@ export default function LoyaltyGiftPanel({ canMutateClaims = true, canMutateCata
       <RejectModal
         open={Boolean(rejectId)}
         title="Reject gift claim"
-        reasons={GIFT_CLAIM_REJECT_REASONS}
+        reasons={giftRejectReasons}
         error={claimsError}
         busy={busy}
         onClose={() => {

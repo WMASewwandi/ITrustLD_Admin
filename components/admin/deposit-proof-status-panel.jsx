@@ -1,20 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-export const DEPOSIT_PROOF_REJECT_REASONS = [
-  "Your slip is not clear",
-  "The transaction date does not match",
-  "Cash not received today",
-  "Your order amount does not match",
-  "Duplicate submission, your account is at risk",
-  "Your slip details are incomplete",
-  "Your slip's XM ID remark is missing",
-  "Contact live chat for assistance",
-  "Please write your XM ID clearly in the center of the slip",
-  "Please Subscribe IB - 67104269",
-  "Custom Message",
-];
+import {
+  CUSTOM_REJECT_REASON,
+  isCustomRejectReason,
+  withCustomRejectOption,
+} from "@/lib/reject-reasons";
 
 const STATUS_OPTIONS = [
   { value: "Completed", label: "Completed" },
@@ -28,26 +19,28 @@ export default function DepositProofStatusPanel({
   saving = false,
   includeAuthorization = false,
   error = "",
+  reasons,
   onCancel,
   onSave,
 }) {
+  const options = withCustomRejectOption(reasons);
   const [status, setStatus] = useState(initialStatus);
-  const [rejectReason, setRejectReason] = useState(DEPOSIT_PROOF_REJECT_REASONS[0]);
+  const [rejectReason, setRejectReason] = useState(options[0] || CUSTOM_REJECT_REASON);
   const [rejectMessage, setRejectMessage] = useState("");
   const statusOptions = includeAuthorization
     ? STATUS_OPTIONS
     : STATUS_OPTIONS.filter((option) => option.value !== "Pending Authorization");
+  const customSelected = isCustomRejectReason(rejectReason);
 
   useEffect(() => {
     setStatus(initialStatus || "Pending");
-    setRejectReason(DEPOSIT_PROOF_REJECT_REASONS[0]);
+    setRejectReason(options[0] || CUSTOM_REJECT_REASON);
     setRejectMessage("");
-  }, [initialStatus]);
+  }, [initialStatus, options[0]]);
 
   function handleSave() {
     if (status === "Rejected") {
-      const message =
-        rejectReason === "Custom Message" ? rejectMessage.trim() : rejectMessage.trim() || rejectReason;
+      const message = customSelected ? rejectMessage.trim() : rejectMessage.trim() || rejectReason;
       if (!message) return;
       onSave?.({
         status,
@@ -60,7 +53,7 @@ export default function DepositProofStatusPanel({
   }
 
   const saveDisabled =
-    saving || (status === "Rejected" && rejectReason === "Custom Message" && !rejectMessage.trim());
+    saving || (status === "Rejected" && customSelected && !rejectMessage.trim());
 
   return (
     <div className="space-y-4">
@@ -101,7 +94,7 @@ export default function DepositProofStatusPanel({
             className="admin-input text-sm"
             aria-label="Rejected reason"
           >
-            {DEPOSIT_PROOF_REJECT_REASONS.map((reason) => (
+            {options.map((reason) => (
               <option key={reason} value={reason} className="bg-admin-surface text-slate-100">
                 {reason}
               </option>
@@ -115,7 +108,7 @@ export default function DepositProofStatusPanel({
             onChange={(e) => setRejectMessage(e.target.value)}
             rows={3}
             placeholder={
-              rejectReason === "Custom Message"
+              customSelected
                 ? "Enter a custom rejection message…"
                 : "Optional — leave blank to use the selected reason"
             }
