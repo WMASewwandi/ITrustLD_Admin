@@ -23,6 +23,7 @@ import {
   NAV_COUNTS_REVISION_POLL_MS,
   mergeNavCounts,
   notifyAdminNavCountsRefresh,
+  notifyAdminNavCountsRevision,
 } from "@/lib/notifications";
 import {
   applyBookmarkBadges,
@@ -194,6 +195,7 @@ export default function AdminMainNav({ user, roleLabel }) {
         if (lastRevision == null) return;
         if (nextRevision !== lastRevision) {
           lastRevision = nextRevision;
+          notifyAdminNavCountsRevision(nextRevision);
           loadCounts();
         }
       } catch (err) {

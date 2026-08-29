@@ -15,7 +15,7 @@ import AssignWithdrawalsModal from "@/components/admin/assign-withdrawals-modal"
 import { EmailSendModal, SmsSendModal } from "@/components/admin/customer-message-modals";
 import { formatDateTimeParts } from "@/lib/sl-time";
 import { sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
-import { notifyAdminNavCountsRefresh } from "@/lib/notifications";
+import { notifyAdminNavCountsRefresh, ADMIN_NAV_COUNTS_REVISION_EVENT } from "@/lib/notifications";
 import {
   buildDepositQueryParams,
   downloadDepositsExport,
@@ -268,7 +268,7 @@ function ProofSummaryFields({ proof, isDeposit = false }) {
 
   if (isDeposit) {
     return (
-      <dl className="grid gap-2 text-sm">
+      <dl className="grid w-full gap-2 text-sm">
         <ProofTextField label="Platform" value={proof.platform} />
         <ProofTextField label="Method" value={proof.method} />
         <ProofTextField label="Client Pay" value={proof.clientPay} />
@@ -282,7 +282,7 @@ function ProofSummaryFields({ proof, isDeposit = false }) {
   }
 
   return (
-    <dl className="grid gap-2 text-sm">
+    <dl className="grid w-full gap-2 text-sm">
       <ProofTextField label="Platform" value={proof.platform} />
       <ProofTextField label="Method" value={proof.method} />
       <ProofTextField
@@ -360,7 +360,7 @@ function ProofImageCard({ proof, file, fetchProofBlob }) {
 
   if (loading) {
     return (
-      <div className="flex h-48 w-full max-w-sm items-center justify-center rounded-lg border border-slate-300/30 bg-[#f8fafc] text-sm text-slate-500">
+      <div className="flex h-full min-h-[12rem] w-full items-center justify-center bg-[#f8fafc] text-sm text-slate-500">
         Loading proof image…
       </div>
     );
@@ -368,13 +368,7 @@ function ProofImageCard({ proof, file, fetchProofBlob }) {
 
   if (previewUrl && !loadError) {
     return (
-      <div className="w-full max-w-sm overflow-hidden rounded-lg border border-slate-300/30 bg-[#f8fafc] text-slate-800 shadow-lg">
-        <img src={previewUrl} alt={name} className="max-h-[420px] w-full object-contain bg-black/5" />
-        <div className="border-t border-slate-200 px-4 py-3 text-xs text-slate-600">
-          <p className="font-semibold text-slate-900">{method}</p>
-          <p className="mt-1">{amount}</p>
-        </div>
-      </div>
+      <img src={previewUrl} alt={name} className="block h-auto w-full" />
     );
   }
 
@@ -430,7 +424,7 @@ function ProofImageLightbox({ open, proof, file, onClose, fetchProofBlob }) {
       <p className="pointer-events-none absolute bottom-6 left-0 right-0 text-center text-xs text-white/60">
         Tap anywhere to close
       </p>
-      <div className="pointer-events-none max-h-[85vh] w-full max-w-md overflow-auto">
+      <div className="pointer-events-none max-h-[85vh] w-full max-w-md overflow-auto rounded-lg bg-[#f8fafc]">
         <ProofImageCard proof={proof} file={file} fetchProofBlob={fetchProofBlob} />
       </div>
     </div>
@@ -484,19 +478,21 @@ function SubmittedProofViewer({ proof, proofs, activeId, onOpenImage, fetchProof
   const active = proofs.find((p) => p.id === activeId) || proofs[0];
   if (!active) {
     return (
-      <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_260px]">
+      <div className="mb-4 grid grid-cols-1 gap-3 min-[640px]:grid-cols-[minmax(0,1fr)_230px]">
         <div className="flex h-48 flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 text-sm text-slate-400">
           <FileText className="mb-2 h-8 w-8 opacity-50" />
           No proof submitted by the customer
         </div>
-        <ProofSummaryFields proof={proof} isDeposit={isDeposit} />
+        <div className="min-w-0 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+          <ProofSummaryFields proof={proof} isDeposit={isDeposit} />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_260px]">
-      <div className="overflow-hidden rounded-xl border border-white/10 bg-[#0c0f1a]">
+    <div className="mb-4 grid grid-cols-1 items-stretch gap-3 min-[640px]:grid-cols-[minmax(0,1fr)_230px]">
+      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#0c0f1a]">
         <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-white">{active.name}</p>
@@ -508,17 +504,14 @@ function SubmittedProofViewer({ proof, proofs, activeId, onOpenImage, fetchProof
             Customer proof
           </span>
         </div>
-        <button
-          type="button"
-          onClick={() => onOpenImage?.(active)}
-          className="flex min-h-[220px] w-full items-center justify-center bg-gradient-to-b from-white/[0.04] to-transparent p-4 transition hover:from-white/[0.07] sm:min-h-[280px] sm:p-6"
-          title="View full image"
-        >
+        <div className="h-[280px] w-full overflow-y-auto bg-[#f8fafc] sm:h-[320px]">
           <ProofImageCard proof={proof} file={active} fetchProofBlob={fetchProofBlob} />
-        </button>
+        </div>
       </div>
 
-      <ProofSummaryFields proof={proof} isDeposit={isDeposit} />
+      <div className="min-w-0 overflow-y-auto rounded-xl border border-white/10 bg-white/[0.03] p-3">
+        <ProofSummaryFields proof={proof} isDeposit={isDeposit} />
+      </div>
     </div>
   );
 }
@@ -609,7 +602,6 @@ function TransactionsContent() {
   const [actionError, setActionError] = useState("");
   const [exporting, setExporting] = useState(false);
   const [viewAll, setViewAll] = useState(false);
-  const [livePulse, setLivePulse] = useState(0);
   const skipUrlHydrationRef = useRef(false);
   const lastHydratedQueryRef = useRef(null);
   const skipAutoLoadRef = useRef(false);
@@ -939,7 +931,7 @@ function TransactionsContent() {
       setDepositsError(err.message || "Failed to load deposits.");
       setDeposits([]);
     } finally {
-      setDepositsLoading(false);
+      if (!overrides.silent) setDepositsLoading(false);
     }
   }, [depositFilters, resolvedDepositStatus, depositPage, perPage]);
 
@@ -989,7 +981,7 @@ function TransactionsContent() {
       setWithdrawalsError(err.message || "Failed to load withdrawals.");
       setWithdrawals([]);
     } finally {
-      setWithdrawalsLoading(false);
+      if (!overrides.silent) setWithdrawalsLoading(false);
     }
   }, [withdrawalFilters, resolvedDepositStatus, withdrawalPage, perPage]);
 
@@ -1532,10 +1524,23 @@ function TransactionsContent() {
   }, [searchParamsString]);
 
   useEffect(() => {
-    const id = setInterval(() => {
-      setLivePulse((n) => n + 1);
-    }, 12000);
-    return () => clearInterval(id);
+    function silentReload() {
+      if (skipAutoLoadRef.current || skipInitialAutoLoadRef.current) return;
+      const loader =
+        tabRef.current === "deposits" ? loadDepositsRef.current : loadWithdrawalsRef.current;
+      loader?.({ silent: true, cacheBust: Date.now() });
+    }
+
+    function onRevision() {
+      silentReload();
+    }
+
+    window.addEventListener(ADMIN_NAV_COUNTS_REVISION_EVENT, onRevision);
+    const id = window.setInterval(silentReload, 8000);
+    return () => {
+      window.removeEventListener(ADMIN_NAV_COUNTS_REVISION_EVENT, onRevision);
+      window.clearInterval(id);
+    };
   }, []);
 
   const filtered = useMemo(() => {
@@ -2246,35 +2251,35 @@ function TransactionsContent() {
       </div>
 
       {/* Summary strips like screenshot */}
-      <div className="admin-fade-up mb-4 grid gap-3 sm:grid-cols-2">
-        <div className="admin-metric-card relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#129E38] to-[#0D9F1B] px-5 py-4">
+      <div className="admin-fade-up mb-4 grid grid-cols-2 gap-3">
+        <div className="admin-metric-card relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#129E38] to-[#0D9F1B] px-3 py-3 sm:px-5 sm:py-4">
           <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/10 blur-2xl" />
-          <div className="relative flex items-center justify-between gap-3">
-            <div>
+          <div className="relative flex items-center justify-between gap-2 sm:gap-3">
+            <div className="min-w-0">
               <p className="text-xs font-medium text-white/90">
                 {tab === "deposits" ? "Client Pay" : "Client Receive"}
               </p>
-              <p className="mt-1 text-2xl font-bold tracking-tight text-white">
+              <p className="mt-1 truncate text-lg font-bold tracking-tight text-white sm:text-2xl">
                 Rs. {clientPayLkr.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
-            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/20 text-white">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/20 text-white sm:h-11 sm:w-11">
               <FileText className="h-5 w-5" />
             </span>
           </div>
         </div>
-        <div className="admin-metric-card admin-metric-card--teal relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0D9488] to-[#2DD4BF] px-5 py-4">
+        <div className="admin-metric-card admin-metric-card--teal relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0D9488] to-[#2DD4BF] px-3 py-3 sm:px-5 sm:py-4">
           <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/10 blur-2xl" />
-          <div className="relative flex items-center justify-between gap-3">
-            <div>
+          <div className="relative flex items-center justify-between gap-2 sm:gap-3">
+            <div className="min-w-0">
               <p className="text-xs font-medium text-white/90">
                 {tab === "deposits" ? "Top Up" : "Cash Out"}
               </p>
-              <p className="mt-1 text-2xl font-bold tracking-tight text-white">
+              <p className="mt-1 truncate text-lg font-bold tracking-tight text-white sm:text-2xl">
                 USD {topUpTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
-            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/20 text-lg font-bold text-white">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/20 text-lg font-bold text-white sm:h-11 sm:w-11">
               $
             </span>
           </div>
