@@ -1,14 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Clock, Loader2, Send, Users, XCircle } from "lucide-react";
+import { Clock, Loader2, RotateCcw, Send, Trash2, Users, XCircle } from "lucide-react";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import { useAppDialog } from "@/components/admin/app-dialog";
 import { inputCls } from "@/components/admin/queue-ui";
 import {
   cancelBulkSmsCampaign,
   createBulkSmsCampaign,
+  deleteBulkSmsCampaign,
   fetchBulkSmsCampaigns,
+  resendBulkSmsCampaign,
 } from "@/lib/bulk-sms";
 import { fetchMessageTemplates } from "@/lib/message-templates";
 
@@ -17,6 +19,7 @@ const RECIPIENT_OPTIONS = [
   "Normal users",
   "Affiliate users",
   "Pending KYC segment",
+  "Custom",
 ];
 
 function FieldLabel({ children, required }) {
@@ -68,9 +71,10 @@ export default function BulkSmsPage() {
   const [smsTemplates, setSmsTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [action, setAction] = useState({ id: null, type: null });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [form, setForm] = useState({ recipients: "All users", message: "", schedule: "", templateId: "" });
+  const [form, setForm] = useState({ recipients: "All users", numbers: "", message: "", schedule: "", templateId: "" });
 
   const loadQueue = useCallback(async () => {
     setError("");
@@ -131,10 +135,11 @@ export default function BulkSmsPage() {
     try {
       await createBulkSmsCampaign({
         recipients: form.recipients,
+        numbers: form.recipients === "Custom" ? form.numbers : undefined,
         message: form.message,
         schedule: form.schedule || null,
       });
-      setForm((prev) => ({ ...prev, message: "", schedule: "", templateId: "" }));
+      setForm((prev) => ({ ...prev, numbers: "", message: "", schedule: "", templateId: "" }));
       setSuccess("Bulk SMS queued successfully.");
       await loadQueue();
     } catch (err) {
@@ -145,14 +150,50 @@ export default function BulkSmsPage() {
   }
 
   async function handleCancel(id) {
+    if (action.id) return;
     if (!(await confirm("Cancel this bulk SMS campaign?", { title: "Cancel campaign", confirmLabel: "Cancel campaign" }))) return;
     setError("");
+    setAction({ id, type: "cancel" });
     try {
       await cancelBulkSmsCampaign(id);
       setSuccess("Campaign cancelled.");
       await loadQueue();
     } catch (err) {
       setError(err.message || "Failed to cancel campaign.");
+    } finally {
+      setAction({ id: null, type: null });
+    }
+  }
+
+  async function handleResend(id) {
+    if (action.id) return;
+    if (!(await confirm("Resend this bulk SMS now?", { title: "Resend campaign", confirmLabel: "Resend" }))) return;
+    setError("");
+    setAction({ id, type: "resend" });
+    try {
+      await resendBulkSmsCampaign(id);
+      setSuccess("Campaign queued again.");
+      await loadQueue();
+    } catch (err) {
+      setError(err.message || "Failed to resend campaign.");
+    } finally {
+      setAction({ id: null, type: null });
+    }
+  }
+
+  async function handleDelete(id) {
+    if (action.id) return;
+    if (!(await confirm("Delete this bulk SMS from history?", { title: "Delete campaign", confirmLabel: "Delete", danger: true }))) return;
+    setError("");
+    setAction({ id, type: "delete" });
+    try {
+      await deleteBulkSmsCampaign(id);
+      setSuccess("Campaign deleted.");
+      await loadQueue();
+    } catch (err) {
+      setError(err.message || "Failed to delete campaign.");
+    } finally {
+      setAction({ id: null, type: null });
     }
   }
 
@@ -216,6 +257,23 @@ export default function BulkSmsPage() {
                 ))}
               </select>
             </label>
+
+            {form.recipients === "Custom" ? (
+              <label className="block">
+                <FieldLabel required>Mobile numbers</FieldLabel>
+                <textarea
+                  required
+                  rows={4}
+                  value={form.numbers}
+                  onChange={(e) => update("numbers", e.target.value)}
+                  placeholder={"0771234567\n94771234567"}
+                  className={inputCls}
+                />
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Enter any mobile numbers, one per line or comma-separated.
+                </p>
+              </label>
+            ) : null}
 
             {smsTemplates.length > 0 ? (
               <label className="block">
@@ -312,7 +370,12 @@ export default function BulkSmsPage() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <Users className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-                            <span className="font-medium text-white">{job.recipients}</span>
+                            <span
+                              className="font-medium text-white"
+                              title={(job.customNumbers || []).join(", ") || undefined}
+                            >
+                              {job.recipients}
+                            </span>
                           </div>
                         </td>
                         <td className="max-w-[200px] px-4 py-3">
@@ -333,19 +396,55 @@ export default function BulkSmsPage() {
                           <StatusBadge status={job.status} />
                         </td>
                         <td className="px-4 py-3">
-                          {job.status === "Queued" || job.status === "Sending" ? (
-                            <button
-                              type="button"
-                              onClick={() => handleCancel(job.id)}
-                              className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-white/15"
-                              title="Cancel campaign"
-                            >
-                              <XCircle className="h-3.5 w-3.5" />
-                              Cancel
-                            </button>
-                          ) : (
-                            <span className="text-xs text-slate-500">—</span>
-                          )}
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {job.status === "Queued" || job.status === "Sending" ? (
+                              <button
+                                type="button"
+                                onClick={() => handleCancel(job.id)}
+                                disabled={Boolean(action.id)}
+                                className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-white/15 disabled:opacity-60"
+                                title="Cancel campaign"
+                              >
+                                {action.id === job.id && action.type === "cancel" ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <XCircle className="h-3.5 w-3.5" />
+                                )}
+                                Cancel
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleResend(job.id)}
+                                disabled={Boolean(action.id)}
+                                className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-white/15 disabled:opacity-60"
+                                title="Resend campaign"
+                              >
+                                {action.id === job.id && action.type === "resend" ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <RotateCcw className="h-3.5 w-3.5" />
+                                )}
+                                Resend
+                              </button>
+                            )}
+                            {job.status !== "Sending" ? (
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(job.id)}
+                                disabled={Boolean(action.id)}
+                                className="inline-flex items-center gap-1 rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/25 disabled:opacity-60"
+                                title="Delete campaign"
+                              >
+                                {action.id === job.id && action.type === "delete" ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                )}
+                                Delete
+                              </button>
+                            ) : null}
+                          </div>
                         </td>
                       </tr>
                     ))

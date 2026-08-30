@@ -478,6 +478,9 @@ export default function BannersPage() {
                 onChange={handleMediaChange}
                 className={`${inputCls} file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-slate-300`}
               />
+              <p className="mt-1.5 text-[11px] text-slate-500">
+                Best image size: 640 × 360 (16:9). JPG, PNG, WEBP, GIF, or video. Max 10MB.
+              </p>
             </div>
 
             <FormError message={!deleteConfirm ? pageError : ""} />

@@ -785,12 +785,9 @@ function TransactionsContent() {
       const keywordOnlyWithinStatus =
         nextKeyword.trim() &&
         !advancedActive &&
-        (isPendingQueueStatus(resolvedStatus) ||
-          resolvedStatus === "Completed" ||
-          resolvedStatus === "Rejected");
+        isPendingQueueStatus(resolvedStatus);
 
       const defaultScopedList =
-        !nextKeyword.trim() &&
         !advancedActive &&
         (resolvedStatus === "Completed" || resolvedStatus === "Rejected");
 
@@ -876,12 +873,9 @@ function TransactionsContent() {
       const keywordOnlyWithinStatus =
         nextKeyword.trim() &&
         !advancedActive &&
-        (isPendingQueueStatus(resolvedStatus) ||
-          resolvedStatus === "Completed" ||
-          resolvedStatus === "Rejected");
+        isPendingQueueStatus(resolvedStatus);
 
       const defaultScopedList =
-        !nextKeyword.trim() &&
         !advancedActive &&
         (resolvedStatus === "Completed" || resolvedStatus === "Rejected");
 
@@ -1219,7 +1213,9 @@ function TransactionsContent() {
           ? advancedSearchIn
           : status;
       const clearKeyword = isPendingQueueStatus(status) && nextStatus !== status;
-      const nextKeyword = clearKeyword ? "" : (fromAdvancedRow ? q : searchDraft).trim();
+      const nextKeyword = clearKeyword
+        ? ""
+        : (fromAdvancedRow && isPendingQueueStatus(status) ? q : searchDraft).trim();
 
       const searchOverrides = {
         page: 1,
@@ -1686,23 +1682,42 @@ function TransactionsContent() {
           : "Transactions";
 
   const showAssignColumn =
-    resolvedDepositStatus === "Pending" ||
-    (tab === "withdrawals" && resolvedDepositStatus === "Pending Authorization");
-  const showUpdatedByColumn =
     tab === "withdrawals" &&
-    (resolvedDepositStatus === "Pending Authorization" ||
-      resolvedDepositStatus === "Completed" ||
-      resolvedDepositStatus === "Rejected");
-  const showAuthorizedByColumn =
-    tab === "withdrawals" &&
-    (resolvedDepositStatus === "Completed" || resolvedDepositStatus === "Rejected");
+    (resolvedDepositStatus === "All" ||
+      resolvedDepositStatus === "Pending" ||
+      resolvedDepositStatus === "Pending Authorization");
   const showAdminColumn =
-    tab === "deposits" &&
-    (resolvedDepositStatus === "Completed" || resolvedDepositStatus === "Rejected");
+    tab === "deposits"
+      ? resolvedDepositStatus === "All" ||
+        resolvedDepositStatus === "Pending" ||
+        resolvedDepositStatus === "Completed" ||
+        resolvedDepositStatus === "Rejected"
+      : resolvedDepositStatus === "All" ||
+        resolvedDepositStatus === "Pending Authorization" ||
+        resolvedDepositStatus === "Completed" ||
+        resolvedDepositStatus === "Rejected";
   const canManualAssign =
-    showAssignColumn &&
+    (resolvedDepositStatus === "Pending" ||
+      (tab === "withdrawals" && resolvedDepositStatus === "Pending Authorization")) &&
     !isWithdrawalAuthorizer &&
     (tab === "deposits" ? depositIsAdmin : withdrawalIsAdmin);
+
+  function depositAdminLabel(r) {
+    if (r.status === "Pending") {
+      if (r.assigned && r.assigned !== "—") return r.assigned;
+      if (r.admin && r.admin !== "NA") return r.admin;
+      return "Unassigned";
+    }
+    return r.admin && r.admin !== "NA" ? r.admin : "—";
+  }
+
+  function withdrawalAdminLabel(r) {
+    if (r.authorizedBy && r.authorizedBy !== "—") return r.authorizedBy;
+    if ((r.status === "Completed" || r.status === "Rejected") && r.admin && r.admin !== "NA") {
+      return r.admin;
+    }
+    return "—";
+  }
 
   function openProof(r) {
     setProof(r);
@@ -2492,13 +2507,13 @@ function TransactionsContent() {
                 </p>
               ) : status === "Completed" ? (
                 <p className="mt-1.5 text-[11px] text-slate-500">
-                  Keyword search filters completed {tab === "deposits" ? "deposits" : "withdrawals"} only. Use
-                  filters below and Search to narrow by date or account.
+                  Keyword search filters completed {tab === "deposits" ? "deposits" : "withdrawals"}{" "}
+                  within the selected duration.
                 </p>
               ) : status === "Rejected" ? (
                 <p className="mt-1.5 text-[11px] text-slate-500">
-                  Keyword search filters rejected {tab === "deposits" ? "deposits" : "withdrawals"} only. Use
-                  filters below and Search to narrow by date or account.
+                  Keyword search filters rejected {tab === "deposits" ? "deposits" : "withdrawals"}{" "}
+                  within the selected duration.
                 </p>
               ) : null}
             </div>
@@ -2631,8 +2646,6 @@ function TransactionsContent() {
                     <th className="px-3 py-3">Rejected Reason</th>
                   ) : null}
                   {showAssignColumn ? <th className="px-3 py-3">Assigned To</th> : null}
-                  {showUpdatedByColumn ? <th className="px-3 py-3">Updated By</th> : null}
-                  {showAuthorizedByColumn ? <th className="px-3 py-3">Authorized By</th> : null}
                   {showAdminColumn ? <th className="px-3 py-3">Admin</th> : null}
                 </tr>
               </thead>
@@ -2733,40 +2746,16 @@ function TransactionsContent() {
                         </span>
                       </td>
                     ) : null}
-                    {showUpdatedByColumn ? (
-                      <td className="px-3 py-3">
-                        <span className="text-xs text-slate-200">
-                          {r.updatedBy && r.updatedBy !== "—"
-                            ? r.updatedBy
-                            : r.admin && r.admin !== "NA"
-                              ? r.admin
-                              : "—"}
-                        </span>
-                      </td>
-                    ) : null}
-                    {showAuthorizedByColumn ? (
-                      <td className="px-3 py-3">
-                        <span className="text-xs text-slate-200">
-                          {r.authorizedBy && r.authorizedBy !== "—"
-                            ? r.authorizedBy
-                            : r.admin && r.admin !== "NA"
-                              ? r.admin
-                              : "—"}
-                        </span>
-                      </td>
-                    ) : null}
                     {showAdminColumn ? (
                       <td className="px-3 py-3">
-                        <span className="text-xs text-slate-200">
-                          {r.admin && r.admin !== "NA" ? r.admin : "—"}
-                        </span>
+                        <span className="text-xs text-slate-200">{withdrawalAdminLabel(r)}</span>
                       </td>
                     ) : null}
                   </tr>
                 ))}
                 {shown.length === 0 ? (
                   <tr>
-                    <td colSpan={13 + (resolvedDepositStatus === "Rejected" ? 1 : 0) + (showAssignColumn ? 1 : 0) + (showUpdatedByColumn ? 1 : 0) + (showAuthorizedByColumn ? 1 : 0) + (showAdminColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
+                    <td colSpan={13 + (resolvedDepositStatus === "Rejected" ? 1 : 0) + (showAssignColumn ? 1 : 0) + (showAdminColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
                       {listLoading
                         ? `Loading ${tab === "deposits" ? "deposits" : "withdrawals"}…`
                         : "No Results Found"}
@@ -2801,7 +2790,6 @@ function TransactionsContent() {
                   {resolvedDepositStatus === "Rejected" ? (
                     <th className="px-3 py-3">Rejected Reason</th>
                   ) : null}
-                  {showAssignColumn ? <th className="px-3 py-3">Assigned To</th> : null}
                   {showAdminColumn ? <th className="px-3 py-3">Admin</th> : null}
                 </tr>
               </thead>
@@ -2877,23 +2865,16 @@ function TransactionsContent() {
                         )}
                       </td>
                     ) : null}
-                    {showAssignColumn ? (
+                    {showAdminColumn ? (
                       <td className="px-3 py-3">
                         <span
                           className={
-                            r.assigned && r.assigned !== "—"
+                            depositAdminLabel(r) !== "Unassigned" && depositAdminLabel(r) !== "—"
                               ? "text-xs font-semibold text-admin-teal"
                               : "text-xs text-slate-400"
                           }
                         >
-                          {r.assigned && r.assigned !== "—" ? r.assigned : "Unassigned"}
-                        </span>
-                      </td>
-                    ) : null}
-                    {showAdminColumn ? (
-                      <td className="px-3 py-3">
-                        <span className="text-xs text-slate-200">
-                          {r.admin && r.admin !== "NA" ? r.admin : "—"}
+                          {depositAdminLabel(r)}
                         </span>
                       </td>
                     ) : null}
@@ -2901,7 +2882,7 @@ function TransactionsContent() {
                 ))}
                 {shown.length === 0 ? (
                   <tr>
-                    <td colSpan={12 + (resolvedDepositStatus === "Rejected" ? 1 : 0) + (showAssignColumn ? 1 : 0) + (showAdminColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
+                    <td colSpan={12 + (resolvedDepositStatus === "Rejected" ? 1 : 0) + (showAdminColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
                       {listLoading
                         ? `Loading ${tab === "deposits" ? "deposits" : "withdrawals"}…`
                         : "No Results Found"}
