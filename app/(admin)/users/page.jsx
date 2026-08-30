@@ -57,7 +57,7 @@ const EMPTY_SEARCH = {
 const USER_TYPE_FILTERS = [
   { value: "", label: "All" },
   { value: "normal", label: "Normal" },
-  { value: "affluent", label: "Affluent" },
+  { value: "affiliate", label: "Affiliate" },
 ];
 
 const LOYALTY_TIER_FILTERS = [
@@ -1199,12 +1199,18 @@ function UsersContent() {
                       <td className="px-3 py-3">
                         <span
                           className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-semibold ${
-                            u.userType === "Affluent" || isPartnerValue(u.partner)
+                            u.userType === "Affiliate" ||
+                            u.userType === "Affluent" ||
+                            isPartnerValue(u.partner)
                               ? "border-theme-green-action/40 bg-theme-green-action/10 text-theme-green-action"
                               : "border-white/15 bg-white/5 text-slate-300"
                           }`}
                         >
-                          {u.userType || (isPartnerValue(u.partner) ? "Affluent" : "Normal")}
+                          {isPartnerValue(u.partner) ||
+                          u.userType === "Affiliate" ||
+                          u.userType === "Affluent"
+                            ? "Affiliate"
+                            : u.userType || "Normal"}
                         </span>
                       </td>
                       <td className="px-3 py-3">

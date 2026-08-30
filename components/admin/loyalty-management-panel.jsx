@@ -1083,7 +1083,7 @@ export default function LoyaltyManagementPanel({ canMutate = true }) {
                   Top 50 earners in the previous 12 months · {audience} · {selectedTierLabel}
                 </p>
                 <p className="mt-1 text-[11px] text-slate-500">
-                  Ranking uses Trust Points earned in the last 365 days. User type is Normal or Affluent
+                  Ranking uses Trust Points earned in the last 365 days. User type is Normal or Affiliate
                   (partner).
                 </p>
               </div>
