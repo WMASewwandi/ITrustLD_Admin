@@ -12,7 +12,7 @@ import { LOYALTY_MANAGEMENT_UPDATE } from "@/lib/loyalty-permissions";
 
 const BENEFIT_AUDIENCES = [
   { value: "normal", label: "Normal" },
-  { value: "affiliate", label: "Partner" },
+  { value: "affiliate", label: "Affiliate" },
   { value: "both", label: "Both" },
 ];
 
@@ -251,7 +251,7 @@ export default function LoyaltyTiersPage() {
                           Benefits – {tier.name || "Tier"} Level
                         </h3>
                         <p className="mt-1 text-xs text-slate-500">
-                          Choose whether each benefit applies to Normal users, Partners, or both.
+                          Choose whether each benefit applies to Normal users, Affiliates, or both.
                         </p>
                       </div>
                       {canMutate ? (
