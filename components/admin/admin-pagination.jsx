@@ -25,7 +25,7 @@ export default function AdminPagination({
   }
 
   return (
-    <nav className={`flex flex-wrap items-center gap-1.5 ${className}`} aria-label="Pagination">
+    <nav className={`flex flex-nowrap items-center gap-1.5 ${className}`} aria-label="Pagination">
       <button
         type="button"
         disabled={atStart}
