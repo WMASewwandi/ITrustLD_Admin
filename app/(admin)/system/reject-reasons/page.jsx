@@ -309,18 +309,18 @@ export default function RejectReasonsPage() {
           </table>
         </div>
 
-        <div className="flex items-center justify-between border-t border-white/10 px-5 py-4">
-          <p className="text-xs text-slate-500">
+        <div className="flex flex-nowrap items-center justify-between gap-3 overflow-x-auto border-t border-white/10 px-5 py-4">
+          <p className="shrink-0 text-xs text-slate-500">
             Page {page} of {totalPages} · {filtered.length} total
           </p>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-nowrap items-center gap-3">
             <select
               value={String(perPage)}
               onChange={(e) => {
                 setPerPage(Number(e.target.value) || 10);
                 setPage(1);
               }}
-              className="admin-input py-1.5 text-xs"
+              className="w-auto shrink-0 rounded-lg border border-white/10 bg-admin-chrome-deep px-2 py-1.5 text-xs text-slate-100 outline-none"
             >
               {[10, 25, 50].map((n) => (
                 <option key={n} value={n}>
@@ -328,7 +328,13 @@ export default function RejectReasonsPage() {
                 </option>
               ))}
             </select>
-            <AdminPagination page={page} totalPages={totalPages} disabled={loading} onPageChange={setPage} />
+            <AdminPagination
+              page={page}
+              totalPages={totalPages}
+              disabled={loading}
+              onPageChange={setPage}
+              className="flex-nowrap shrink-0"
+            />
           </div>
         </div>
       </section>
