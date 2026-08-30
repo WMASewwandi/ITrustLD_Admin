@@ -199,6 +199,17 @@ function ConfirmModal({ open, title, message, confirmLabel = "Confirm", onClose,
   );
 }
 
+function kycRejectCopy(user, field) {
+  const title = String(
+    (field === "address" ? user?.addressRejectTitle : user?.nicRejectTitle) || "",
+  ).trim();
+  const message = String(
+    (field === "address" ? user?.addressRejectReason : user?.nicRejectReason) || "",
+  ).trim();
+  if (title && message && title !== message) return `${title} — ${message}`;
+  return message || title || "No rejection reason recorded.";
+}
+
 function KycDocsModal({ open, user, field, canActOnKyc, onClose, onApprove, onReject }) {
   const [docs, setDocs] = useState([]);
   const [activeId, setActiveId] = useState(null);
@@ -408,11 +419,11 @@ function KycDocsModal({ open, user, field, canActOnKyc, onClose, onApprove, onRe
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-2">
               <KycBadge value={status} />
-              <p className="text-xs text-slate-500">
+              <p className={`min-w-0 text-xs ${status === "Rejected" ? "text-rose-300" : "text-slate-500"}`}>
                 {status === "Verified"
                   ? "Already verified — you can still reject with a reason."
                   : status === "Rejected"
-                    ? "Rejected — approve again if documents are valid."
+                    ? kycRejectCopy(user, field)
                     : `Review uploaded ${label.toLowerCase()} documents, then approve or reject.`}
               </p>
             </div>
