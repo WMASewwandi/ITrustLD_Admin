@@ -218,6 +218,7 @@ function KycDocsModal({ open, user, field, canActOnKyc, onClose, onApprove, onRe
   const [acting, setActing] = useState(false);
   const [error, setError] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
+  const [previewFailed, setPreviewFailed] = useState(false);
   const active = docs.find((d) => d.id === activeId) || docs[0];
   const label = field === "nic" ? "NIC" : "Address";
   const status = user?.[field];
@@ -264,31 +265,35 @@ function KycDocsModal({ open, user, field, canActOnKyc, onClose, onApprove, onRe
   }, [open, user?.accountHolderId, field]);
 
   useEffect(() => {
-    if (!open || !active?.filename || active?.missing) {
+    if (!open || !active?.filename) {
       setPreviewUrl("");
+      setPreviewFailed(false);
       return;
     }
 
     let cancelled = false;
     let objectUrl = "";
+    setPreviewUrl("");
+    setPreviewFailed(false);
 
     fetchKycDocumentBlob(active.filename)
       .then((blob) => {
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
         setPreviewUrl(objectUrl);
+        setPreviewFailed(false);
       })
-      .catch((err) => {
+      .catch(() => {
         if (cancelled) return;
         setPreviewUrl("");
-        setError(err.message || "Failed to load document preview.");
+        setPreviewFailed(true);
       });
 
     return () => {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [open, active?.filename, active?.missing]);
+  }, [open, active?.filename]);
 
   if (!open || !user) return null;
 
@@ -351,22 +356,22 @@ function KycDocsModal({ open, user, field, canActOnKyc, onClose, onApprove, onRe
                   </p>
                 </div>
                 <div className="flex min-h-[240px] items-center justify-center bg-gradient-to-b from-white/[0.04] to-transparent p-4">
-                  {active?.missing ? (
-                    <div className="flex w-full max-w-xs flex-col items-center rounded-lg border border-amber-300/30 bg-amber-50 p-6 text-center text-amber-950 shadow-lg">
-                      <FileImage className="mb-2 h-10 w-10 text-amber-500" />
-                      <p className="text-sm font-bold">File not on this server</p>
-                      <p className="mt-1 text-xs text-amber-800">{active?.name}</p>
-                      <p className="mt-3 text-[11px] leading-relaxed text-amber-800">
-                        This record points to an image that is not in local storage. Older files use paths like
-                        upload/... and live on S3 or the original server, not this machine.
-                      </p>
-                    </div>
-                  ) : previewUrl ? (
+                  {previewUrl ? (
                     <img
                       src={previewUrl}
                       alt={active?.kind || "Document preview"}
                       className="max-h-[360px] w-full rounded-lg object-contain"
                     />
+                  ) : previewFailed ? (
+                    <div className="flex w-full max-w-xs flex-col items-center rounded-lg border border-amber-300/30 bg-amber-50 p-6 text-center text-amber-950 shadow-lg">
+                      <FileImage className="mb-2 h-10 w-10 text-amber-500" />
+                      <p className="text-sm font-bold">File not on this server</p>
+                      <p className="mt-1 text-xs text-amber-800">{active?.name}</p>
+                      <p className="mt-3 text-[11px] leading-relaxed text-amber-800">
+                        This record points to an image that is not in local storage or S3. Older files may use
+                        paths like upload/... on the original server.
+                      </p>
+                    </div>
                   ) : (
                     <div className="flex w-full max-w-xs flex-col items-center rounded-lg border border-slate-300/30 bg-[#f8fafc] p-6 text-center text-slate-800 shadow-lg">
                       <FileImage className="mb-2 h-10 w-10 text-slate-400" />

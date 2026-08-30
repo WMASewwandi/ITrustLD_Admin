@@ -299,8 +299,8 @@ function ProofSummaryFields({ proof, isDeposit = false }) {
           <dt className="mb-2 text-slate-400">Bank Details</dt>
           <dd className="space-y-1 text-sm text-slate-200">
             <CopyCell value={proof.bankName || "—"} />
-            <CopyCell value={proof.accountName || "—"} />
             <CopyCell value={proof.bankAccountNo || "—"} />
+            <CopyCell value={proof.accountName || "—"} />
           </dd>
         </div>
       ) : (
