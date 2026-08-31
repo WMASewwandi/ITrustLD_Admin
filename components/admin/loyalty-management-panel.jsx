@@ -381,7 +381,7 @@ function AmountModal({
                 <input
                   type="number"
                   min="0"
-                  step="1"
+                  step={field.step || "1"}
                   value={field.value}
                   onChange={(e) => field.onChange(e.target.value)}
                   className={inputCls}
@@ -628,7 +628,7 @@ export default function LoyaltyManagementPanel({ canMutate = true }) {
     try {
       if (modal.type === "add-point") {
         const amount = Number(modal.calAmount);
-        if (!Number.isInteger(amount) || amount < 0) throw new Error("Enter a valid cal amount.");
+        if (!Number.isFinite(amount) || amount < 0) throw new Error("Enter a valid cal amount.");
         if (!modal.membershipTier) throw new Error("Select a membership tier.");
         await createPointCollection({
           calAmount: amount,
@@ -637,7 +637,7 @@ export default function LoyaltyManagementPanel({ canMutate = true }) {
         });
       } else if (modal.type === "edit-point") {
         const amount = Number(modal.calAmount);
-        if (!Number.isInteger(amount) || amount < 0) throw new Error("Enter a valid cal amount.");
+        if (!Number.isFinite(amount) || amount < 0) throw new Error("Enter a valid cal amount.");
         if (!modal.membershipTier) throw new Error("Select a membership tier.");
         await updatePointCollectionAmount({
           id: modal.id,
@@ -799,6 +799,7 @@ export default function LoyaltyManagementPanel({ canMutate = true }) {
             name: "calAmount",
             label: "Cal Amount",
             value: modal.calAmount,
+            step: "any",
             onChange: (value) => setModal((prev) => ({ ...prev, calAmount: value })),
           },
         ]
