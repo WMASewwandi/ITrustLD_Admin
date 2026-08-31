@@ -1721,6 +1721,7 @@ function TransactionsContent() {
       if (r.authorizedBy && r.authorizedBy !== "—" && r.authorizedBy !== "NA") {
         return r.authorizedBy;
       }
+      if (r.assigned && r.assigned !== "—") return r.assigned;
       return "—";
     }
     if (status === "Pending Authorization") {
