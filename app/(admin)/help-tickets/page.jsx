@@ -38,6 +38,7 @@ export default function HelpTicketsPage() {
   const [replySubject, setReplySubject] = useState("");
   const [replyMessage, setReplyMessage] = useState("");
   const [replyBusy, setReplyBusy] = useState(false);
+  const [replySuccess, setReplySuccess] = useState("");
   const [viewBusy, setViewBusy] = useState(false);
   const [markAllBusy, setMarkAllBusy] = useState(false);
   const [markAllConfirmOpen, setMarkAllConfirmOpen] = useState(false);
@@ -90,6 +91,7 @@ export default function HelpTicketsPage() {
     setPageError("");
     setReplySubject(buildReplySubject(row.subject));
     setReplyMessage("");
+    setReplySuccess("");
     setSelected(row);
 
     try {
@@ -111,6 +113,7 @@ export default function HelpTicketsPage() {
     if (!selected) return;
     setReplyBusy(true);
     setActionMessage("");
+    setReplySuccess("");
     setPageError("");
     try {
       const data = await replyToHelpTicket(selected.id, {
@@ -118,7 +121,10 @@ export default function HelpTicketsPage() {
         message: replyMessage.trim(),
       });
       updateRowReadState(data.ticket);
-      setActionMessage(data.message || "Reply sent successfully.");
+      const sent = data.message || "Reply sent successfully.";
+      setActionMessage(sent);
+      setReplySuccess(sent);
+      setReplyMessage("");
       notifyAdminNavCountsRefresh({
         counts: { help_tickets: { unread: data.unread } },
       });
@@ -133,6 +139,7 @@ export default function HelpTicketsPage() {
     setSelected(null);
     setReplyMessage("");
     setReplySubject("");
+    setReplySuccess("");
   }
 
   async function confirmMarkAllRead() {
@@ -454,6 +461,11 @@ export default function HelpTicketsPage() {
                   />
                 </div>
                 <FormError message={pageError} />
+                {replySuccess ? (
+                  <p className="rounded-xl border border-admin-teal/30 bg-admin-teal/10 px-3 py-2 text-sm text-admin-teal">
+                    {replySuccess}
+                  </p>
+                ) : null}
                 {canReply ? (
                 <button
                   type="button"
