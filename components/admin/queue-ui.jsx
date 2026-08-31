@@ -45,12 +45,12 @@ export function CopyButton({ value, title = "Copy", className = "" }) {
 
 export default function CopyCell({ value, sub }) {
   return (
-    <div className="flex items-start gap-1.5">
-      <div className="min-w-0">
-        <p className="truncate font-medium text-slate-100">{value}</p>
-        {sub ? <p className="truncate text-[11px] text-slate-500">{sub}</p> : null}
+    <div className="flex w-full min-w-0 max-w-full items-start gap-1.5">
+      <div className="min-w-0 flex-1">
+        <p className="break-words [overflow-wrap:anywhere] font-medium text-slate-100">{value}</p>
+        {sub ? <p className="break-words [overflow-wrap:anywhere] text-[11px] text-slate-500">{sub}</p> : null}
       </div>
-      <CopyButton value={value} className="mt-0.5" />
+      <CopyButton value={value} className="mt-0.5 shrink-0" />
     </div>
   );
 }
