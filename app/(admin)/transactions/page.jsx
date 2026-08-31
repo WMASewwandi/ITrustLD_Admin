@@ -295,9 +295,9 @@ function ProofSummaryFields({ proof, isDeposit = false }) {
         value={proof.receiving || proof.deposited || proof.amount}
       />
       {showBankDetails ? (
-        <div className="rounded-lg bg-white/5 px-3 py-2">
+        <div className="min-w-0 rounded-lg bg-white/5 px-3 py-2">
           <dt className="mb-2 text-slate-400">Bank Details</dt>
-          <dd className="space-y-1 text-sm text-slate-200">
+          <dd className="min-w-0 space-y-1 text-sm text-slate-200">
             <CopyCell value={proof.bankName || "—"} />
             <CopyCell value={proof.bankAccountNo || "—"} />
             <CopyCell value={proof.accountName || "—"} />
@@ -639,6 +639,8 @@ function TransactionsContent() {
   const lastHydratedQueryRef = useRef(null);
   const skipAutoLoadRef = useRef(false);
   const skipInitialAutoLoadRef = useRef(true);
+  const depositsInFlightRef = useRef(false);
+  const withdrawalsInFlightRef = useRef(false);
   const loadDepositsRef = useRef(null);
   const loadWithdrawalsRef = useRef(null);
   const buildDepositUrlQueryRef = useRef(null);
@@ -920,6 +922,8 @@ function TransactionsContent() {
 
   const loadDeposits = useCallback(async (overrides = {}) => {
     if (tabRef.current !== "deposits") return;
+    if (overrides.silent && depositsInFlightRef.current) return;
+    depositsInFlightRef.current = true;
     const nextDuration = overrides.duration ?? depositFilters.duration;
     const nextFrom = overrides.from ?? depositFilters.from;
     const nextTo = overrides.to ?? depositFilters.to;
@@ -927,6 +931,7 @@ function TransactionsContent() {
     const nextPage = overrides.page ?? depositPage;
     const customDateError = validateDepositCustomDate(nextDuration, nextFrom, nextTo);
     if (customDateError) {
+      depositsInFlightRef.current = false;
       setFilterError(customDateError);
       return;
     }
@@ -958,12 +963,15 @@ function TransactionsContent() {
       setDepositsError(err.message || "Failed to load deposits.");
       setDeposits([]);
     } finally {
+      depositsInFlightRef.current = false;
       if (!overrides.silent) setDepositsLoading(false);
     }
   }, [depositFilters, resolvedDepositStatus, depositPage, perPage]);
 
   const loadWithdrawals = useCallback(async (overrides = {}) => {
     if (tabRef.current !== "withdrawals") return;
+    if (overrides.silent && withdrawalsInFlightRef.current) return;
+    withdrawalsInFlightRef.current = true;
     const nextDuration = overrides.duration ?? withdrawalFilters.duration;
     const nextFrom = overrides.from ?? withdrawalFilters.from;
     const nextTo = overrides.to ?? withdrawalFilters.to;
@@ -971,6 +979,7 @@ function TransactionsContent() {
     const nextPage = overrides.page ?? withdrawalPage;
     const customDateError = validateWithdrawalCustomDate(nextDuration, nextFrom, nextTo);
     if (customDateError) {
+      withdrawalsInFlightRef.current = false;
       setFilterError(customDateError);
       return;
     }
@@ -1008,6 +1017,7 @@ function TransactionsContent() {
       setWithdrawalsError(err.message || "Failed to load withdrawals.");
       setWithdrawals([]);
     } finally {
+      withdrawalsInFlightRef.current = false;
       if (!overrides.silent) setWithdrawalsLoading(false);
     }
   }, [withdrawalFilters, resolvedDepositStatus, withdrawalPage, perPage]);
@@ -1555,6 +1565,8 @@ function TransactionsContent() {
   useEffect(() => {
     function silentReload() {
       if (skipAutoLoadRef.current || skipInitialAutoLoadRef.current) return;
+      if (tabRef.current === "deposits" && depositsInFlightRef.current) return;
+      if (tabRef.current === "withdrawals" && withdrawalsInFlightRef.current) return;
       const loader =
         tabRef.current === "deposits" ? loadDepositsRef.current : loadWithdrawalsRef.current;
       loader?.({ silent: true, cacheBust: Date.now() });
@@ -1671,7 +1683,7 @@ function TransactionsContent() {
   const title =
     resolvedDepositStatus === "Pending Authorization"
       ? "Pending Authorization"
-      : resolvedDepositStatus === "Pending" || resolvedDepositStatus.includes("Pending")
+      : resolvedDepositStatus === "Pending" || resolvedDepositStatus?.includes("Pending")
       ? tab === "deposits"
         ? "Pending Deposits"
         : "Pending Withdrawals"
@@ -1685,11 +1697,7 @@ function TransactionsContent() {
             : "Rejected Withdrawals"
           : "Transactions";
 
-  const showAssignColumn =
-    tab === "withdrawals" &&
-    (resolvedDepositStatus === "All" ||
-      resolvedDepositStatus === "Pending" ||
-      resolvedDepositStatus === "Pending Authorization");
+  const showPendingAssignToColumn = tab === "withdrawals";
   const showAdminColumn =
     tab === "deposits"
       ? resolvedDepositStatus === "All" ||
@@ -1700,11 +1708,6 @@ function TransactionsContent() {
         resolvedDepositStatus === "Pending Authorization" ||
         resolvedDepositStatus === "Completed" ||
         resolvedDepositStatus === "Rejected";
-  const showUpdatedByColumn =
-    tab === "withdrawals" &&
-    (resolvedDepositStatus === "All" ||
-      resolvedDepositStatus === "Completed" ||
-      resolvedDepositStatus === "Rejected");
   const canManualAssign =
     (resolvedDepositStatus === "Pending" ||
       (tab === "withdrawals" && resolvedDepositStatus === "Pending Authorization")) &&
@@ -1720,7 +1723,12 @@ function TransactionsContent() {
     return r.admin && r.admin !== "NA" ? r.admin : "—";
   }
 
-  function withdrawalUpdatedByLabel(r) {
+  function withdrawalPendingAssignToLabel(r) {
+    const status = String(r.status || "").trim();
+    if (status === "Pending") {
+      if (r.assigned && r.assigned !== "—") return r.assigned;
+      return "Unassigned";
+    }
     if (r.updatedBy && r.updatedBy !== "—" && r.updatedBy !== "NA") return r.updatedBy;
     return "—";
   }
@@ -2670,15 +2678,16 @@ function TransactionsContent() {
                   {resolvedDepositStatus === "Rejected" ? (
                     <th className="px-3 py-3">Rejected Reason</th>
                   ) : null}
-                  {showAssignColumn ? <th className="px-3 py-3">Assigned To</th> : null}
-                  {showUpdatedByColumn ? (
-                    <th className="whitespace-nowrap px-3 py-3">Updated By</th>
+                  {showPendingAssignToColumn ? (
+                    <th className="whitespace-nowrap px-3 py-3">Pending Assign To</th>
                   ) : null}
                   {showAdminColumn ? <th className="px-3 py-3">Admin</th> : null}
                 </tr>
               </thead>
               <tbody>
-                {shown.map((r) => (
+                {shown.map((r) => {
+                  const pendingAssignTo = withdrawalPendingAssignToLabel(r);
+                  return (
                   <tr key={r.id} className={transactionRowClassName(r)}>
                     <td className="px-3 py-3">
                       <input
@@ -2761,29 +2770,16 @@ function TransactionsContent() {
                         )}
                       </td>
                     ) : null}
-                    {showAssignColumn ? (
+                    {showPendingAssignToColumn ? (
                       <td className="px-3 py-3">
                         <span
                           className={
-                            r.assigned && r.assigned !== "—"
+                            pendingAssignTo !== "—" && pendingAssignTo !== "Unassigned"
                               ? "text-xs font-semibold text-admin-teal"
                               : "text-xs text-slate-400"
                           }
                         >
-                          {r.assigned && r.assigned !== "—" ? r.assigned : "Unassigned"}
-                        </span>
-                      </td>
-                    ) : null}
-                    {showUpdatedByColumn ? (
-                      <td className="px-3 py-3">
-                        <span
-                          className={
-                            withdrawalUpdatedByLabel(r) !== "—"
-                              ? "text-xs font-semibold text-admin-teal"
-                              : "text-xs text-slate-400"
-                          }
-                        >
-                          {withdrawalUpdatedByLabel(r)}
+                          {pendingAssignTo}
                         </span>
                       </td>
                     ) : null}
@@ -2793,10 +2789,11 @@ function TransactionsContent() {
                       </td>
                     ) : null}
                   </tr>
-                ))}
+                  );
+                })}
                 {shown.length === 0 ? (
                   <tr>
-                    <td colSpan={13 + (resolvedDepositStatus === "Rejected" ? 1 : 0) + (showAssignColumn ? 1 : 0) + (showUpdatedByColumn ? 1 : 0) + (showAdminColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
+                    <td colSpan={13 + (resolvedDepositStatus === "Rejected" ? 1 : 0) + (showPendingAssignToColumn ? 1 : 0) + (showAdminColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
                       {listLoading
                         ? `Loading ${tab === "deposits" ? "deposits" : "withdrawals"}…`
                         : "No Results Found"}

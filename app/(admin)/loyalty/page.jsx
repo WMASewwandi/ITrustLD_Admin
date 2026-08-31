@@ -189,7 +189,7 @@ function LoyaltyDetailModal({
               </>
             ) : null}
           </dl>
-          {record.rejectReason && tab !== "orders" ? (
+          {record.rejectReason ? (
             <div className="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
               Rejection reason: <span className="font-semibold">{record.rejectReason}</span>
             </div>
@@ -297,6 +297,7 @@ function LoyaltyContent() {
   );
   const [tab, setTab] = useState(params.get("tab") || "orders");
   const { reasons: voucherRejectReasons } = useRejectReasonOptions("voucher_claim");
+  const { reasons: orderRejectReasons } = useRejectReasonOptions("loyalty_order");
   const [status, setStatus] = useState(params.get("status") || "Pending");
   const [q, setQ] = useState("");
   const [duration, setDuration] = useState("");
@@ -490,10 +491,6 @@ function LoyaltyContent() {
   const voucherRangeStart =
     voucherPagination.total === 0 ? 0 : (voucherPagination.page - 1) * voucherPagination.per_page + 1;
   const voucherRangeEnd = Math.min(voucherPagination.page * voucherPagination.per_page, voucherPagination.total);
-  const rejectOrderRecord = useMemo(() => {
-    if (!rejectId || tab !== "orders") return null;
-    return orders.find((r) => r.id === rejectId) ?? null;
-  }, [rejectId, tab, orders]);
   const rejectBonusRecord = useMemo(() => {
     if (!rejectId || tab !== "bonus") return null;
     return bonuses.find((r) => r.id === rejectId) ?? null;
@@ -625,11 +622,15 @@ function LoyaltyContent() {
   const showLoyaltyAdminColumn =
     status === "Completed" || status === "Rejected" || status === "Claimed";
 
-  async function handleOrderStatusUpdate(id, nextStatus) {
+  async function handleOrderStatusUpdate(id, nextStatus, rejectionReason) {
     setOrderStatusBusy(true);
     setOrderActionError("");
     try {
-      await updateLoyaltyOrderStatus({ transactionId: id, status: nextStatus });
+      await updateLoyaltyOrderStatus({
+        transactionId: id,
+        status: nextStatus,
+        rejectionReason,
+      });
       await loadOrders();
       if (detail?.id === id) {
         setDetail(null);
@@ -717,7 +718,7 @@ function LoyaltyContent() {
 
   function rejectRecord(id, reason) {
     if (tab === "orders") {
-      handleOrderStatusUpdate(id, "Rejected");
+      handleOrderStatusUpdate(id, "Rejected", reason);
       return;
     }
     if (tab === "bonus") {
@@ -1086,6 +1087,7 @@ function LoyaltyContent() {
                     <th className="px-3 py-3">Plat. ID / Email</th>
                     <th className="px-3 py-3">Action</th>
                     <th className="px-3 py-3">Status</th>
+                    {status === "Rejected" ? <th className="px-3 py-3">Rejection Reason</th> : null}
                     {showLoyaltyAdminColumn ? <th className="px-3 py-3">Admin</th> : null}
                   </tr>
                 </thead>
@@ -1213,6 +1215,11 @@ function LoyaltyContent() {
                           title="View details and approve / reject"
                         />
                       </td>
+                      {status === "Rejected" ? (
+                        <td className="px-3 py-3 max-w-[220px]">
+                          <CopyCell value={r.rejectReason || "N/A"} />
+                        </td>
+                      ) : null}
                       {showLoyaltyAdminColumn ? (
                         <td className="px-3 py-3 text-xs text-slate-200">
                           {r.admin && r.admin !== "NA" ? r.admin : "—"}
@@ -1222,7 +1229,7 @@ function LoyaltyContent() {
                   ))}
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={10 + (showLoyaltyAdminColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
+                      <td colSpan={10 + (status === "Rejected" ? 1 : 0) + (showLoyaltyAdminColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
                         No Results Found
                       </td>
                     </tr>
@@ -1805,25 +1812,35 @@ function LoyaltyContent() {
       />
 
       <DepositStatusConfirmModal
-        open={Boolean(rejectId) && (tab === "orders" || tab === "bonus")}
+        open={Boolean(rejectId) && tab === "bonus"}
         title="Set as Rejected?"
         message={
-          rejectOrderRecord
-            ? `${rejectOrderRecord.id} · ${rejectOrderRecord.customer}`
-            : rejectBonusRecord
-              ? `${rejectBonusRecord.id} · ${rejectBonusRecord.customer}`
-              : undefined
+          rejectBonusRecord
+            ? `${rejectBonusRecord.id} · ${rejectBonusRecord.customer}`
+            : undefined
         }
         confirmLabel="Yes"
         confirmClassName="bg-[#E11D48]"
-        busy={tab === "orders" ? orderStatusBusy : bonusStatusBusy}
-        error={tab === "orders" ? orderActionError : bonusActionError}
+        busy={bonusStatusBusy}
+        error={bonusActionError}
         onCancel={() => {
           setRejectId(null);
-          setOrderActionError("");
           setBonusActionError("");
         }}
         onConfirm={() => rejectRecord(rejectId)}
+      />
+
+      <RejectModal
+        open={Boolean(rejectId) && tab === "orders"}
+        title="Reject loyalty order"
+        reasons={orderRejectReasons}
+        error={orderActionError}
+        busy={orderStatusBusy}
+        onClose={() => {
+          setRejectId(null);
+          setOrderActionError("");
+        }}
+        onConfirm={(reason) => rejectRecord(rejectId, reason)}
       />
 
       <RejectModal
