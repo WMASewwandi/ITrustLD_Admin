@@ -1700,6 +1700,11 @@ function TransactionsContent() {
         resolvedDepositStatus === "Pending Authorization" ||
         resolvedDepositStatus === "Completed" ||
         resolvedDepositStatus === "Rejected";
+  const showUpdatedByColumn =
+    tab === "withdrawals" &&
+    (resolvedDepositStatus === "All" ||
+      resolvedDepositStatus === "Completed" ||
+      resolvedDepositStatus === "Rejected");
   const canManualAssign =
     (resolvedDepositStatus === "Pending" ||
       (tab === "withdrawals" && resolvedDepositStatus === "Pending Authorization")) &&
@@ -1713,6 +1718,11 @@ function TransactionsContent() {
       return "Unassigned";
     }
     return r.admin && r.admin !== "NA" ? r.admin : "—";
+  }
+
+  function withdrawalUpdatedByLabel(r) {
+    if (r.updatedBy && r.updatedBy !== "—" && r.updatedBy !== "NA") return r.updatedBy;
+    return "—";
   }
 
   function withdrawalAdminLabel(r) {
@@ -2661,6 +2671,9 @@ function TransactionsContent() {
                     <th className="px-3 py-3">Rejected Reason</th>
                   ) : null}
                   {showAssignColumn ? <th className="px-3 py-3">Assigned To</th> : null}
+                  {showUpdatedByColumn ? (
+                    <th className="whitespace-nowrap px-3 py-3">Updated By</th>
+                  ) : null}
                   {showAdminColumn ? <th className="px-3 py-3">Admin</th> : null}
                 </tr>
               </thead>
@@ -2761,6 +2774,19 @@ function TransactionsContent() {
                         </span>
                       </td>
                     ) : null}
+                    {showUpdatedByColumn ? (
+                      <td className="px-3 py-3">
+                        <span
+                          className={
+                            withdrawalUpdatedByLabel(r) !== "—"
+                              ? "text-xs font-semibold text-admin-teal"
+                              : "text-xs text-slate-400"
+                          }
+                        >
+                          {withdrawalUpdatedByLabel(r)}
+                        </span>
+                      </td>
+                    ) : null}
                     {showAdminColumn ? (
                       <td className="px-3 py-3">
                         <span className="text-xs text-slate-200">{withdrawalAdminLabel(r)}</span>
@@ -2770,7 +2796,7 @@ function TransactionsContent() {
                 ))}
                 {shown.length === 0 ? (
                   <tr>
-                    <td colSpan={13 + (resolvedDepositStatus === "Rejected" ? 1 : 0) + (showAssignColumn ? 1 : 0) + (showAdminColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
+                    <td colSpan={13 + (resolvedDepositStatus === "Rejected" ? 1 : 0) + (showAssignColumn ? 1 : 0) + (showUpdatedByColumn ? 1 : 0) + (showAdminColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
                       {listLoading
                         ? `Loading ${tab === "deposits" ? "deposits" : "withdrawals"}…`
                         : "No Results Found"}
