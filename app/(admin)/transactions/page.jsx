@@ -332,9 +332,7 @@ function ProofSummaryFields({ proof, isDeposit = false }) {
                   proof.assigned &&
                   proof.assigned !== "—"
                 ? proof.assigned
-                : proof.admin && proof.admin !== "NA"
-                  ? proof.admin
-                  : "—"
+                : "—"
           }
         />
       ) : null}
@@ -1718,17 +1716,19 @@ function TransactionsContent() {
   }
 
   function withdrawalAdminLabel(r) {
-    if (r.authorizedBy && r.authorizedBy !== "—" && r.authorizedBy !== "NA") return r.authorizedBy;
-    if (r.status === "Pending Authorization" && r.assigned && r.assigned !== "—") {
-      return r.assigned;
+    const status = String(r.status || "").trim();
+    if (status === "Completed" || status === "Rejected") {
+      if (r.authorizedBy && r.authorizedBy !== "—" && r.authorizedBy !== "NA") {
+        return r.authorizedBy;
+      }
+      return "—";
     }
-    if (
-      (r.status === "Completed" || r.status === "Rejected") &&
-      r.admin &&
-      r.admin !== "NA" &&
-      r.admin !== "—"
-    ) {
-      return r.admin;
+    if (status === "Pending Authorization") {
+      if (r.authorizedBy && r.authorizedBy !== "—" && r.authorizedBy !== "NA") {
+        return r.authorizedBy;
+      }
+      if (r.assigned && r.assigned !== "—") return r.assigned;
+      return "—";
     }
     return "—";
   }
