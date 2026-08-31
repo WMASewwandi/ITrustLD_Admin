@@ -114,7 +114,7 @@ export default function AdminShell({ children }) {
         setReady(true);
       } catch (error) {
         if (cancelled) return;
-        if (error?.status === 401 && !cached) {
+        if (error?.data?.code === "SHIFT_MISMATCH" || (error?.status === 401 && !cached)) {
           shellSnapshot = null;
           clearAdminSession();
           routerRef.current.replace("/login");

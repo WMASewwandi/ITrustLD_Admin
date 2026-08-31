@@ -320,15 +320,21 @@ function ProofSummaryFields({ proof, isDeposit = false }) {
           }
         />
       ) : null}
-      {proof.status === "Completed" || proof.status === "Rejected" ? (
+      {proof.status === "Pending Authorization" ||
+      proof.status === "Completed" ||
+      proof.status === "Rejected" ? (
         <ProofTextField
           label="Authorized By"
           value={
             proof.authorizedBy && proof.authorizedBy !== "—"
               ? proof.authorizedBy
-              : proof.admin && proof.admin !== "NA"
-                ? proof.admin
-                : "—"
+              : proof.status === "Pending Authorization" &&
+                  proof.assigned &&
+                  proof.assigned !== "—"
+                ? proof.assigned
+                : proof.admin && proof.admin !== "NA"
+                  ? proof.admin
+                  : "—"
           }
         />
       ) : null}
@@ -1712,8 +1718,16 @@ function TransactionsContent() {
   }
 
   function withdrawalAdminLabel(r) {
-    if (r.authorizedBy && r.authorizedBy !== "—") return r.authorizedBy;
-    if ((r.status === "Completed" || r.status === "Rejected") && r.admin && r.admin !== "NA") {
+    if (r.authorizedBy && r.authorizedBy !== "—" && r.authorizedBy !== "NA") return r.authorizedBy;
+    if (r.status === "Pending Authorization" && r.assigned && r.assigned !== "—") {
+      return r.assigned;
+    }
+    if (
+      (r.status === "Completed" || r.status === "Rejected") &&
+      r.admin &&
+      r.admin !== "NA" &&
+      r.admin !== "—"
+    ) {
       return r.admin;
     }
     return "—";

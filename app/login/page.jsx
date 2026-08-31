@@ -11,6 +11,7 @@ import {
   Lock,
   Eye,
   EyeOff,
+  Clock3,
 } from "lucide-react";
 import { loginAdmin, safeAdminPath, setAdminSession } from "@/lib/auth";
 import { TOP_NAV } from "@/lib/mock-data";
@@ -36,10 +37,12 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [shiftBlock, setShiftBlock] = useState(null);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+    setShiftBlock(null);
     setLoading(true);
 
     const form = e.currentTarget;
@@ -59,7 +62,18 @@ function LoginForm() {
       // that first landing page forever.
       window.location.replace(safeAdminPath(landing));
     } catch (err) {
-      setError(err.message || "Sign in failed. Please try again.");
+      if (err.data?.code === "SHIFT_MISMATCH") {
+        setShiftBlock({
+          message:
+            err.data?.message ||
+            err.message ||
+            "You cannot sign in outside your assigned shift.",
+          activeShift: err.data?.active_shift || null,
+          userShift: err.data?.user_shift || null,
+        });
+      } else {
+        setError(err.message || "Sign in failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -220,6 +234,43 @@ function LoginForm() {
           </div>
         </section>
       </div>
+
+      {shiftBlock ? (
+        <div className="admin-modal-overlay z-[90]" role="presentation">
+          <div
+            className="admin-card w-full max-w-md p-6 shadow-2xl"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="shift-block-title"
+            aria-describedby="shift-block-message"
+          >
+            <div className="flex items-start gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-200">
+                <Clock3 className="h-5 w-5" />
+              </span>
+              <div>
+                <h3 id="shift-block-title" className="text-lg font-semibold text-white">
+                  Not your shift today
+                </h3>
+                <p id="shift-block-message" className="mt-2 text-sm leading-relaxed text-slate-300">
+                  {shiftBlock.activeShift && shiftBlock.userShift
+                    ? `Today is Shift ${shiftBlock.activeShift}. Your account is assigned to Shift ${shiftBlock.userShift}, so you cannot sign in.`
+                    : shiftBlock.message}
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShiftBlock(null)}
+                className="rounded-xl bg-admin-teal px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-admin-teal-deep"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
