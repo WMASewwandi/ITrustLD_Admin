@@ -150,9 +150,9 @@ function DateTimeCell({ value }) {
   return (
     <div className="flex items-start gap-1.5">
       <Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
-      <div className="min-w-0 space-y-0.5">
-        <CopyCell value={date} />
-        {time ? <CopyCell value={time} /> : null}
+      <div className="w-max space-y-0.5">
+        <CopyCell value={date} nowrap />
+        {time ? <CopyCell value={time} nowrap /> : null}
       </div>
     </div>
   );
@@ -160,9 +160,9 @@ function DateTimeCell({ value }) {
 
 function IdNameCell({ id, name }) {
   return (
-    <div className="min-w-0 space-y-0.5">
-      <CopyCell value={id || "—"} />
-      {name ? <CopyCell value={name} /> : null}
+    <div className="w-max space-y-0.5">
+      <CopyCell value={id || "—"} nowrap />
+      {name ? <CopyCell value={name} nowrap /> : null}
     </div>
   );
 }
@@ -179,10 +179,35 @@ function transactionRowClassName(record) {
     : "border-t border-white/10 text-slate-300 transition hover:bg-admin-teal/[0.05]";
 }
 
+function withdrawalAccLines(record) {
+  const bank = String(record?.bankName || "").trim();
+  const accNo = String(record?.bankAccountNo || "").trim();
+  const name = String(record?.accountName || "").trim();
+  if (bank || accNo || name) {
+    return [bank || "—", accNo || "—", name || "—"];
+  }
+  const raw = String(record?.account || "").trim();
+  if (raw.includes(" · ")) {
+    const parts = raw.split(" · ").map((part) => part.trim()).filter(Boolean);
+    return [parts[0] || "—", parts[1] || "—", parts[2] || "—"];
+  }
+  return [raw || "—"];
+}
+
+function WithdrawalAccCell({ record }) {
+  return (
+    <div className="w-max space-y-0.5">
+      {withdrawalAccLines(record).map((line, index) => (
+        <CopyCell key={`${record?.id || "acc"}-${index}`} value={line} nowrap />
+      ))}
+    </div>
+  );
+}
+
 function PlatformIdCell({ value, isScammer }) {
   return (
-    <div className="min-w-0">
-      <CopyCell value={value} />
+    <div className="w-max">
+      <CopyCell value={value} nowrap />
       {isScammer ? (
         <p className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-rose-300">
           <Info className="h-3 w-3" />
@@ -2679,9 +2704,9 @@ function TransactionsContent() {
                     <th className="px-3 py-3">Rejected Reason</th>
                   ) : null}
                   {showPendingAssignToColumn ? (
-                    <th className="whitespace-nowrap px-3 py-3">Pending Assign To</th>
+                    <th className="whitespace-nowrap px-3 py-3">Updated By</th>
                   ) : null}
-                  {showAdminColumn ? <th className="px-3 py-3">Admin</th> : null}
+                  {showAdminColumn ? <th className="whitespace-nowrap px-3 py-3">Authorized By</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -2697,22 +2722,22 @@ function TransactionsContent() {
                         className="rounded border-white/20"
                       />
                     </td>
-                    <td className="px-3 py-3">
-                      <CopyCell value={r.id} />
+                    <td className="whitespace-nowrap px-3 py-3">
+                      <CopyCell value={r.id} nowrap />
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="whitespace-nowrap px-3 py-3">
                       <DateTimeCell value={r.date} />
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="whitespace-nowrap px-3 py-3">
                       <IdNameCell id={r.userId} name={r.customer} />
                     </td>
                     <td className="px-3 py-3">
                       <CopyCell value={r.platform} />
                     </td>
-                    <td className="px-3 py-3">
-                      <CopyCell value={r.cashoutAmt || r.amount} />
+                    <td className="whitespace-nowrap px-3 py-3">
+                      <CopyCell value={r.cashoutAmt || r.amount} nowrap />
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="whitespace-nowrap px-3 py-3">
                       <div
                         role="button"
                         tabIndex={0}
@@ -2737,11 +2762,11 @@ function TransactionsContent() {
                         {r.method}
                       </span>
                     </td>
-                    <td className="px-3 py-3">
-                      <CopyCell value={r.receiving || r.payout} />
+                    <td className="whitespace-nowrap px-3 py-3">
+                      <CopyCell value={r.receiving || r.payout} nowrap />
                     </td>
-                    <td className="px-3 py-3 max-w-[140px]">
-                      <CopyCell value={r.account} />
+                    <td className="whitespace-nowrap px-3 py-3">
+                      <WithdrawalAccCell record={r} />
                     </td>
                     <td className="px-3 py-3">
                       <button
