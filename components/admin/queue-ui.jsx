@@ -43,23 +43,26 @@ export function CopyButton({ value, title = "Copy", className = "" }) {
   );
 }
 
-export default function CopyCell({ value, sub }) {
+export default function CopyCell({ value, sub, nowrap = false }) {
+  const wrapClass = nowrap
+    ? "whitespace-nowrap"
+    : "break-words [overflow-wrap:anywhere]";
   return (
-    <div className="flex w-full min-w-0 max-w-full items-start gap-1.5">
-      <div className="min-w-0 flex-1">
-        <p className="break-words [overflow-wrap:anywhere] font-medium text-slate-100">{value}</p>
-        {sub ? <p className="break-words [overflow-wrap:anywhere] text-[11px] text-slate-500">{sub}</p> : null}
+    <div className={`flex items-start gap-1.5 ${nowrap ? "w-max max-w-none" : "w-full min-w-0 max-w-full"}`}>
+      <div className={nowrap ? "shrink-0" : "min-w-0 flex-1"}>
+        <p className={`${wrapClass} font-medium text-slate-100`}>{value}</p>
+        {sub ? <p className={`${wrapClass} text-[11px] text-slate-500`}>{sub}</p> : null}
       </div>
       <CopyButton value={value} className="mt-0.5 shrink-0" />
     </div>
   );
 }
 
-export function IdNameCell({ id, name }) {
+export function IdNameCell({ id, name, nowrap = false }) {
   return (
-    <div className="min-w-0 space-y-0.5">
-      <CopyCell value={id || "—"} />
-      {name ? <CopyCell value={name} /> : null}
+    <div className={nowrap ? "w-max space-y-0.5" : "min-w-0 space-y-0.5"}>
+      <CopyCell value={id || "—"} nowrap={nowrap} />
+      {name ? <CopyCell value={name} nowrap={nowrap} /> : null}
     </div>
   );
 }

@@ -1088,7 +1088,7 @@ function LoyaltyContent() {
                     <th className="px-3 py-3">Action</th>
                     <th className="px-3 py-3">Status</th>
                     {status === "Rejected" ? <th className="px-3 py-3">Rejection Reason</th> : null}
-                    {showLoyaltyAdminColumn ? <th className="px-3 py-3">Admin</th> : null}
+                    {showLoyaltyAdminColumn ? <th className="whitespace-nowrap px-3 py-3">Authorized By</th> : null}
                   </tr>
                 </thead>
                 <tbody>
