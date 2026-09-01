@@ -305,7 +305,7 @@ function ProofSummaryFields({ proof, isDeposit = false }) {
           <dd className="min-w-0 space-y-1 text-sm text-slate-200">
             <CopyCell value={proof.bankName || "—"} />
             <CopyCell value={proof.bankAccountNo || "—"} />
-            <CopyCell value={proof.accountName || "—"} />
+            <CopyCell value={proof.accountName || "—"} nowrap={false} />
           </dd>
         </div>
       ) : (
