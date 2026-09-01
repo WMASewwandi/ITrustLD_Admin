@@ -21,7 +21,7 @@ import {
   updateGiftState,
 } from "@/lib/loyalty-gifts";
 import { useAppDialog } from "@/components/admin/app-dialog";
-import { parseDbDateTime } from "@/lib/sl-time";
+import { parseDbDateTime, getColomboDateParts } from "@/lib/sl-time";
 import { notifyAdminNavCountsRefresh } from "@/lib/notifications";
 
 const LEVEL_OPTIONS = [
@@ -80,7 +80,8 @@ function toDateInputValue(value) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return String(value);
   const parsed = parseDbDateTime(value);
   if (!parsed) return "";
-  return `${parsed.getFullYear()}-${pad2(parsed.getMonth() + 1)}-${pad2(parsed.getDate())}`;
+  const parts = getColomboDateParts(parsed);
+  return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`;
 }
 
 function getCountdownParts(expiresAt) {
