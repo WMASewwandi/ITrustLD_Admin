@@ -8,12 +8,11 @@ import RejectReasonPanel from "@/components/admin/reject-reason-panel";
 import DepositProofStatusPanel from "@/components/admin/deposit-proof-status-panel";
 import { useRejectReasonOptions } from "@/lib/reject-reasons";
 import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
-import CopyCell, { FilterField, StatusPill, inputCls, statusHeaderToneClass } from "@/components/admin/queue-ui";
+import CopyCell, { DateTimeCell, FilterField, StatusPill, inputCls, statusHeaderToneClass } from "@/components/admin/queue-ui";
 import AdminPagination from "@/components/admin/admin-pagination";
 import AssignDepositsModal from "@/components/admin/assign-deposits-modal";
 import AssignWithdrawalsModal from "@/components/admin/assign-withdrawals-modal";
 import { EmailSendModal, SmsSendModal } from "@/components/admin/customer-message-modals";
-import { formatDateTimeParts } from "@/lib/sl-time";
 import { sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
 import { notifyAdminNavCountsRefresh, ADMIN_NAV_COUNTS_REVISION_EVENT } from "@/lib/notifications";
 import {
@@ -48,7 +47,6 @@ import {
   ArrowLeft,
   Check,
   ChevronDown,
-  Clock3,
   Eye,
   FileImage,
   FileText,
@@ -138,24 +136,6 @@ function parseTabFiltersFromSearchParams(urlParams) {
   const promotedFromUrl = status !== urlStatus;
   const q = promotedFromUrl && isPendingQueueStatus(urlStatus) ? "" : urlParams.get("keyword") || "";
   return { status, q, duration, from, to, txId, platformId, userAccount, advancedSearchIn };
-}
-
-function formatDateParts(value) {
-  const { date, time } = formatDateTimeParts(value);
-  return { date, time };
-}
-
-function DateTimeCell({ value }) {
-  const { date, time } = formatDateParts(value);
-  return (
-    <div className="flex items-start gap-1.5">
-      <Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
-      <div className="w-max space-y-0.5">
-        <CopyCell value={date} nowrap />
-        {time ? <CopyCell value={time} nowrap /> : null}
-      </div>
-    </div>
-  );
 }
 
 function IdNameCell({ id, name }) {
@@ -2789,7 +2769,7 @@ function TransactionsContent() {
                     {resolvedDepositStatus === "Rejected" ? (
                       <td className="px-3 py-3 max-w-[220px]">
                         {r.status === "Rejected" ? (
-                          <CopyCell value={formatDepositRejectedReason(r)} />
+                          <CopyCell value={formatDepositRejectedReason(r)} nowrap={false} />
                         ) : (
                           <span className="text-slate-500">—</span>
                         )}
@@ -2922,7 +2902,7 @@ function TransactionsContent() {
                     {resolvedDepositStatus === "Rejected" ? (
                       <td className="px-3 py-3 max-w-[220px]">
                         {r.status === "Rejected" ? (
-                          <CopyCell value={formatDepositRejectedReason(r)} />
+                          <CopyCell value={formatDepositRejectedReason(r)} nowrap={false} />
                         ) : (
                           <span className="text-slate-500">—</span>
                         )}

@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 import { useLocationSearchParams } from "@/lib/location-search";
 import { Check, Loader2, Pencil, Plus, Trash2, Truck, X } from "lucide-react";
-import CopyCell, { FilterField, IdNameCell, StatusPill, inputCls } from "@/components/admin/queue-ui";
+import CopyCell, { DateTimeCell, FilterField, IdNameCell, StatusPill, inputCls } from "@/components/admin/queue-ui";
 import RejectModal from "@/components/admin/reject-modal";
 import { useRejectReasonOptions } from "@/lib/reject-reasons";
 import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
@@ -783,14 +783,14 @@ export default function LoyaltyGiftPanel({ canMutateClaims = true, canMutateCata
                           <CopyCell value={claim.id} />
                         </td>
                         <td className="px-3 py-3">
-                          <CopyCell value={claim.date} />
+                          <DateTimeCell value={claim.date} />
                         </td>
                         <td className="px-3 py-3">
                           <IdNameCell id={claim.account_id} name={claim.customer} />
                         </td>
                         <td className="px-3 py-3 font-medium text-white">{claim.gift_title}</td>
                         <td className="max-w-[220px] px-3 py-3">
-                          <CopyCell value={claim.delivery_address} />
+                          <CopyCell value={claim.delivery_address} nowrap={false} />
                         </td>
                         <td className="px-3 py-3">
                           <CopyCell value={claim.contact_phone || "—"} />
