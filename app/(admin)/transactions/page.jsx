@@ -6,7 +6,7 @@ import { useLocationSearchString } from "@/lib/location-search";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectReasonPanel from "@/components/admin/reject-reason-panel";
 import DepositProofStatusPanel from "@/components/admin/deposit-proof-status-panel";
-import { useRejectReasonOptions } from "@/lib/reject-reasons";
+import { isCustomRejectReason, useRejectReasonOptions } from "@/lib/reject-reasons";
 import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
 import CopyCell, { DateTimeCell, FilterField, StatusPill, inputCls, statusHeaderToneClass } from "@/components/admin/queue-ui";
 import AdminPagination from "@/components/admin/admin-pagination";
@@ -41,6 +41,7 @@ import {
   validateWithdrawalCustomDate,
 } from "@/lib/withdrawals";
 import { getAdminUser } from "@/lib/auth";
+import { forgetProofBlob, loadProofBlob } from "@/lib/proof-blob";
 import { useCan } from "@/contexts/admin-permissions";
 import {
   AlertTriangle,
@@ -147,10 +148,22 @@ function IdNameCell({ id, name }) {
   );
 }
 
+function parseMoneyAmount(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const parsed = Number(String(value ?? "").replace(/[^\d.]/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function formatDepositRejectedReason(record) {
-  const message = record?.rejectReasonMessage?.trim() || "Custom reason Not Added";
-  const category = record?.rejectReasonCategory?.trim() || "Reason Not Added";
-  return `${message} | ${category}`;
+  const message = record?.rejectReasonMessage?.trim() || "";
+  const category = record?.rejectReasonCategory?.trim() || "";
+  if (isCustomRejectReason(category)) {
+    return message || "Custom reason Not Added";
+  }
+  if (message && category && message !== category) {
+    return `${message} | ${category}`;
+  }
+  return message || category || "Reason Not Added";
 }
 
 function transactionRowClassName(record) {
@@ -353,9 +366,13 @@ function ProofImageCard({ proof, file, fetchProofBlob }) {
   const name = file?.name || `payment_slip_${String(proof.id).slice(-6)}.jpg`;
   const proofKey = file?.proofKey || proof.proofFileName || null;
   const directUrl = !proofKey ? file?.url || proof.proofUrl : null;
+  const fetchBlob = fetchProofBlob || fetchDepositProofBlob;
+  const fetchBlobRef = useRef(fetchBlob);
+  fetchBlobRef.current = fetchBlob;
   const [previewUrl, setPreviewUrl] = useState("");
   const [loading, setLoading] = useState(Boolean(proofKey));
   const [loadError, setLoadError] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     if (!proofKey) {
@@ -370,18 +387,17 @@ function ProofImageCard({ proof, file, fetchProofBlob }) {
 
     setLoading(true);
     setLoadError(false);
-    setPreviewUrl("");
 
-    (fetchProofBlob || fetchDepositProofBlob)(proofKey)
+    loadProofBlob(fetchBlobRef.current, proofKey)
       .then((blob) => {
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
         setPreviewUrl(objectUrl);
+        setLoadError(false);
       })
       .catch(() => {
         if (cancelled) return;
         setLoadError(true);
-        setPreviewUrl("");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -391,7 +407,7 @@ function ProofImageCard({ proof, file, fetchProofBlob }) {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [proofKey, directUrl, fetchProofBlob]);
+  }, [proofKey, directUrl, reloadToken]);
 
   if (loading) {
     return (
@@ -403,16 +419,39 @@ function ProofImageCard({ proof, file, fetchProofBlob }) {
 
   if (previewUrl && !loadError) {
     return (
-      <img src={previewUrl} alt={name} className="block h-auto w-full" />
+      <img
+        src={previewUrl}
+        alt={name}
+        className="block h-auto w-full"
+        onError={() => {
+          if (proofKey) forgetProofBlob(proofKey);
+          if (reloadToken < 2) {
+            setReloadToken((value) => value + 1);
+            return;
+          }
+          setLoadError(true);
+        }}
+      />
     );
   }
 
   return (
     <div className="w-full max-w-sm rounded-lg border border-slate-300/30 bg-[#f8fafc] p-4 text-slate-800 shadow-lg">
       {loadError ? (
-        <p className="mb-3 rounded bg-amber-50 px-2 py-1.5 text-[11px] font-medium text-amber-800">
-          Could not load the proof image. Check that deposit files are available on storage or Laravel/S3.
-        </p>
+        <div className="mb-3 rounded bg-amber-50 px-2 py-1.5 text-[11px] font-medium text-amber-800">
+          <p>Could not load the proof image. Check that deposit files are available on storage or Laravel/S3.</p>
+          <button
+            type="button"
+            onClick={() => {
+              if (proofKey) forgetProofBlob(proofKey);
+              setLoadError(false);
+              setReloadToken((value) => value + 1);
+            }}
+            className="mt-1.5 text-[11px] font-semibold text-teal-700 underline"
+          >
+            Try again
+          </button>
+        </div>
       ) : null}
       <div className="mb-3 flex items-start justify-between border-b border-slate-200 pb-2">
         <div>
@@ -698,19 +737,24 @@ function TransactionsContent() {
     }
   };
 
-  /** Status dropdown: open that list cleanly (no leftover Completed/Rejected search). */
+  /** Status dropdown: open that list cleanly (no leftover Completed/Rejected search).
+   *  All keeps the search row so Duration / IDs / Account apply across every status. */
   const applyStatusFilter = (nextStatus) => {
-    const nextFilters = {
-      ...createDefaultTabFilters(),
-      status: nextStatus,
-      advancedSearchIn: nextStatus === "Rejected" ? "Rejected" : "Completed",
-    };
+    const current = tab === "deposits" ? depositFilters : withdrawalFilters;
+    const nextFilters =
+      nextStatus === "All"
+        ? { ...current, status: "All" }
+        : {
+            ...createDefaultTabFilters(),
+            status: nextStatus,
+            advancedSearchIn: nextStatus === "Rejected" ? "Rejected" : "Completed",
+          };
     if (tab === "deposits") {
       setDepositFilters(nextFilters);
     } else {
       setWithdrawalFilters(nextFilters);
     }
-    setSearchDraft("");
+    setSearchDraft(nextStatus === "All" ? current.q : "");
     setFilterError("");
     setViewAll(false);
     setDepositPage(1);
@@ -800,9 +844,9 @@ function TransactionsContent() {
 
       const defaultScopedList =
         !advancedActive &&
-        (resolvedStatus === "Completed" || resolvedStatus === "Rejected");
+        (resolvedStatus === "Completed" || resolvedStatus === "Rejected" || resolvedStatus === "All");
 
-      if (advancedActive) {
+      if (advancedActive || resolvedStatus === "All") {
         const filterValue =
           mapDurationToFilter(nextDuration) || (nextDuration === "Today" ? "today" : "");
         if (filterValue) next.set("filter", filterValue);
@@ -888,9 +932,9 @@ function TransactionsContent() {
 
       const defaultScopedList =
         !advancedActive &&
-        (resolvedStatus === "Completed" || resolvedStatus === "Rejected");
+        (resolvedStatus === "Completed" || resolvedStatus === "Rejected" || resolvedStatus === "All");
 
-      if (advancedActive) {
+      if (advancedActive || resolvedStatus === "All") {
         const filterValue =
           mapDurationToFilter(nextDuration) || (nextDuration === "Today" ? "today" : "");
         if (filterValue) next.set("filter", filterValue);
@@ -1660,30 +1704,33 @@ function TransactionsContent() {
     return allowedStatusesForTab.includes(row.status);
   }
 
-  const pendingRows =
-    tab === "deposits"
-      ? deposits.filter((r) => r.status === "Pending")
-      : withdrawals.filter((r) => r.status === "Pending");
+  const usePendingApiTotals = resolvedDepositStatus === "Pending";
+  const loadedClientPay = shown.reduce((sum, r) => {
+    if (tab === "withdrawals") {
+      return sum + parseMoneyAmount(r.receiving || r.payout);
+    }
+    if (Number(r.clientPayLkr)) return sum + Number(r.clientPayLkr);
+    if (Number(r.clientPayUsd)) return sum + Number(r.clientPayUsd) * 300;
+    return sum + parseMoneyAmount(r.clientPay || r.amount);
+  }, 0);
+  const loadedTopUp = shown.reduce((sum, r) => {
+    if (tab === "withdrawals") {
+      return sum + (Number(r.clientPayUsd) || parseMoneyAmount(r.cashoutAmt || r.amount));
+    }
+    return sum + parseMoneyAmount(r.deposited || r.amount);
+  }, 0);
   const clientPayLkr =
-    tab === "deposits" && resolvedDepositStatus === "Pending"
+    usePendingApiTotals && tab === "deposits"
       ? depositTotals.totalPaymentAmount
-      : tab === "withdrawals" && resolvedDepositStatus === "Pending"
+      : usePendingApiTotals && tab === "withdrawals"
         ? withdrawalTotals.totalReceivingAmount
-        : pendingRows.reduce(
-            (sum, r) => sum + (Number(r.clientPayLkr) || Number(r.clientPayUsd || 0) * 300),
-            0,
-          );
+        : loadedClientPay;
   const topUpTotal =
-    tab === "deposits" && resolvedDepositStatus === "Pending"
+    usePendingApiTotals && tab === "deposits"
       ? depositTotals.totalDepositAmount
-      : tab === "withdrawals" && resolvedDepositStatus === "Pending"
+      : usePendingApiTotals && tab === "withdrawals"
         ? withdrawalTotals.totalCashoutAmount
-        : tab === "withdrawals"
-          ? pendingRows.reduce((sum, r) => sum + (Number(r.clientPayUsd) || 0), 0)
-          : pendingRows.reduce(
-              (sum, r) => sum + Number(String(r.deposited || r.amount).replace(/[^\d.]/g, "") || 0),
-              0,
-            );
+        : loadedTopUp;
 
   const title =
     resolvedDepositStatus === "Pending Authorization"
@@ -2552,6 +2599,10 @@ function TransactionsContent() {
                 <p className="mt-1.5 text-[11px] text-slate-500">
                   Keyword search filters rejected {tab === "deposits" ? "deposits" : "withdrawals"}{" "}
                   within the selected duration.
+                </p>
+              ) : status === "All" ? (
+                <p className="mt-1.5 text-[11px] text-slate-500">
+                  Searches every status using the keyword and all filters entered below.
                 </p>
               ) : null}
             </div>

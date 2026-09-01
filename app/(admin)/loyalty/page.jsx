@@ -21,8 +21,10 @@ import { useAdminPermissions } from "@/contexts/admin-permissions";
 import { hasLoyaltyTabRead, hasLoyaltyTabUpdate, hasLoyaltyGiftsCatalogUpdate } from "@/lib/loyalty-permissions";
 import LoyaltyManagementPanel from "@/components/admin/loyalty-management-panel";
 import LoyaltyGiftPanel from "@/components/admin/loyalty-gift-panel";
+import AssignLoyaltyModal from "@/components/admin/assign-loyalty-modal";
+import { getAdminUser } from "@/lib/auth";
 import { useRejectReasonOptions } from "@/lib/reject-reasons";
-import { Check, RefreshCw, Search, X } from "lucide-react";
+import { Check, RefreshCw, Search, UserPlus, X } from "lucide-react";
 
 const TABS = [
   { id: "orders", label: "Orders" },
@@ -38,6 +40,29 @@ function DetailField({ label, children }) {
       <dt className="mb-0.5 text-[11px] text-slate-400">{label}</dt>
       <dd className="text-sm font-medium text-white">{children}</dd>
     </div>
+  );
+}
+
+function assignedToLabel(record) {
+  if (record?.assigned && record.assigned !== "—" && record.assigned !== "NA") {
+    return record.assigned;
+  }
+  if (record?.status === "Pending") return "Unassigned";
+  return "—";
+}
+
+function AssignedToCell({ record }) {
+  const label = assignedToLabel(record);
+  return (
+    <span
+      className={
+        label !== "—" && label !== "Unassigned"
+          ? "text-xs font-semibold text-admin-teal"
+          : "text-xs text-slate-400"
+      }
+    >
+      {label}
+    </span>
   );
 }
 
@@ -136,6 +161,9 @@ function LoyaltyDetailModal({
                 {record.status === "Completed" || record.status === "Rejected" ? (
                   <DetailField label="Admin">{record.admin || "—"}</DetailField>
                 ) : null}
+                <DetailField label="Assigned To">
+                  <AssignedToCell record={record} />
+                </DetailField>
               </>
             ) : null}
             {tab === "bonus" ? (
@@ -156,6 +184,9 @@ function LoyaltyDetailModal({
                   <CopyCell value={record.email} />
                 </DetailField>
                 <DetailField label="Admin">{record.admin || "—"}</DetailField>
+                <DetailField label="Assigned To">
+                  <AssignedToCell record={record} />
+                </DetailField>
               </>
             ) : null}
             {tab === "vouchers" ? (
@@ -176,6 +207,9 @@ function LoyaltyDetailModal({
                   <CopyCell value={record.token || "—"} />
                 </DetailField>
                 <DetailField label="Admin">{record.admin || record.claimedBy || "—"}</DetailField>
+                <DetailField label="Assigned To">
+                  <AssignedToCell record={record} />
+                </DetailField>
                 {record.claimedDate ? (
                   <DetailField label="Claimed Date">
                     <DateTimeCell value={record.claimedDate} />
@@ -368,7 +402,25 @@ function LoyaltyContent() {
   const [approveConfirmId, setApproveConfirmId] = useState(null);
   const [reopenConfirmId, setReopenConfirmId] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [loyaltyIsAdmin, setLoyaltyIsAdmin] = useState(false);
   const canUpdateTab = hasLoyaltyTabUpdate(permissions, tab);
+  const canManualAssign =
+    loyaltyIsAdmin &&
+    status === "Pending" &&
+    (tab === "orders" || tab === "bonus" || tab === "vouchers");
+
+  function loyaltyAssignId(record) {
+    if (tab === "orders") return Number(record?.withdrawal_id) || null;
+    if (tab === "bonus") return Number(record?.bonus_id) || null;
+    return Number(record?.voucher_id || record?.id) || null;
+  }
+
+  useEffect(() => {
+    const roles = getAdminUser()?.roles || [];
+    setLoyaltyIsAdmin(roles.includes("super-admin") || roles.includes("sub-admin"));
+  }, []);
 
   useEffect(() => {
     if (visibleTabs.length === 0) return;
@@ -407,6 +459,7 @@ function LoyaltyContent() {
         to: appliedOrderFilters.to,
       });
       setOrders(data.orders || []);
+      if (typeof data.isAdmin === "boolean") setLoyaltyIsAdmin(data.isAdmin);
       setOrdersPagination(
         data.pagination || {
           page: 1,
@@ -437,6 +490,7 @@ function LoyaltyContent() {
         to: appliedBonusFilters.to,
       });
       setBonuses(data.claims || []);
+      if (typeof data.isAdmin === "boolean") setLoyaltyIsAdmin(data.isAdmin);
       setBonusPagination(
         data.pagination || {
           page: 1,
@@ -467,6 +521,7 @@ function LoyaltyContent() {
         to: appliedVoucherFilters.to,
       });
       setVouchers(data.claims || []);
+      if (typeof data.isAdmin === "boolean") setLoyaltyIsAdmin(data.isAdmin);
       setVoucherPagination(
         data.pagination || {
           page: 1,
@@ -516,6 +571,11 @@ function LoyaltyContent() {
     if (!rejectId || tab !== "vouchers") return null;
     return vouchers.find((r) => r.id === rejectId) ?? null;
   }, [rejectId, tab, vouchers]);
+
+  useEffect(() => {
+    setSelectedIds([]);
+    setAssignOpen(false);
+  }, [tab, status]);
 
   useEffect(() => {
     if (tab !== "orders") return undefined;
@@ -618,6 +678,23 @@ function LoyaltyContent() {
 
   const showLoyaltyAdminColumn =
     status === "Completed" || status === "Rejected" || status === "Claimed";
+
+  const selectableIds = useMemo(
+    () =>
+      canManualAssign
+        ? filtered.map(loyaltyAssignId).filter(Boolean)
+        : [],
+    [canManualAssign, filtered, tab],
+  );
+
+  function toggleAllSelected(checked) {
+    setSelectedIds(checked ? selectableIds : []);
+  }
+
+  function toggleOneSelected(id) {
+    if (!id) return;
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((value) => value !== id) : [...prev, id]));
+  }
 
   async function handleOrderStatusUpdate(id, nextStatus, rejectionReason) {
     setOrderStatusBusy(true);
@@ -879,7 +956,20 @@ function LoyaltyContent() {
           <div className="border-b border-white/10 px-5 py-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <h1 className="text-xl font-bold text-white sm:text-2xl">{pageTitle}</h1>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-xl font-bold text-white sm:text-2xl">{pageTitle}</h1>
+                  {canManualAssign ? (
+                    <button
+                      type="button"
+                      disabled={!selectedIds.length}
+                      onClick={() => setAssignOpen(true)}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-admin-teal px-3.5 py-2 text-xs font-semibold text-white transition enabled:hover:brightness-110 disabled:opacity-40"
+                    >
+                      <UserPlus className="h-3.5 w-3.5" />
+                      Assign {selectedIds.length ? `(${selectedIds.length})` : ""}
+                    </button>
+                  ) : null}
+                </div>
                 <p className="mt-0.5 text-xs text-slate-400">
                   {ordersRecordCount} records
                   {tab === "bonus" && status === "Rejected"
@@ -892,7 +982,7 @@ function LoyaltyContent() {
                 </p>
               </div>
               {(tab === "orders" || tab === "bonus" || tab === "vouchers") ? (
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
                   {(tab === "orders"
                     ? [
                         ["Pending", "Pending"],
@@ -1074,6 +1164,16 @@ function LoyaltyContent() {
               <table className="min-w-[1100px] w-full text-left text-[13px]">
                 <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                   <tr>
+                    {canManualAssign ? (
+                      <th className="px-3 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectableIds.length > 0 && selectedIds.length === selectableIds.length}
+                          onChange={(e) => toggleAllSelected(e.target.checked)}
+                          className="rounded border-white/20"
+                        />
+                      </th>
+                    ) : null}
                     <th className="px-3 py-3">Trans ID</th>
                     <th className="px-3 py-3">Date</th>
                     <th className="px-3 py-3">ID & Name</th>
@@ -1086,11 +1186,22 @@ function LoyaltyContent() {
                     <th className="px-3 py-3">Status</th>
                     {status === "Rejected" ? <th className="px-3 py-3">Rejection Reason</th> : null}
                     {showLoyaltyAdminColumn ? <th className="whitespace-nowrap px-3 py-3">Authorized By</th> : null}
+                    <th className="whitespace-nowrap px-3 py-3">Assigned To</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((r) => (
                     <tr key={r.id} className="border-t border-white/10 text-slate-300 hover:bg-admin-teal/[0.05]">
+                      {canManualAssign ? (
+                        <td className="px-3 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(loyaltyAssignId(r))}
+                            onChange={() => toggleOneSelected(loyaltyAssignId(r))}
+                            className="rounded border-white/20"
+                          />
+                        </td>
+                      ) : null}
                       <td className="px-3 py-3">
                         <CopyCell value={r.id} />
                       </td>
@@ -1222,11 +1333,14 @@ function LoyaltyContent() {
                           {r.admin && r.admin !== "NA" ? r.admin : "—"}
                         </td>
                       ) : null}
+                      <td className="px-3 py-3">
+                        <AssignedToCell record={r} />
+                      </td>
                     </tr>
                   ))}
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={10 + (status === "Rejected" ? 1 : 0) + (showLoyaltyAdminColumn ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
+                      <td colSpan={11 + (status === "Rejected" ? 1 : 0) + (showLoyaltyAdminColumn ? 1 : 0) + (canManualAssign ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
                         No Results Found
                       </td>
                     </tr>
@@ -1239,6 +1353,16 @@ function LoyaltyContent() {
               <table className="min-w-[1150px] w-full text-left text-[13px]">
                 <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                   <tr>
+                    {canManualAssign ? (
+                      <th className="px-3 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectableIds.length > 0 && selectedIds.length === selectableIds.length}
+                          onChange={(e) => toggleAllSelected(e.target.checked)}
+                          className="rounded border-white/20"
+                        />
+                      </th>
+                    ) : null}
                     <th className="px-3 py-3">Trans ID</th>
                     <th className="px-3 py-3">Date</th>
                     <th className="px-3 py-3">ID & Name</th>
@@ -1250,11 +1374,22 @@ function LoyaltyContent() {
                     <th className="px-3 py-3">Status</th>
                     {status === "Rejected" ? <th className="px-3 py-3">Rejection Reason</th> : null}
                     <th className="px-3 py-3">Admin</th>
+                    <th className="whitespace-nowrap px-3 py-3">Assigned To</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((r) => (
                     <tr key={r.id} className="border-t border-white/10 text-slate-300 hover:bg-admin-teal/[0.05]">
+                      {canManualAssign ? (
+                        <td className="px-3 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(loyaltyAssignId(r))}
+                            onChange={() => toggleOneSelected(loyaltyAssignId(r))}
+                            className="rounded border-white/20"
+                          />
+                        </td>
+                      ) : null}
                       <td className="px-3 py-3">
                         <CopyCell value={r.id} />
                       </td>
@@ -1381,11 +1516,14 @@ function LoyaltyContent() {
                         </td>
                       ) : null}
                       <td className="px-3 py-3 text-xs text-slate-400">{r.admin || "—"}</td>
+                      <td className="px-3 py-3">
+                        <AssignedToCell record={r} />
+                      </td>
                     </tr>
                   ))}
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={11 + (status === "Rejected" ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
+                      <td colSpan={12 + (status === "Rejected" ? 1 : 0) + (canManualAssign ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
                         No Results Found
                       </td>
                     </tr>
@@ -1406,6 +1544,7 @@ function LoyaltyContent() {
                     <th className="px-3 py-3">Rejection Reason</th>
                     <th className="px-3 py-3">Rejected Date</th>
                     <th className="px-3 py-3">Admin</th>
+                    <th className="whitespace-nowrap px-3 py-3">Assigned To</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1453,11 +1592,14 @@ function LoyaltyContent() {
                         <DateTimeCell value={r.rejectedDate || "N/A"} />
                       </td>
                       <td className="px-3 py-3 text-xs text-slate-400">{r.admin || "—"}</td>
+                      <td className="px-3 py-3">
+                        <AssignedToCell record={r} />
+                      </td>
                     </tr>
                   ))}
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="px-4 py-14 text-center text-slate-400">
+                      <td colSpan={12} className="px-4 py-14 text-center text-slate-400">
                         No Results Found
                       </td>
                     </tr>
@@ -1477,6 +1619,7 @@ function LoyaltyContent() {
                     <th className="px-3 py-3">Voucher Token</th>
                     <th className="px-3 py-3">Claimed Date</th>
                     <th className="px-3 py-3">Admin</th>
+                    <th className="whitespace-nowrap px-3 py-3">Assigned To</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1523,11 +1666,14 @@ function LoyaltyContent() {
                       <td className="px-3 py-3">
                         <CopyCell value={r.claimedBy || r.admin || "—"} />
                       </td>
+                      <td className="px-3 py-3">
+                        <AssignedToCell record={r} />
+                      </td>
                     </tr>
                   ))}
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-14 text-center text-slate-400">
+                      <td colSpan={10} className="px-4 py-14 text-center text-slate-400">
                         No Results Found
                       </td>
                     </tr>
@@ -1538,6 +1684,16 @@ function LoyaltyContent() {
               <table className="min-w-[1200px] w-full text-left text-[13px]">
                 <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
                   <tr>
+                    {canManualAssign ? (
+                      <th className="px-3 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectableIds.length > 0 && selectedIds.length === selectableIds.length}
+                          onChange={(e) => toggleAllSelected(e.target.checked)}
+                          className="rounded border-white/20"
+                        />
+                      </th>
+                    ) : null}
                     <th className="px-3 py-3">#</th>
                     <th className="px-3 py-3">Date</th>
                     <th className="px-3 py-3">ID & Name</th>
@@ -1549,11 +1705,22 @@ function LoyaltyContent() {
                     <th className="px-3 py-3">Action</th>
                     <th className="px-3 py-3">Status</th>
                     <th className="px-3 py-3">Admin</th>
+                    <th className="whitespace-nowrap px-3 py-3">Assigned To</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((r) => (
                     <tr key={r.id} className="border-t border-white/10 text-slate-300 hover:bg-admin-teal/[0.05]">
+                      {canManualAssign ? (
+                        <td className="px-3 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(loyaltyAssignId(r))}
+                            onChange={() => toggleOneSelected(loyaltyAssignId(r))}
+                            className="rounded border-white/20"
+                          />
+                        </td>
+                      ) : null}
                       <td className="px-3 py-3 font-medium text-slate-500">{r.id}</td>
                       <td className="px-3 py-3">
                         <DateTimeCell value={r.date} />
@@ -1634,11 +1801,14 @@ function LoyaltyContent() {
                         ) : null}
                       </td>
                       <td className="px-3 py-3 text-xs text-slate-400">{r.admin || r.claimedBy || "—"}</td>
+                      <td className="px-3 py-3">
+                        <AssignedToCell record={r} />
+                      </td>
                     </tr>
                   ))}
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="px-4 py-14 text-center text-slate-400">
+                      <td colSpan={12 + (canManualAssign ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
                         No Results Found
                       </td>
                     </tr>
@@ -1851,6 +2021,25 @@ function LoyaltyContent() {
           setVoucherActionError("");
         }}
         onConfirm={(reason) => rejectRecord(rejectId, reason)}
+      />
+
+      <AssignLoyaltyModal
+        open={assignOpen && canManualAssign}
+        kind={tab}
+        selectedIds={selectedIds}
+        onClose={() => setAssignOpen(false)}
+        onAssigned={() => {
+          setSelectedIds([]);
+          setAssignOpen(false);
+          if (tab === "orders") {
+            loadOrders();
+          } else if (tab === "bonus") {
+            loadBonusClaims();
+          } else {
+            loadVoucherClaims();
+          }
+          notifyAdminNavCountsRefresh();
+        }}
       />
 
       <LoyaltyDetailModal

@@ -100,20 +100,20 @@ export default function DepositProofStatusPanel({
               </option>
             ))}
           </select>
-          <label className="mb-2 mt-3 block text-sm font-medium text-slate-300">
-            Message to customer
-          </label>
-          <textarea
-            value={rejectMessage}
-            onChange={(e) => setRejectMessage(e.target.value)}
-            rows={3}
-            placeholder={
-              customSelected
-                ? "Enter a custom rejection message…"
-                : "Optional — leave blank to use the selected reason"
-            }
-            className="admin-input text-sm"
-          />
+          {customSelected ? (
+            <>
+              <label className="mb-2 mt-3 block text-sm font-medium text-slate-300">
+                Message to customer
+              </label>
+              <textarea
+                value={rejectMessage}
+                onChange={(e) => setRejectMessage(e.target.value)}
+                rows={3}
+                placeholder="Enter a custom rejection message…"
+                className="admin-input text-sm"
+              />
+            </>
+          ) : null}
         </div>
       ) : null}
 
