@@ -8,7 +8,7 @@ import { Loader2, Mail, MessageSquare, Pencil, Plus, RefreshCw, Trash2, X } from
 import { FilterField, inputCls } from "@/components/admin/queue-ui";
 import { useAppDialog } from "@/components/admin/app-dialog";
 import { sendCustomerEmail, sendCustomerSms } from "@/lib/customers";
-import { parseDbDateTime } from "@/lib/sl-time";
+import { parseDbDateTime, formatDateTimeDisplaySl } from "@/lib/sl-time";
 import {
   createBonus,
   createLoyaltyLevel,
@@ -244,7 +244,7 @@ function LevelBonusCountdown({ expiresAt, createdAt, isExpired }) {
   return (
     <span
       className="inline-flex rounded-md bg-amber-500/15 px-2 py-1 font-mono text-[11px] font-semibold text-amber-200"
-      title={expires ? `Expires ${expires.toLocaleString()}` : undefined}
+      title={expires ? `Expires ${formatDateTimeDisplaySl(expires)}` : undefined}
     >
       {formatCountdown(parts)}
     </span>
