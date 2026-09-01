@@ -6,7 +6,7 @@ import { useLocationSearchString } from "@/lib/location-search";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectReasonPanel from "@/components/admin/reject-reason-panel";
 import DepositProofStatusPanel from "@/components/admin/deposit-proof-status-panel";
-import { useRejectReasonOptions } from "@/lib/reject-reasons";
+import { isCustomRejectReason, useRejectReasonOptions } from "@/lib/reject-reasons";
 import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
 import CopyCell, { DateTimeCell, FilterField, StatusPill, inputCls, statusHeaderToneClass } from "@/components/admin/queue-ui";
 import AdminPagination from "@/components/admin/admin-pagination";
@@ -148,9 +148,15 @@ function IdNameCell({ id, name }) {
 }
 
 function formatDepositRejectedReason(record) {
-  const message = record?.rejectReasonMessage?.trim() || "Custom reason Not Added";
-  const category = record?.rejectReasonCategory?.trim() || "Reason Not Added";
-  return `${message} | ${category}`;
+  const message = record?.rejectReasonMessage?.trim() || "";
+  const category = record?.rejectReasonCategory?.trim() || "";
+  if (isCustomRejectReason(category)) {
+    return message || "Custom reason Not Added";
+  }
+  if (message && category && message !== category) {
+    return `${message} | ${category}`;
+  }
+  return message || category || "Reason Not Added";
 }
 
 function transactionRowClassName(record) {
