@@ -207,9 +207,6 @@ function LoyaltyDetailModal({
                   <CopyCell value={record.token || "—"} />
                 </DetailField>
                 <DetailField label="Admin">{record.admin || record.claimedBy || "—"}</DetailField>
-                <DetailField label="Assigned To">
-                  <AssignedToCell record={record} />
-                </DetailField>
                 {record.claimedDate ? (
                   <DetailField label="Claimed Date">
                     <DateTimeCell value={record.claimedDate} />
@@ -409,7 +406,7 @@ function LoyaltyContent() {
   const canManualAssign =
     loyaltyIsAdmin &&
     status === "Pending" &&
-    (tab === "orders" || tab === "bonus" || tab === "vouchers");
+    (tab === "orders" || tab === "bonus");
 
   function loyaltyAssignId(record) {
     if (tab === "orders") return Number(record?.withdrawal_id) || null;
@@ -1544,7 +1541,6 @@ function LoyaltyContent() {
                     <th className="px-3 py-3">Rejection Reason</th>
                     <th className="px-3 py-3">Rejected Date</th>
                     <th className="px-3 py-3">Admin</th>
-                    <th className="whitespace-nowrap px-3 py-3">Assigned To</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1592,14 +1588,11 @@ function LoyaltyContent() {
                         <DateTimeCell value={r.rejectedDate || "N/A"} />
                       </td>
                       <td className="px-3 py-3 text-xs text-slate-400">{r.admin || "—"}</td>
-                      <td className="px-3 py-3">
-                        <AssignedToCell record={r} />
-                      </td>
                     </tr>
                   ))}
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="px-4 py-14 text-center text-slate-400">
+                      <td colSpan={10} className="px-4 py-14 text-center text-slate-400">
                         No Results Found
                       </td>
                     </tr>
@@ -1619,7 +1612,6 @@ function LoyaltyContent() {
                     <th className="px-3 py-3">Voucher Token</th>
                     <th className="px-3 py-3">Claimed Date</th>
                     <th className="px-3 py-3">Admin</th>
-                    <th className="whitespace-nowrap px-3 py-3">Assigned To</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1666,14 +1658,11 @@ function LoyaltyContent() {
                       <td className="px-3 py-3">
                         <CopyCell value={r.claimedBy || r.admin || "—"} />
                       </td>
-                      <td className="px-3 py-3">
-                        <AssignedToCell record={r} />
-                      </td>
                     </tr>
                   ))}
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="px-4 py-14 text-center text-slate-400">
+                      <td colSpan={9} className="px-4 py-14 text-center text-slate-400">
                         No Results Found
                       </td>
                     </tr>
@@ -1704,8 +1693,6 @@ function LoyaltyContent() {
                     <th className="px-3 py-3">Duplicates</th>
                     <th className="px-3 py-3">Action</th>
                     <th className="px-3 py-3">Status</th>
-                    <th className="px-3 py-3">Admin</th>
-                    <th className="whitespace-nowrap px-3 py-3">Assigned To</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1800,15 +1787,11 @@ function LoyaltyContent() {
                           <p className="mt-1 max-w-[120px] truncate text-[10px] text-rose-300">{r.rejectReason}</p>
                         ) : null}
                       </td>
-                      <td className="px-3 py-3 text-xs text-slate-400">{r.admin || r.claimedBy || "—"}</td>
-                      <td className="px-3 py-3">
-                        <AssignedToCell record={r} />
-                      </td>
                     </tr>
                   ))}
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={12 + (canManualAssign ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
+                      <td colSpan={10} className="px-4 py-14 text-center text-slate-400">
                         No Results Found
                       </td>
                     </tr>
@@ -2035,8 +2018,6 @@ function LoyaltyContent() {
             loadOrders();
           } else if (tab === "bonus") {
             loadBonusClaims();
-          } else {
-            loadVoucherClaims();
           }
           notifyAdminNavCountsRefresh();
         }}

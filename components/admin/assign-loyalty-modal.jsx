@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { assignLoyaltyOrders, fetchLoyaltyOrderAssignees } from "@/lib/loyalty-orders";
 import { assignBonusClaims, fetchBonusClaimAssignees } from "@/lib/loyalty-bonus-claims";
-import { assignVoucherClaims, fetchVoucherClaimAssignees } from "@/lib/loyalty-voucher-claims";
 
 const KIND_CONFIG = {
   orders: {
@@ -18,12 +17,6 @@ const KIND_CONFIG = {
     itemLabel: "bonus claims",
     fetchAssignees: fetchBonusClaimAssignees,
     assign: assignBonusClaims,
-  },
-  vouchers: {
-    title: "Assign Voucher Claims",
-    itemLabel: "voucher claims",
-    fetchAssignees: fetchVoucherClaimAssignees,
-    assign: assignVoucherClaims,
   },
 };
 
