@@ -520,7 +520,10 @@ export default function LoyaltyManagementPanel({ canMutate = true }) {
   }, [reload]);
 
   // Keep URL explicit so sidebar "Affiliate Users" / "Normal Users" stays highlighted.
+  // Only rewrite while this tab is active — otherwise a click to Orders/Bonus/Vouchers
+  // still has this panel mounted for one render and it would send the URL back here.
   useEffect(() => {
+    if (searchParams.get("tab") !== "management") return;
     const current = String(searchParams.get("audience") || "").trim().toLowerCase();
     if (current === audienceOption.param) return;
     const params = new URLSearchParams(searchParams.toString());

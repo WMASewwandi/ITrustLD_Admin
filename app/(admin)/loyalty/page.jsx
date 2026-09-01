@@ -297,6 +297,7 @@ function LoyaltyContent() {
   );
   const [tab, setTab] = useState(params.get("tab") || "orders");
   const { reasons: voucherRejectReasons } = useRejectReasonOptions("voucher_claim");
+  const { reasons: bonusRejectReasons } = useRejectReasonOptions("bonus_claim");
   const { reasons: orderRejectReasons } = useRejectReasonOptions("loyalty_order");
   const [status, setStatus] = useState(params.get("status") || "Pending");
   const [q, setQ] = useState("");
@@ -491,10 +492,6 @@ function LoyaltyContent() {
   const voucherRangeStart =
     voucherPagination.total === 0 ? 0 : (voucherPagination.page - 1) * voucherPagination.per_page + 1;
   const voucherRangeEnd = Math.min(voucherPagination.page * voucherPagination.per_page, voucherPagination.total);
-  const rejectBonusRecord = useMemo(() => {
-    if (!rejectId || tab !== "bonus") return null;
-    return bonuses.find((r) => r.id === rejectId) ?? null;
-  }, [rejectId, tab, bonuses]);
   const approveOrderRecord = useMemo(() => {
     if (!approveConfirmId || tab !== "orders") return null;
     return orders.find((r) => r.id === approveConfirmId) ?? null;
@@ -646,11 +643,11 @@ function LoyaltyContent() {
     }
   }
 
-  async function handleBonusStatusUpdate(id, nextStatus) {
+  async function handleBonusStatusUpdate(id, nextStatus, rejectionReason) {
     setBonusStatusBusy(true);
     setBonusActionError("");
     try {
-      await updateBonusClaimStatus({ transactionId: id, status: nextStatus });
+      await updateBonusClaimStatus({ transactionId: id, status: nextStatus, rejectionReason });
       await loadBonusClaims();
       if (detail?.id === id) {
         setDetail(null);
@@ -722,7 +719,7 @@ function LoyaltyContent() {
       return;
     }
     if (tab === "bonus") {
-      handleBonusStatusUpdate(id, "Rejected");
+      handleBonusStatusUpdate(id, "Rejected", reason);
       return;
     }
     if (tab === "vouchers") {
@@ -1251,6 +1248,7 @@ function LoyaltyContent() {
                     <th className="px-3 py-3">Plat. ID / Email</th>
                     <th className="px-3 py-3">Action</th>
                     <th className="px-3 py-3">Status</th>
+                    {status === "Rejected" ? <th className="px-3 py-3">Rejection Reason</th> : null}
                     <th className="px-3 py-3">Admin</th>
                   </tr>
                 </thead>
@@ -1377,12 +1375,17 @@ function LoyaltyContent() {
                           title="View details and approve / reject"
                         />
                       </td>
+                      {status === "Rejected" ? (
+                        <td className="px-3 py-3 max-w-[220px]">
+                          <CopyCell value={r.rejectReason || "N/A"} nowrap={false} />
+                        </td>
+                      ) : null}
                       <td className="px-3 py-3 text-xs text-slate-400">{r.admin || "—"}</td>
                     </tr>
                   ))}
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="px-4 py-14 text-center text-slate-400">
+                      <td colSpan={11 + (status === "Rejected" ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
                         No Results Found
                       </td>
                     </tr>
@@ -1811,25 +1814,6 @@ function LoyaltyContent() {
         onConfirm={() => reopen(reopenConfirmId)}
       />
 
-      <DepositStatusConfirmModal
-        open={Boolean(rejectId) && tab === "bonus"}
-        title="Set as Rejected?"
-        message={
-          rejectBonusRecord
-            ? `${rejectBonusRecord.id} · ${rejectBonusRecord.customer}`
-            : undefined
-        }
-        confirmLabel="Yes"
-        confirmClassName="bg-[#E11D48]"
-        busy={bonusStatusBusy}
-        error={bonusActionError}
-        onCancel={() => {
-          setRejectId(null);
-          setBonusActionError("");
-        }}
-        onConfirm={() => rejectRecord(rejectId)}
-      />
-
       <RejectModal
         open={Boolean(rejectId) && tab === "orders"}
         title="Reject loyalty order"
@@ -1839,6 +1823,19 @@ function LoyaltyContent() {
         onClose={() => {
           setRejectId(null);
           setOrderActionError("");
+        }}
+        onConfirm={(reason) => rejectRecord(rejectId, reason)}
+      />
+
+      <RejectModal
+        open={Boolean(rejectId) && tab === "bonus"}
+        title="Reject bonus claim"
+        reasons={bonusRejectReasons}
+        error={bonusActionError}
+        busy={bonusStatusBusy}
+        onClose={() => {
+          setRejectId(null);
+          setBonusActionError("");
         }}
         onConfirm={(reason) => rejectRecord(rejectId, reason)}
       />
