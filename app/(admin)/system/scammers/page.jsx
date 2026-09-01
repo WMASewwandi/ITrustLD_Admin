@@ -239,7 +239,7 @@ export default function ScammersPage() {
                       <CopyCell value={r.userId} />
                     </td>
                     <td className="px-4 py-3 max-w-[220px]">
-                      <CopyCell value={r.notes} />
+                      <CopyCell value={r.notes} nowrap={false} />
                     </td>
                     <td className="px-4 py-3 text-slate-500">{r.added}</td>
                     <td className="px-4 py-3 text-right">

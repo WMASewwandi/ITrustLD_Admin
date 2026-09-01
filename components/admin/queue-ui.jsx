@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Clock3, Copy } from "lucide-react";
 import { copyTextToClipboard, normalizeCopyText } from "@/lib/clipboard";
+import { formatDateTimeParts } from "@/lib/sl-time";
 
 export function CopyButton({ value, title = "Copy", className = "" }) {
   const [copied, setCopied] = useState(false);
@@ -43,10 +44,8 @@ export function CopyButton({ value, title = "Copy", className = "" }) {
   );
 }
 
-export default function CopyCell({ value, sub, nowrap = false }) {
-  const wrapClass = nowrap
-    ? "whitespace-nowrap"
-    : "break-words [overflow-wrap:anywhere]";
+export default function CopyCell({ value, sub, nowrap = true }) {
+  const wrapClass = nowrap ? "whitespace-nowrap" : "break-words";
   return (
     <div className={`flex items-start gap-1.5 ${nowrap ? "w-max max-w-none" : "w-full min-w-0 max-w-full"}`}>
       <div className={nowrap ? "shrink-0" : "min-w-0 flex-1"}>
@@ -58,7 +57,20 @@ export default function CopyCell({ value, sub, nowrap = false }) {
   );
 }
 
-export function IdNameCell({ id, name, nowrap = false }) {
+export function DateTimeCell({ value }) {
+  const { date, time } = formatDateTimeParts(value);
+  return (
+    <div className="flex items-start gap-1.5">
+      <Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+      <div className="w-max space-y-0.5">
+        <CopyCell value={date || "—"} />
+        {time ? <CopyCell value={time} /> : null}
+      </div>
+    </div>
+  );
+}
+
+export function IdNameCell({ id, name, nowrap = true }) {
   return (
     <div className={nowrap ? "w-max space-y-0.5" : "min-w-0 space-y-0.5"}>
       <CopyCell value={id || "—"} nowrap={nowrap} />
@@ -102,7 +114,7 @@ export function PlatformIdCell({ platform, platformId, platformName, platformDet
   if (lines.length === 0) lines.push("—");
 
   return (
-    <div className="min-w-0 space-y-0.5">
+    <div className="w-max space-y-0.5">
       {lines.map((line, index) => (
         <CopyCell key={`${line}-${index}`} value={line} />
       ))}

@@ -7,7 +7,7 @@ import Breadcrumb from "@/components/admin/breadcrumb";
 import RejectModal from "@/components/admin/reject-modal";
 import DepositStatusConfirmModal from "@/components/admin/deposit-status-confirm-modal";
 import RejectReasonPanel from "@/components/admin/reject-reason-panel";
-import CopyCell, { FilterField, IdNameCell, PlatformIdCell, StatusPill, inputCls } from "@/components/admin/queue-ui";
+import CopyCell, { DateTimeCell, FilterField, IdNameCell, PlatformIdCell, StatusPill, inputCls } from "@/components/admin/queue-ui";
 import AdminPagination from "@/components/admin/admin-pagination";
 import { fetchLoyaltyOrders, updateLoyaltyOrderStatus } from "@/lib/loyalty-orders";
 import { fetchBonusClaims, updateBonusClaimStatus } from "@/lib/loyalty-bonus-claims";
@@ -105,7 +105,7 @@ function LoyaltyDetailModal({
         <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
           <dl className="grid gap-2 sm:grid-cols-2">
             <DetailField label="Date">
-              <CopyCell value={record.date} />
+              <DateTimeCell value={record.date} />
             </DetailField>
             <DetailField label="User">
               <IdNameCell id={record.userId} name={record.customer} />
@@ -178,12 +178,12 @@ function LoyaltyDetailModal({
                 <DetailField label="Admin">{record.admin || record.claimedBy || "—"}</DetailField>
                 {record.claimedDate ? (
                   <DetailField label="Claimed Date">
-                    <CopyCell value={record.claimedDate} />
+                    <DateTimeCell value={record.claimedDate} />
                   </DetailField>
                 ) : null}
                 {record.rejectedDate ? (
                   <DetailField label="Rejected Date">
-                    <CopyCell value={record.rejectedDate} />
+                    <DateTimeCell value={record.rejectedDate} />
                   </DetailField>
                 ) : null}
               </>
@@ -1098,7 +1098,7 @@ function LoyaltyContent() {
                         <CopyCell value={r.id} />
                       </td>
                       <td className="px-3 py-3">
-                        <CopyCell value={r.date} />
+                        <DateTimeCell value={r.date} />
                       </td>
                       <td className="px-3 py-3">
                         <IdNameCell id={r.userId} name={r.customer} />
@@ -1217,7 +1217,7 @@ function LoyaltyContent() {
                       </td>
                       {status === "Rejected" ? (
                         <td className="px-3 py-3 max-w-[220px]">
-                          <CopyCell value={r.rejectReason || "N/A"} />
+                          <CopyCell value={r.rejectReason || "N/A"} nowrap={false} />
                         </td>
                       ) : null}
                       {showLoyaltyAdminColumn ? (
@@ -1261,7 +1261,7 @@ function LoyaltyContent() {
                         <CopyCell value={r.id} />
                       </td>
                       <td className="px-3 py-3">
-                        <CopyCell value={r.date} />
+                        <DateTimeCell value={r.date} />
                       </td>
                       <td className="px-3 py-3">
                         <IdNameCell id={r.userId} name={r.customer} />
@@ -1426,7 +1426,7 @@ function LoyaltyContent() {
                         </div>
                       </td>
                       <td className="px-3 py-3">
-                        <CopyCell value={r.date} />
+                        <DateTimeCell value={r.date} />
                       </td>
                       <td className="px-3 py-3">
                         <IdNameCell id={r.userId} name={r.customer} />
@@ -1444,10 +1444,10 @@ function LoyaltyContent() {
                         <CopyCell value={r.token || "—"} />
                       </td>
                       <td className="px-3 py-3">
-                        <CopyCell value={r.rejectReason || "N/A"} />
+                        <CopyCell value={r.rejectReason || "N/A"} nowrap={false} />
                       </td>
                       <td className="px-3 py-3">
-                        <CopyCell value={r.rejectedDate || "N/A"} />
+                        <DateTimeCell value={r.rejectedDate || "N/A"} />
                       </td>
                       <td className="px-3 py-3 text-xs text-slate-400">{r.admin || "—"}</td>
                     </tr>
@@ -1497,7 +1497,7 @@ function LoyaltyContent() {
                         </div>
                       </td>
                       <td className="px-3 py-3">
-                        <CopyCell value={r.date} />
+                        <DateTimeCell value={r.date} />
                       </td>
                       <td className="px-3 py-3">
                         <IdNameCell id={r.userId} name={r.customer} />
@@ -1515,7 +1515,7 @@ function LoyaltyContent() {
                         <CopyCell value={r.token || "—"} />
                       </td>
                       <td className="px-3 py-3">
-                        <CopyCell value={r.claimedDate || r.date} />
+                        <DateTimeCell value={r.claimedDate || r.date} />
                       </td>
                       <td className="px-3 py-3">
                         <CopyCell value={r.claimedBy || r.admin || "—"} />
@@ -1553,7 +1553,7 @@ function LoyaltyContent() {
                     <tr key={r.id} className="border-t border-white/10 text-slate-300 hover:bg-admin-teal/[0.05]">
                       <td className="px-3 py-3 font-medium text-slate-500">{r.id}</td>
                       <td className="px-3 py-3">
-                        <CopyCell value={r.date} />
+                        <DateTimeCell value={r.date} />
                       </td>
                       <td className="px-3 py-3">
                         <IdNameCell id={r.userId} name={r.customer} />

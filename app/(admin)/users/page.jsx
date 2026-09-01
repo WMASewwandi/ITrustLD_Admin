@@ -1222,7 +1222,7 @@ function UsersContent() {
                   ) : null}
                   {filter === "banned" ? (
                     <td className="max-w-[240px] px-3 py-3">
-                      <CopyCell value={u.banReason || "—"} />
+                      <CopyCell value={u.banReason || "—"} nowrap={false} />
                     </td>
                   ) : null}
                   {!isMobilePending ? (
