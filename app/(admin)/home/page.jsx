@@ -29,6 +29,15 @@ const QUEUE_CARDS = [
     icon: ShieldCheck,
   },
   {
+    id: "loyalty-pending-authorization",
+    label: "Loyalty Authorization",
+    detail: "Loyalty orders waiting for authorization",
+    href: "/loyalty?tab=orders&status=Pending%20Authorization",
+    permission: ["read_loyalty_orders_data", "authorize_loyalty_orders_data"],
+    count: (c) => c?.loyalty?.orders_pending_authorization,
+    icon: ShieldCheck,
+  },
+  {
     id: "pending-withdrawals",
     label: "Pending Withdrawals",
     detail: "Cash-out requests in your queue",
@@ -72,6 +81,7 @@ const QUEUE_CARDS = [
     loyalty: true,
     count: (c) =>
       (c?.loyalty?.orders || 0) +
+      (c?.loyalty?.orders_pending_authorization || 0) +
       (c?.loyalty?.bonus || 0) +
       (c?.loyalty?.vouchers || 0) +
       (c?.loyalty?.gifts || 0),

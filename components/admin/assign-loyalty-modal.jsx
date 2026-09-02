@@ -24,6 +24,7 @@ export default function AssignLoyaltyModal({
   open,
   kind = "orders",
   selectedIds = [],
+  assignAuthorizers = false,
   onClose,
   onAssigned,
 }) {
@@ -40,15 +41,18 @@ export default function AssignLoyaltyModal({
     setError("");
     setExecutiveId("");
     setLoading(true);
-    config
-      .fetchAssignees()
+    const fetchAssignees =
+      kind === "orders"
+        ? () => fetchLoyaltyOrderAssignees({ authorizers: assignAuthorizers })
+        : config.fetchAssignees;
+    fetchAssignees()
       .then((data) => {
         setActiveShift(data.active_shift ? `Shift ${data.active_shift}` : "—");
         setExecutives(data.executives || []);
       })
       .catch((err) => setError(err.message || "Failed to load users."))
       .finally(() => setLoading(false));
-  }, [open, kind]);
+  }, [open, kind, assignAuthorizers]);
 
   async function handleConfirm() {
     if (!selectedIds?.length) {
@@ -76,7 +80,9 @@ export default function AssignLoyaltyModal({
   return (
     <div className="admin-modal-overlay z-[80]" onClick={onClose}>
       <div className="admin-card w-full max-w-xl p-5" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-semibold text-white">{config.title}</h3>
+        <h3 className="text-lg font-semibold text-white">
+          {assignAuthorizers ? "Assign Loyalty Order Authorizers" : config.title}
+        </h3>
         <p className="mt-1 text-sm text-slate-400">
           Selected {config.itemLabel}: <span className="font-semibold text-white">{selectedIds.length}</span>
         </p>
@@ -86,7 +92,7 @@ export default function AssignLoyaltyModal({
 
         <label className="mt-4 block">
           <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-            Select User
+            {assignAuthorizers ? "Select Authorizer" : "Select User"}
           </span>
           <select
             value={executiveId}
