@@ -1704,33 +1704,14 @@ function TransactionsContent() {
     return allowedStatusesForTab.includes(row.status);
   }
 
-  const usePendingApiTotals = resolvedDepositStatus === "Pending";
-  const loadedClientPay = shown.reduce((sum, r) => {
-    if (tab === "withdrawals") {
-      return sum + parseMoneyAmount(r.receiving || r.payout);
-    }
-    if (Number(r.clientPayLkr)) return sum + Number(r.clientPayLkr);
-    if (Number(r.clientPayUsd)) return sum + Number(r.clientPayUsd) * 300;
-    return sum + parseMoneyAmount(r.clientPay || r.amount);
-  }, 0);
-  const loadedTopUp = shown.reduce((sum, r) => {
-    if (tab === "withdrawals") {
-      return sum + (Number(r.clientPayUsd) || parseMoneyAmount(r.cashoutAmt || r.amount));
-    }
-    return sum + parseMoneyAmount(r.deposited || r.amount);
-  }, 0);
   const clientPayLkr =
-    usePendingApiTotals && tab === "deposits"
+    tab === "deposits"
       ? depositTotals.totalPaymentAmount
-      : usePendingApiTotals && tab === "withdrawals"
-        ? withdrawalTotals.totalReceivingAmount
-        : loadedClientPay;
+      : withdrawalTotals.totalReceivingAmount;
   const topUpTotal =
-    usePendingApiTotals && tab === "deposits"
+    tab === "deposits"
       ? depositTotals.totalDepositAmount
-      : usePendingApiTotals && tab === "withdrawals"
-        ? withdrawalTotals.totalCashoutAmount
-        : loadedTopUp;
+      : withdrawalTotals.totalCashoutAmount;
 
   const title =
     resolvedDepositStatus === "Pending Authorization"

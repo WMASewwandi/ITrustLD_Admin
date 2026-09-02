@@ -571,7 +571,7 @@ export default function DashboardPage() {
   const isLoading = loading && !data;
 
   const revenueTitle =
-    chartMode === "daily" ? "Daily Revenue in ('000 USD)" : "Total Monthly Revenue in ('000 USD)";
+    chartMode === "daily" ? "Daily Revenue" : "Total Monthly Revenue";
   const profitTitle = chartMode === "daily" ? "Daily Profit" : "Monthly Profit";
   const dailyProfitTitle =
     globalFilter === "currentyear" ? "Daily Profit" : "Period Profit Trend";
