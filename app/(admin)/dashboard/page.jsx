@@ -714,6 +714,16 @@ export default function DashboardPage() {
               <h2 className="text-sm font-semibold text-slate-100">{revenueTitle}</h2>
               <p className="mt-0.5 text-xs text-slate-500">{periodLabel}</p>
             </div>
+            {isLoading ? (
+              <Skeleton className="h-8 w-28" />
+            ) : (
+              <div className="text-right">
+                <p className="text-sm font-bold text-white">{formatDashboardLkr(data?.lastRevenueLkr)}</p>
+                {data?.lastRevenueLabel ? (
+                  <p className="mt-0.5 text-[11px] text-slate-500">{data.lastRevenueLabel}</p>
+                ) : null}
+              </div>
+            )}
           </div>
           {isLoading ? <Skeleton className="h-52 w-full" /> : (
             <BarChart values={data?.monthlyRevenue ?? []} labels={revenueLabels} />
