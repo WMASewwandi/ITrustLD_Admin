@@ -574,11 +574,11 @@ export default function DashboardPage() {
     chartMode === "daily" ? "Daily Revenue in ('000 USD)" : "Total Monthly Revenue in ('000 USD)";
   const profitTitle = chartMode === "daily" ? "Daily Profit" : "Monthly Profit";
   const dailyProfitTitle =
-    globalFilter === DEFAULT_DASHBOARD_FILTER ? "Daily Profit" : "Period Profit Trend";
+    globalFilter === "currentyear" ? "Daily Profit" : "Period Profit Trend";
   const dailyProfitSubtitle =
-    globalFilter === DEFAULT_DASHBOARD_FILTER ? monthName : periodLabel;
+    globalFilter === "currentyear" ? monthName : periodLabel;
   const platformsTitle =
-    globalFilter === DEFAULT_DASHBOARD_FILTER ? "All Time Transactions" : `Transactions (${periodLabel})`;
+    globalFilter === "currentyear" ? "All Time Transactions" : `Transactions (${periodLabel})`;
 
   return (
     <div className="pb-10">
