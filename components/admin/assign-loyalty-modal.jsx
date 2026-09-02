@@ -89,6 +89,12 @@ export default function AssignLoyaltyModal({
         <p className="mt-1 text-sm text-slate-400">
           Today&apos;s active shift: <span className="font-semibold text-white">{activeShift}</span>
         </p>
+        {kind === "orders" && !assignAuthorizers ? (
+          <p className="mt-2 text-xs text-slate-500">
+            Bank Transfer orders must go to a Withdrawal Executive. Other payment methods must go to a
+            Deposit Executive.
+          </p>
+        ) : null}
 
         <label className="mt-4 block">
           <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
