@@ -18,13 +18,13 @@ import {
 } from "@/lib/loyalty-voucher-claims";
 import { notifyAdminNavCountsRefresh } from "@/lib/notifications";
 import { useAdminPermissions } from "@/contexts/admin-permissions";
-import { hasLoyaltyTabRead, hasLoyaltyTabUpdate, hasLoyaltyGiftsCatalogUpdate } from "@/lib/loyalty-permissions";
+import { hasLoyaltyTabRead, hasLoyaltyTabUpdate, hasLoyaltyGiftsCatalogUpdate, canAuthorizeLoyaltyOrders } from "@/lib/loyalty-permissions";
 import LoyaltyManagementPanel from "@/components/admin/loyalty-management-panel";
 import LoyaltyGiftPanel from "@/components/admin/loyalty-gift-panel";
 import AssignLoyaltyModal from "@/components/admin/assign-loyalty-modal";
 import { getAdminUser } from "@/lib/auth";
 import { useRejectReasonOptions } from "@/lib/reject-reasons";
-import { Check, RefreshCw, Search, UserPlus, X } from "lucide-react";
+import { Check, RefreshCw, Search, ShieldCheck, UserPlus, X } from "lucide-react";
 
 const TABS = [
   { id: "orders", label: "Orders" },
@@ -47,8 +47,29 @@ function assignedToLabel(record) {
   if (record?.assigned && record.assigned !== "—" && record.assigned !== "NA") {
     return record.assigned;
   }
-  if (record?.status === "Pending") return "Unassigned";
+  if (record?.status === "Pending" || record?.status === "Pending Authorization") return "Unassigned";
   return "—";
+}
+
+function displayNameOrDash(value, { unassigned = false } = {}) {
+  if (value && value !== "—" && value !== "NA") return value;
+  if (unassigned) return "Unassigned";
+  return "—";
+}
+
+function NameCell({ value, unassigned = false }) {
+  const label = displayNameOrDash(value, { unassigned });
+  return (
+    <span
+      className={
+        label !== "—" && label !== "Unassigned"
+          ? "text-xs font-semibold text-admin-teal"
+          : "text-xs text-slate-400"
+      }
+    >
+      {label}
+    </span>
+  );
 }
 
 function AssignedToCell({ record }) {
@@ -66,6 +87,59 @@ function AssignedToCell({ record }) {
   );
 }
 
+function formatActionHelpText(actions) {
+  const list = (actions || []).filter(Boolean);
+  if (!list.length) return "No actions available.";
+  if (list.length === 1) return `You can ${list[0]}.`;
+  if (list.length === 2) return `You can ${list[0]} or ${list[1]}.`;
+  return `You can ${list.slice(0, -1).join(", ")}, or ${list[list.length - 1]}.`;
+}
+
+function getOrderActionFlags(record, {
+  isAdmin = false,
+  canUpdate = false,
+  canAuthorize = false,
+  makerCheckerEnabled = false,
+  isAuthorizerOnly = false,
+  isExecutive = false,
+  allowedStatuses = null,
+} = {}) {
+  const empty = {
+    canReject: false,
+    canSendForAuthorization: false,
+    canApprove: false,
+    canReopen: false,
+  };
+  if (!record) return empty;
+
+  const mayUpdate = isAdmin || canUpdate;
+  const mayAuthorize = isAdmin || canAuthorize;
+  const statusAllowed =
+    isAdmin || !allowedStatuses || allowedStatuses.includes(record.status);
+  if (!statusAllowed) return empty;
+
+  const isPending = record.status === "Pending";
+  const isPendingAuth = record.status === "Pending Authorization";
+  const isRejected = record.status === "Rejected";
+  const isCompleted = record.status === "Completed";
+
+  return {
+    canReject:
+      ((isPending || isCompleted) && mayUpdate) ||
+      (isPendingAuth && (mayUpdate || mayAuthorize)),
+    canSendForAuthorization:
+      isPending &&
+      makerCheckerEnabled &&
+      mayUpdate &&
+      (isAdmin || isExecutive || !isAuthorizerOnly),
+    canApprove:
+      (isPending && mayUpdate && (isAdmin || !makerCheckerEnabled)) ||
+      (isPendingAuth && mayAuthorize) ||
+      (isRejected && mayUpdate),
+    canReopen: (isRejected || isCompleted) && mayUpdate,
+  };
+}
+
 function LoyaltyDetailModal({
   open,
   record,
@@ -77,7 +151,15 @@ function LoyaltyDetailModal({
   onRequestReject,
   onRequestApprove,
   onRequestReopen,
+  onRequestAuthorize,
   canMutate = true,
+  canUpdateOrders = false,
+  makerCheckerEnabled = false,
+  canAuthorize = false,
+  isAdmin = false,
+  isAuthorizerOnly = false,
+  isExecutive = false,
+  allowedStatuses = null,
 }) {
   const [rejectOpen, setRejectOpen] = useState(false);
   const usesOrderConfirmFlow = tab === "orders" || tab === "bonus" || tab === "vouchers";
@@ -90,20 +172,64 @@ function LoyaltyDetailModal({
 
   const title =
     tab === "bonus" ? "Bonus claim details" : tab === "vouchers" ? "Voucher claim details" : "Loyalty order details";
-  // Pending: approve + reject · Rejected: approve + reopen · Claimed/Completed: reject + reopen
-  const canApprove =
-    canMutate &&
-    (tab === "vouchers" ? record.status === "Pending" : record.status === "Pending" || record.status === "Rejected");
-  const canReject =
-    canMutate &&
-    (tab === "vouchers"
-      ? record.status === "Pending"
-      : record.status === "Pending" || record.status === "Completed" || record.status === "Claimed");
-  const canReopen =
-    canMutate &&
-    (tab === "vouchers"
-      ? false
-      : record.status === "Rejected" || record.status === "Completed" || record.status === "Claimed");
+  const isOrders = tab === "orders";
+  const orderFlags = isOrders
+    ? getOrderActionFlags(record, {
+        isAdmin,
+        canUpdate: canUpdateOrders,
+        canAuthorize,
+        makerCheckerEnabled,
+        isAuthorizerOnly,
+        isExecutive,
+        allowedStatuses,
+      })
+    : null;
+  const canApprove = isOrders
+    ? orderFlags.canApprove
+    : canMutate &&
+      (tab === "vouchers"
+        ? record.status === "Pending"
+        : record.status === "Pending" || record.status === "Rejected");
+  const canReject = isOrders
+    ? orderFlags.canReject
+    : canMutate &&
+      (tab === "vouchers"
+        ? record.status === "Pending"
+        : record.status === "Pending" || record.status === "Completed" || record.status === "Claimed");
+  const canReopen = isOrders
+    ? orderFlags.canReopen
+    : canMutate &&
+      (tab === "vouchers"
+        ? false
+        : record.status === "Rejected" || record.status === "Completed" || record.status === "Claimed");
+  const canSendForAuthorization = Boolean(orderFlags?.canSendForAuthorization);
+  const helpText = isOrders
+    ? formatActionHelpText([
+        canSendForAuthorization ? "send this order for authorization" : null,
+        canApprove
+          ? record.status === "Pending Authorization"
+            ? "authorize and complete"
+            : "approve"
+          : null,
+        canReject ? "reject" : null,
+        canReopen ? "reopen as pending" : null,
+      ])
+    : record.status === "Pending"
+      ? formatActionHelpText([
+          canApprove ? "approve" : null,
+          canReject ? "reject" : null,
+        ])
+      : record.status === "Rejected"
+        ? formatActionHelpText([
+            canApprove ? "approve again" : null,
+            canReopen ? "reopen as pending" : null,
+          ])
+        : record.status === "Completed" || record.status === "Claimed"
+          ? formatActionHelpText([
+              canReject ? "reject" : null,
+              canReopen ? "reopen as pending" : null,
+            ])
+          : "Already processed.";
 
   return (
     <div className="admin-modal-overlay z-[80]" onClick={onClose}>
@@ -141,7 +267,7 @@ function LoyaltyDetailModal({
                   <span className="text-[#FBBF24]">{record.points}</span>
                 </DetailField>
                 <DetailField label="Withdraw Amount">
-                  <CopyCell value={record.amount} sub={record.amountUsd} />
+                  <CopyCell value={record.amountUsd || record.amount} />
                 </DetailField>
                 <DetailField label="Payment Method">
                   <CopyCell value={record.method} />
@@ -158,12 +284,23 @@ function LoyaltyDetailModal({
                     platformDetail={record.platformDetail}
                   />
                 </DetailField>
-                {record.status === "Completed" || record.status === "Rejected" ? (
-                  <DetailField label="Admin">{record.admin || "—"}</DetailField>
-                ) : null}
-                <DetailField label="Assigned To">
-                  <AssignedToCell record={record} />
-                </DetailField>
+                {record.status === "Pending" ? (
+                  <DetailField label="Assigned To">
+                    <AssignedToCell record={record} />
+                  </DetailField>
+                ) : (
+                  <>
+                    <DetailField label="Updated By">
+                      <NameCell value={record.updatedBy} />
+                    </DetailField>
+                    <DetailField label="Authorized By">
+                      <NameCell
+                        value={record.authorizedBy}
+                        unassigned={record.status === "Pending Authorization"}
+                      />
+                    </DetailField>
+                  </>
+                )}
               </>
             ) : null}
             {tab === "bonus" ? (
@@ -228,20 +365,12 @@ function LoyaltyDetailModal({
         </div>
 
         <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-center gap-2">
+          <div className="flex flex-col gap-3">
+            <div className="w-fit">
               <StatusPill status={record.status} />
-              <p className="text-xs text-slate-500">
-                {record.status === "Pending"
-                  ? "Review this claim, then approve or reject."
-                  : record.status === "Rejected"
-                    ? "Rejected — approve again or reopen as pending."
-                    : record.status === "Completed" || record.status === "Claimed"
-                      ? "Claimed — reject or reopen as pending if needed."
-                      : "Already processed."}
-              </p>
             </div>
-            <div className="flex shrink-0 flex-row flex-nowrap items-center gap-2">
+            <p className="text-xs text-slate-500">{helpText}</p>
+            <div className="flex flex-wrap items-center gap-2">
               {canReject ? (
                 <button
                   type="button"
@@ -263,6 +392,19 @@ function LoyaltyDetailModal({
                   Reject
                 </button>
               ) : null}
+              {canSendForAuthorization ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onRequestAuthorize?.(record.id);
+                    onClose?.();
+                  }}
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[#2563EB] px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110"
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  Send for authorization
+                </button>
+              ) : null}
               {canApprove ? (
                 <button
                   type="button"
@@ -278,7 +420,7 @@ function LoyaltyDetailModal({
                   className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-theme-green-action px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110"
                 >
                   <Check className="h-4 w-4" />
-                  Approve
+                  {record.status === "Pending Authorization" ? "Authorize" : "Approve"}
                 </button>
               ) : null}
               {canReopen ? (
@@ -402,11 +544,20 @@ function LoyaltyContent() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [assignOpen, setAssignOpen] = useState(false);
   const [loyaltyIsAdmin, setLoyaltyIsAdmin] = useState(false);
+  const [makerCheckerEnabled, setMakerCheckerEnabled] = useState(false);
+  const [canAuthorizeOrders, setCanAuthorizeOrders] = useState(false);
+  const [isLoyaltyOrderAuthorizer, setIsLoyaltyOrderAuthorizer] = useState(false);
+  const [isLoyaltyOrderExecutive, setIsLoyaltyOrderExecutive] = useState(false);
+  const [allowedLoyaltyOrderStatuses, setAllowedLoyaltyOrderStatuses] = useState(null);
+  const [authorizeConfirmId, setAuthorizeConfirmId] = useState(null);
   const canUpdateTab = hasLoyaltyTabUpdate(permissions, tab);
+  const canAuthorizeOrderPerm = canAuthorizeLoyaltyOrders(permissions);
+  const canAuthorizeCurrentUser =
+    loyaltyIsAdmin || canAuthorizeOrderPerm || canAuthorizeOrders;
   const canManualAssign =
     loyaltyIsAdmin &&
-    status === "Pending" &&
-    (tab === "orders" || tab === "bonus");
+    ((tab === "orders" && (status === "Pending" || status === "Pending Authorization")) ||
+      (tab === "bonus" && status === "Pending"));
 
   function loyaltyAssignId(record) {
     if (tab === "orders") return Number(record?.withdrawal_id) || null;
@@ -457,6 +608,11 @@ function LoyaltyContent() {
       });
       setOrders(data.orders || []);
       if (typeof data.isAdmin === "boolean") setLoyaltyIsAdmin(data.isAdmin);
+      setMakerCheckerEnabled(Boolean(data.makerCheckerEnabled));
+      setCanAuthorizeOrders(Boolean(data.canAuthorizeLoyaltyOrders));
+      setIsLoyaltyOrderAuthorizer(Boolean(data.isLoyaltyOrderAuthorizer));
+      setIsLoyaltyOrderExecutive(Boolean(data.isLoyaltyOrderExecutive));
+      setAllowedLoyaltyOrderStatuses(data.allowed_loyalty_order_statuses ?? null);
       setOrdersPagination(
         data.pagination || {
           page: 1,
@@ -548,6 +704,10 @@ function LoyaltyContent() {
     if (!approveConfirmId || tab !== "orders") return null;
     return orders.find((r) => r.id === approveConfirmId) ?? null;
   }, [approveConfirmId, tab, orders]);
+  const authorizeOrderRecord = useMemo(() => {
+    if (!authorizeConfirmId || tab !== "orders") return null;
+    return orders.find((r) => r.id === authorizeConfirmId) ?? null;
+  }, [authorizeConfirmId, tab, orders]);
   const approveBonusRecord = useMemo(() => {
     if (!approveConfirmId || tab !== "bonus") return null;
     return bonuses.find((r) => r.id === approveConfirmId) ?? null;
@@ -648,11 +808,15 @@ function LoyaltyContent() {
 
   const pageTitle =
     tab === "orders"
-      ? status === "Pending"
+      ? status === "Pending Authorization"
+        ? "Pending Authorization"
+        : status === "Pending"
         ? "Pending Loyalty Order"
         : status === "Rejected"
           ? "Rejected Loyalty Orders"
-          : "Loyalty Orders"
+          : status === "Completed"
+            ? "Completed Loyalty Orders"
+            : "Loyalty Orders"
       : tab === "bonus"
         ? status === "Rejected"
           ? "Rejected Bonus Claims"
@@ -673,8 +837,16 @@ function LoyaltyContent() {
             ? "Gift Management"
           : "Loyalty Management";
 
+  const showOrderUpdatedBy =
+    tab === "orders" &&
+    (status === "Pending Authorization" || status === "Completed" || status === "Rejected");
+  const showOrderAuthorizedBy = showOrderUpdatedBy;
   const showLoyaltyAdminColumn =
-    status === "Completed" || status === "Rejected" || status === "Claimed";
+    status === "Completed" ||
+    status === "Rejected" ||
+    status === "Claimed" ||
+    (tab === "orders" && status === "Pending Authorization");
+  const showOrderAssignedTo = tab === "orders" && status === "Pending";
 
   const selectableIds = useMemo(
     () =>
@@ -688,9 +860,84 @@ function LoyaltyContent() {
     setSelectedIds(checked ? selectableIds : []);
   }
 
+  function getCurrentOrderActionFlags(row) {
+    return getOrderActionFlags(row, {
+      isAdmin: loyaltyIsAdmin,
+      canUpdate: canUpdateTab,
+      canAuthorize: canAuthorizeCurrentUser,
+      makerCheckerEnabled,
+      isAuthorizerOnly: isLoyaltyOrderAuthorizer,
+      isExecutive: isLoyaltyOrderExecutive,
+      allowedStatuses: allowedLoyaltyOrderStatuses,
+    });
+  }
+
+  function canMutateOrderRow(row) {
+    const flags = getCurrentOrderActionFlags(row);
+    return flags.canReject || flags.canSendForAuthorization || flags.canApprove || flags.canReopen;
+  }
+
   function toggleOneSelected(id) {
     if (!id) return;
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((value) => value !== id) : [...prev, id]));
+  }
+
+  function renderOrderRowActions(r) {
+    const flags = getCurrentOrderActionFlags(r);
+    if (!flags.canReject && !flags.canSendForAuthorization && !flags.canApprove && !flags.canReopen) {
+      return <span className="text-slate-300">—</span>;
+    }
+
+    const rowBusy = orderStatusBusy;
+
+    return (
+      <div className="flex gap-1">
+        {flags.canReject ? (
+          <button
+            type="button"
+            disabled={rowBusy}
+            onClick={() => setRejectId(r.id)}
+            className="rounded-lg bg-[#E11D48] p-1.5 text-white disabled:opacity-50"
+            title="Reject"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+        {flags.canSendForAuthorization ? (
+          <button
+            type="button"
+            disabled={rowBusy}
+            onClick={() => setAuthorizeConfirmId(r.id)}
+            className="rounded-lg bg-[#2563EB] p-1.5 text-white disabled:opacity-50"
+            title="Send for authorization"
+          >
+            <ShieldCheck className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+        {flags.canApprove ? (
+          <button
+            type="button"
+            disabled={rowBusy}
+            onClick={() => setApproveConfirmId(r.id)}
+            className="rounded-lg bg-theme-green-action p-1.5 text-white disabled:opacity-50"
+            title={r.status === "Pending Authorization" ? "Authorize and complete" : "Approve"}
+          >
+            <Check className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+        {flags.canReopen ? (
+          <button
+            type="button"
+            disabled={rowBusy}
+            onClick={() => setReopenConfirmId(r.id)}
+            className="rounded-lg bg-[#D1900F] p-1.5 text-white disabled:opacity-50"
+            title="Reopen"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+      </div>
+    );
   }
 
   async function handleOrderStatusUpdate(id, nextStatus, rejectionReason) {
@@ -709,6 +956,7 @@ function LoyaltyContent() {
       setApproveConfirmId(null);
       setReopenConfirmId(null);
       setRejectId(null);
+      setAuthorizeConfirmId(null);
       notifyAdminNavCountsRefresh();
     } catch (err) {
       setOrderActionError(err.message || "Failed to update loyalty order status.");
@@ -771,6 +1019,10 @@ function LoyaltyContent() {
     } finally {
       setVoucherStatusBusy(false);
     }
+  }
+
+  function sendOrderForAuthorization(id) {
+    handleOrderStatusUpdate(id, "Pending Authorization");
   }
 
   function approve(id) {
@@ -975,7 +1227,9 @@ function LoyaltyContent() {
                       ? " · reject or reopen claimed bonuses"
                     : tab === "vouchers"
                       ? " · approve gift vouchers · reject with reason"
-                      : " · approve / reject"}
+                      : status === "Pending Authorization"
+                        ? " · authorize / reject"
+                        : " · approve / reject"}
                 </p>
               </div>
               {(tab === "orders" || tab === "bonus" || tab === "vouchers") ? (
@@ -983,6 +1237,7 @@ function LoyaltyContent() {
                   {(tab === "orders"
                     ? [
                         ["Pending", "Pending"],
+                        ["Pending Authorization", "Pending Authorization"],
                         ["Completed", "Completed"],
                         ["Rejected", "Rejected"],
                       ]
@@ -1135,7 +1390,7 @@ function LoyaltyContent() {
             {tab === "orders" && ordersError ? (
               <p className="mt-2 text-xs text-rose-400">{ordersError}</p>
             ) : null}
-            {tab === "orders" && orderActionError && !approveConfirmId && !reopenConfirmId && !rejectId ? (
+            {tab === "orders" && orderActionError && !approveConfirmId && !reopenConfirmId && !rejectId && !authorizeConfirmId ? (
               <p className="mt-2 text-xs text-rose-400">{orderActionError}</p>
             ) : null}
             {tab === "bonus" && bonusError ? (
@@ -1182,8 +1437,9 @@ function LoyaltyContent() {
                     <th className="px-3 py-3">Action</th>
                     <th className="px-3 py-3">Status</th>
                     {status === "Rejected" ? <th className="px-3 py-3">Rejection Reason</th> : null}
-                    {showLoyaltyAdminColumn ? <th className="whitespace-nowrap px-3 py-3">Authorized By</th> : null}
-                    <th className="whitespace-nowrap px-3 py-3">Assigned To</th>
+                    {showOrderUpdatedBy ? <th className="whitespace-nowrap px-3 py-3">Updated By</th> : null}
+                    {showOrderAuthorizedBy ? <th className="whitespace-nowrap px-3 py-3">Authorized By</th> : null}
+                    {showOrderAssignedTo ? <th className="whitespace-nowrap px-3 py-3">Assigned To</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -1210,7 +1466,7 @@ function LoyaltyContent() {
                       </td>
                       <td className="px-3 py-3 font-semibold text-[#FBBF24]">{r.points}</td>
                       <td className="px-3 py-3">
-                        <CopyCell value={r.amount} sub={r.amountUsd} />
+                        <CopyCell value={r.amountUsd || r.amount} />
                       </td>
                       <td className="px-3 py-3">
                         <CopyCell value={r.method} />
@@ -1227,92 +1483,7 @@ function LoyaltyContent() {
                           platformDetail={r.platformDetail}
                         />
                       </td>
-                      <td className="px-3 py-3">
-                        {r.status === "Pending" ? (
-                          <div className="flex gap-1">
-                            <button
-                              type="button"
-                              disabled={orderStatusBusy || !canUpdateTab}
-                              onClick={() => {
-                                if (!canUpdateTab) return;
-                                setRejectId(r.id);
-                              }}
-                              className="rounded-lg bg-[#E11D48] p-1.5 text-white disabled:opacity-50"
-                              title="Reject"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={orderStatusBusy || !canUpdateTab}
-                              onClick={() => {
-                                if (!canUpdateTab) return;
-                                setApproveConfirmId(r.id);
-                              }}
-                              className="rounded-lg bg-theme-green-action p-1.5 text-white disabled:opacity-50"
-                              title="Approve"
-                            >
-                              <Check className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        ) : r.status === "Rejected" ? (
-                          <div className="flex gap-1">
-                            <button
-                              type="button"
-                              disabled={orderStatusBusy || !canUpdateTab}
-                              onClick={() => {
-                                if (!canUpdateTab) return;
-                                setApproveConfirmId(r.id);
-                              }}
-                              className="rounded-lg bg-theme-green-action p-1.5 text-white disabled:opacity-50"
-                              title="Approve"
-                            >
-                              <Check className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={orderStatusBusy || !canUpdateTab}
-                              onClick={() => {
-                                if (!canUpdateTab) return;
-                                setReopenConfirmId(r.id);
-                              }}
-                              className="rounded-lg bg-[#D1900F] p-1.5 text-white disabled:opacity-50"
-                              title="Reopen"
-                            >
-                              <RefreshCw className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        ) : r.status === "Completed" ? (
-                          <div className="flex gap-1">
-                            <button
-                              type="button"
-                              disabled={orderStatusBusy || !canUpdateTab}
-                              onClick={() => {
-                                if (!canUpdateTab) return;
-                                setRejectId(r.id);
-                              }}
-                              className="rounded-lg bg-[#E11D48] p-1.5 text-white disabled:opacity-50"
-                              title="Reject"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={orderStatusBusy || !canUpdateTab}
-                              onClick={() => {
-                                if (!canUpdateTab) return;
-                                setReopenConfirmId(r.id);
-                              }}
-                              className="rounded-lg bg-[#D1900F] p-1.5 text-white disabled:opacity-50"
-                              title="Reopen"
-                            >
-                              <RefreshCw className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </td>
+                      <td className="px-3 py-3">{renderOrderRowActions(r)}</td>
                       <td className="px-3 py-3">
                         <StatusPill
                           status={r.status}
@@ -1325,19 +1496,29 @@ function LoyaltyContent() {
                           <CopyCell value={r.rejectReason || "N/A"} nowrap={false} />
                         </td>
                       ) : null}
-                      {showLoyaltyAdminColumn ? (
-                        <td className="px-3 py-3 text-xs text-slate-200">
-                          {r.admin && r.admin !== "NA" ? r.admin : "—"}
+                      {showOrderUpdatedBy ? (
+                        <td className="px-3 py-3">
+                          <NameCell value={r.updatedBy} />
                         </td>
                       ) : null}
-                      <td className="px-3 py-3">
-                        <AssignedToCell record={r} />
-                      </td>
+                      {showOrderAuthorizedBy ? (
+                        <td className="px-3 py-3">
+                          <NameCell
+                            value={r.authorizedBy}
+                            unassigned={r.status === "Pending Authorization"}
+                          />
+                        </td>
+                      ) : null}
+                      {showOrderAssignedTo ? (
+                        <td className="px-3 py-3">
+                          <AssignedToCell record={r} />
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={11 + (status === "Rejected" ? 1 : 0) + (showLoyaltyAdminColumn ? 1 : 0) + (canManualAssign ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
+                      <td colSpan={10 + (status === "Rejected" ? 1 : 0) + (showOrderUpdatedBy ? 1 : 0) + (showOrderAuthorizedBy ? 1 : 0) + (showOrderAssignedTo ? 1 : 0) + (canManualAssign ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
                         No Results Found
                       </td>
                     </tr>
@@ -1693,6 +1874,7 @@ function LoyaltyContent() {
                     <th className="px-3 py-3">Duplicates</th>
                     <th className="px-3 py-3">Action</th>
                     <th className="px-3 py-3">Status</th>
+                    <th className="px-3 py-3">Admin</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1787,11 +1969,12 @@ function LoyaltyContent() {
                           <p className="mt-1 max-w-[120px] truncate text-[10px] text-rose-300">{r.rejectReason}</p>
                         ) : null}
                       </td>
+                      <td className="px-3 py-3 text-xs text-slate-400">{r.admin || "—"}</td>
                     </tr>
                   ))}
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="px-4 py-14 text-center text-slate-400">
+                      <td colSpan={11 + (canManualAssign ? 1 : 0)} className="px-4 py-14 text-center text-slate-400">
                         No Results Found
                       </td>
                     </tr>
@@ -1917,8 +2100,31 @@ function LoyaltyContent() {
       )}
 
       <DepositStatusConfirmModal
+        open={Boolean(authorizeConfirmId) && tab === "orders"}
+        title="Send for authorization?"
+        message={
+          authorizeOrderRecord
+            ? `${authorizeOrderRecord.id} · ${authorizeOrderRecord.customer}`
+            : undefined
+        }
+        confirmLabel="Authorize"
+        confirmClassName="bg-[#2563EB]"
+        busy={orderStatusBusy}
+        error={orderActionError}
+        onCancel={() => {
+          setAuthorizeConfirmId(null);
+          setOrderActionError("");
+        }}
+        onConfirm={() => sendOrderForAuthorization(authorizeConfirmId)}
+      />
+
+      <DepositStatusConfirmModal
         open={Boolean(approveConfirmId) && (tab === "orders" || tab === "bonus" || tab === "vouchers")}
-        title="Set as Approved?"
+        title={
+          tab === "orders" && approveOrderRecord?.status === "Pending Authorization"
+            ? "Authorize and complete?"
+            : "Set as Approved?"
+        }
         message={
           approveOrderRecord
             ? `${approveOrderRecord.id} · ${approveOrderRecord.customer}`
@@ -2010,6 +2216,7 @@ function LoyaltyContent() {
         open={assignOpen && canManualAssign}
         kind={tab}
         selectedIds={selectedIds}
+        assignAuthorizers={tab === "orders" && status === "Pending Authorization"}
         onClose={() => setAssignOpen(false)}
         onAssigned={() => {
           setSelectedIds([]);
@@ -2034,7 +2241,15 @@ function LoyaltyContent() {
         onRequestReject={setRejectId}
         onRequestApprove={setApproveConfirmId}
         onRequestReopen={setReopenConfirmId}
-        canMutate={canUpdateTab}
+        onRequestAuthorize={setAuthorizeConfirmId}
+        canMutate={canUpdateTab || loyaltyIsAdmin}
+        canUpdateOrders={canUpdateTab}
+        makerCheckerEnabled={makerCheckerEnabled}
+        canAuthorize={canAuthorizeCurrentUser}
+        isAdmin={loyaltyIsAdmin}
+        isAuthorizerOnly={isLoyaltyOrderAuthorizer}
+        isExecutive={isLoyaltyOrderExecutive}
+        allowedStatuses={allowedLoyaltyOrderStatuses}
       />
     </div>
   );

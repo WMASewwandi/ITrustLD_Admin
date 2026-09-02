@@ -39,7 +39,7 @@ const SHIFT_OPTIONS = ["-", "Shift A", "Shift B"];
 
 const DEPOSIT_STATUS_OPTIONS = ["Pending", "Completed", "Rejected"];
 const WITHDRAWAL_STATUS_OPTIONS = ["Pending", "Pending Authorization", "Completed", "Rejected"];
-const LOYALTY_ORDER_STATUS_OPTIONS = ["Pending", "Completed", "Rejected"];
+const LOYALTY_ORDER_STATUS_OPTIONS = ["Pending", "Pending Authorization", "Completed", "Rejected"];
 const LOYALTY_BONUS_STATUS_OPTIONS = ["Pending", "Claimed", "Rejected"];
 const LOYALTY_VOUCHER_STATUS_OPTIONS = ["Pending", "Claimed", "Rejected"];
 
@@ -47,6 +47,13 @@ function canUpdateWithdrawals(permissions = []) {
   return (
     permissions.includes("status_update_withdrawal_data") ||
     permissions.includes("authorize_withdrawal_data")
+  );
+}
+
+function canUpdateLoyaltyOrders(permissions = []) {
+  return (
+    permissions.includes("status_update_loyalty_orders_data") ||
+    permissions.includes("authorize_loyalty_orders_data")
   );
 }
 
@@ -64,7 +71,7 @@ function statusScopeForRole(roles, roleName, current = {}) {
   const permissions = rolePermissions(roles, roleName);
   const canDeposit = permissions.includes("status_update_deposit_data");
   const canWithdrawal = canUpdateWithdrawals(permissions);
-  const canLoyaltyOrders = permissions.includes("status_update_loyalty_orders_data");
+  const canLoyaltyOrders = canUpdateLoyaltyOrders(permissions);
   const canLoyaltyBonus = permissions.includes("status_update_loyalty_bonus_claims_data");
   const canLoyaltyVouchers = permissions.includes("status_update_loyalty_voucher_claims_data");
   return {
@@ -126,7 +133,7 @@ function StatusScopeFields({
   const permissions = rolePermissions(roles, roleName);
   const showDeposit = permissions.includes("status_update_deposit_data");
   const showWithdrawal = canUpdateWithdrawals(permissions);
-  const showLoyaltyOrders = permissions.includes("status_update_loyalty_orders_data");
+  const showLoyaltyOrders = canUpdateLoyaltyOrders(permissions);
   const showLoyaltyBonus = permissions.includes("status_update_loyalty_bonus_claims_data");
   const showLoyaltyVouchers = permissions.includes("status_update_loyalty_voucher_claims_data");
   if (!showDeposit && !showWithdrawal && !showLoyaltyOrders && !showLoyaltyBonus && !showLoyaltyVouchers) return null;
@@ -347,12 +354,12 @@ export default function SystemUsersPage() {
       allowed_withdrawal_statuses: statusesForForm(
         user.allowed_withdrawal_statuses,
         WITHDRAWAL_STATUS_OPTIONS,
-        permissions.includes("status_update_withdrawal_data"),
+        canUpdateWithdrawals(permissions),
       ),
       allowed_loyalty_order_statuses: statusesForForm(
         user.allowed_loyalty_order_statuses,
         LOYALTY_ORDER_STATUS_OPTIONS,
-        permissions.includes("status_update_loyalty_orders_data"),
+        canUpdateLoyaltyOrders(permissions),
       ),
       allowed_loyalty_bonus_statuses: statusesForForm(
         user.allowed_loyalty_bonus_statuses,
@@ -375,11 +382,11 @@ export default function SystemUsersPage() {
       setError("Select at least one deposit status this user can update.");
       return;
     }
-    if (permissions.includes("status_update_withdrawal_data") && !createForm.allowed_withdrawal_statuses?.length) {
+    if (canUpdateWithdrawals(permissions) && !createForm.allowed_withdrawal_statuses?.length) {
       setError("Select at least one withdrawal status this user can update.");
       return;
     }
-    if (permissions.includes("status_update_loyalty_orders_data") && !createForm.allowed_loyalty_order_statuses?.length) {
+    if (canUpdateLoyaltyOrders(permissions) && !createForm.allowed_loyalty_order_statuses?.length) {
       setError("Select at least one loyalty order status this user can update.");
       return;
     }
@@ -426,11 +433,11 @@ export default function SystemUsersPage() {
       setError("Select at least one deposit status this user can update.");
       return;
     }
-    if (permissions.includes("status_update_withdrawal_data") && !editUser.allowed_withdrawal_statuses?.length) {
+    if (canUpdateWithdrawals(permissions) && !editUser.allowed_withdrawal_statuses?.length) {
       setError("Select at least one withdrawal status this user can update.");
       return;
     }
-    if (permissions.includes("status_update_loyalty_orders_data") && !editUser.allowed_loyalty_order_statuses?.length) {
+    if (canUpdateLoyaltyOrders(permissions) && !editUser.allowed_loyalty_order_statuses?.length) {
       setError("Select at least one loyalty order status this user can update.");
       return;
     }

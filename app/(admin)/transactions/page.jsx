@@ -2309,6 +2309,10 @@ function TransactionsContent() {
     }
   }
 
+  const proofDupCount = proof
+    ? Math.max(Number(proof.todayTxCount) || 0, similarToday.length)
+    : 0;
+
   return (
     <div>
       <Breadcrumb
@@ -3155,9 +3159,9 @@ function TransactionsContent() {
                   <span>
                     {proof.id} · {proof.customer}
                   </span>
-                  {proof.todayTxCount > 1 ? (
+                  {proofDupCount > 1 ? (
                     <span className="inline-flex items-center rounded-full bg-admin-danger px-2 py-0.5 text-[11px] font-semibold text-white">
-                      {proof.todayTxCount - 1}X Today
+                      {proofDupCount}X Today
                     </span>
                   ) : null}
                 </p>
