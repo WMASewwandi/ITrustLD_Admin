@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AdminMainNav from "@/components/admin/admin-main-nav";
 import AdminIdleTimeout from "@/components/admin/admin-idle-timeout";
+import AdminShiftSessionGuard from "@/components/admin/admin-shift-session-guard";
+import { kickOutAdminSession } from "@/lib/api";
 import { AdminPermissionsProvider } from "@/contexts/admin-permissions";
 import { AppDialogProvider } from "@/components/admin/app-dialog";
 import {
@@ -114,10 +116,19 @@ export default function AdminShell({ children }) {
         setReady(true);
       } catch (error) {
         if (cancelled) return;
-        if (error?.data?.code === "SHIFT_MISMATCH" || error?.status === 401) {
+        if (
+          error?.data?.code === "SHIFT_MISMATCH" ||
+          error?.data?.code === "SHIFT_ENDED" ||
+          error?.status === 401
+        ) {
+          const reason =
+            error?.data?.code === "SHIFT_MISMATCH" || error?.data?.code === "SHIFT_ENDED"
+              ? "shift-ended"
+              : String(error?.message || "").toLowerCase().includes("shift has ended")
+                ? "shift-ended"
+                : "";
           shellSnapshot = null;
-          clearAdminSession();
-          routerRef.current.replace("/login");
+          kickOutAdminSession(reason);
           return;
         }
         if (cached) {
@@ -171,6 +182,7 @@ export default function AdminShell({ children }) {
       </div>
       </div>
       {ready ? <AdminIdleTimeout /> : null}
+      {ready ? <AdminShiftSessionGuard /> : null}
       </AppDialogProvider>
     </AdminPermissionsProvider>
   );

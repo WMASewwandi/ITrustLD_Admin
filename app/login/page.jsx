@@ -34,6 +34,7 @@ export default function LoginPage() {
 function LoginForm() {
   const searchParams = useSearchParams();
   const inactiveNotice = searchParams.get("reason") === "inactive";
+  const shiftEndedNotice = searchParams.get("reason") === "shift-ended";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -149,6 +150,11 @@ function LoginForm() {
               {inactiveNotice ? (
                 <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100" role="status">
                   Your session expired after 30 minutes of inactivity. Please sign in again.
+                </p>
+              ) : null}
+              {shiftEndedNotice ? (
+                <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100" role="status">
+                  Your shift has ended. Please sign in again for the next shift.
                 </p>
               ) : null}
               {error ? (

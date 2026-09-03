@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Eye, EyeOff, Pencil, Plus, X } from "lucide-react";
+import { Check, Eye, EyeOff, LayoutGrid, Pencil, Plus, Table2, X } from "lucide-react";
 import { inputCls } from "@/components/admin/queue-ui";
 import { useAppDialog } from "@/components/admin/app-dialog";
 import {
@@ -25,6 +25,54 @@ import {
 } from "@/lib/wallets";
 import { TOPUP_WALLET_PLATFORM_TYPES } from "@/lib/mock-data";
 
+const WALLET_VIEW_STORAGE_KEY = "itrustld.admin.walletsView";
+
+function readWalletView() {
+  if (typeof window === "undefined") return "card";
+  try {
+    const stored = window.localStorage.getItem(WALLET_VIEW_STORAGE_KEY);
+    return stored === "table" ? "table" : "card";
+  } catch {
+    return "card";
+  }
+}
+
+function WalletViewSwitch({ value, onChange }) {
+  const options = [
+    { id: "card", label: "Card view", icon: LayoutGrid },
+    { id: "table", label: "Table view", icon: Table2 },
+  ];
+
+  return (
+    <div
+      className="inline-flex rounded-xl border border-white/15 bg-admin-surface p-0.5"
+      role="group"
+      aria-label="Wallet display"
+    >
+      {options.map((option) => {
+        const Icon = option.icon;
+        const active = value === option.id;
+        return (
+          <button
+            key={option.id}
+            type="button"
+            onClick={() => onChange(option.id)}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+              active
+                ? "bg-gradient-to-r from-admin-teal to-admin-teal-deep text-white shadow-sm"
+                : "text-slate-400 hover:text-white"
+            }`}
+            aria-pressed={active}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 const emptyForm = {
   name: "",
   logoName: "",
@@ -41,6 +89,7 @@ const emptyForm = {
   allowNavigateButton: false,
   navigateUrl: "",
   navigateButtonLabel: "",
+  payAccountKey: "",
   badgeColor: "#236B6B",
 };
 
@@ -160,6 +209,32 @@ function isPlatformTypeSelected(selectedTypes, platformType) {
   return (selectedTypes || []).some((type) => String(type).toLowerCase() === target);
 }
 
+function paymentMethodsText(row) {
+  return Array.isArray(row.paymentMethods) ? row.paymentMethods.join(", ") : row.paymentMethods || "—";
+}
+
+function platformTypeText(row) {
+  if (Array.isArray(row.platformTypes) && row.platformTypes.length) {
+    return row.platformTypes.join(", ");
+  }
+  return row.platformType || "—";
+}
+
+function payAccountGroups(choices) {
+  const groups = [];
+  const seen = new Map();
+  for (const choice of choices || []) {
+    const groupName = choice.group || "Pay Accounts";
+    if (!seen.has(groupName)) {
+      const group = { name: groupName, options: [] };
+      seen.set(groupName, group);
+      groups.push(group);
+    }
+    seen.get(groupName).options.push(choice);
+  }
+  return groups;
+}
+
 function WalletSection({
   title,
   activateLabel,
@@ -169,6 +244,7 @@ function WalletSection({
   addSubtitle,
   hideConfirm,
   paymentOptionChoices,
+  payAccountChoices = [],
   currencyOptions,
   platformTypes,
   loadRows,
@@ -181,6 +257,8 @@ function WalletSection({
   toggleRowStatus,
   fallbackTerms,
   showVoucherFlag = false,
+  viewMode = "card",
+  onViewModeChange,
 }) {
   const { alert, confirm } = useAppDialog();
   const [rows, setRows] = useState([]);
@@ -216,6 +294,7 @@ function WalletSection({
         ...emptyForm,
         currency: currencyOptions[0] || "USD",
         paymentMethodIds: [],
+        payAccountKey: "",
       });
     } catch (error) {
       await alert(error?.message || "Could not load payment methods.");
@@ -253,6 +332,7 @@ function WalletSection({
         allowNavigateButton: Boolean(wallet.allowNavigateButton),
         navigateUrl: wallet.navigateUrl || "",
         navigateButtonLabel: wallet.navigateButtonLabel || "",
+        payAccountKey: showVoucherFlag ? "" : wallet.payAccountKey || "",
         badgeColor: wallet.badgeColor || "#236B6B",
       });
     } catch (error) {
@@ -311,6 +391,7 @@ function WalletSection({
       allowNavigateButton,
       navigateUrl,
       navigateButtonLabel,
+      payAccountKey,
     } = modal;
 
     const selectedPlatformTypes = Array.isArray(platformTypes) ? platformTypes : [];
@@ -353,6 +434,7 @@ function WalletSection({
       navigateButtonLabel: Boolean(allowNavigateButton)
         ? String(navigateButtonLabel || "").trim()
         : "",
+      payAccountKey: showVoucherFlag ? "" : String(payAccountKey || "").trim(),
       ...(showVoucherFlag ? { allowForVoucher: Boolean(allowForVoucher) } : {}),
     };
 
@@ -408,20 +490,201 @@ function WalletSection({
     }
   }
 
+  function renderActivateControl(row, compact = false) {
+    return (
+      <button
+        type="button"
+        disabled={row.hidden}
+        onClick={() => toggleActive(row.id, row.active)}
+        className={`inline-flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium transition ${
+          row.hidden
+            ? "cursor-not-allowed text-slate-600"
+            : row.active
+              ? "text-theme-green-action"
+              : "text-slate-500 hover:text-slate-100"
+        }`}
+      >
+        <span
+          className={`inline-flex h-5 w-5 items-center justify-center rounded border ${
+            row.active && !row.hidden
+              ? "border-theme-green-action bg-theme-green-action text-white"
+              : "border-white/20 bg-admin-surface"
+          }`}
+        >
+          {row.active && !row.hidden ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
+        </span>
+        {compact ? null : activateLabel}
+      </button>
+    );
+  }
+
+  function renderWalletActions(row, compact = false) {
+    const btnCls = compact
+      ? "inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold transition"
+      : "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold transition";
+
+    if (!row.hidden) {
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => openEdit(row)}
+            className={`${btnCls} border-theme-green-action text-theme-green-action hover:bg-theme-green-action/10`}
+          >
+            <Pencil className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => hideWallet(row.id)}
+            className={`${btnCls} border-[#E11D48] text-[#E11D48] hover:bg-[#E11D48]/10`}
+          >
+            <EyeOff className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
+            Hide
+          </button>
+        </>
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={() => restoreWallet(row.id)}
+        className={`${btnCls} border-theme-green-action text-theme-green-action hover:bg-theme-green-action/10`}
+      >
+        <Eye className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
+        Unhide
+      </button>
+    );
+  }
+
+  function renderVoucherStatus(row) {
+    return (
+      <span
+        className={
+          row.hidden
+            ? "text-slate-500"
+            : row.allowForVoucher
+              ? "font-semibold text-theme-green-action"
+              : "text-slate-400"
+        }
+      >
+        {row.allowForVoucher ? "Allowed" : "Not allowed"}
+      </span>
+    );
+  }
+
+  function renderNavigateStatus(row) {
+    if (row.allowNavigateButton) {
+      return (
+        <span
+          className={
+            row.hidden
+              ? "break-all text-slate-500"
+              : "break-all font-semibold text-theme-green-action"
+          }
+        >
+          Enabled · {row.navigateButtonLabel || "—"} · {row.navigateUrl || "—"}
+        </span>
+      );
+    }
+    return <span className="text-slate-500">Disabled</span>;
+  }
+
+  function renderTermsLink(row) {
+    return (
+      <button
+        type="button"
+        onClick={() => setTermsModal(row)}
+        className={`pointer-events-auto font-semibold underline-offset-2 ${
+          row.hidden
+            ? "cursor-default text-slate-500 no-underline"
+            : "text-admin-teal hover:text-admin-teal-deep hover:underline"
+        }`}
+        disabled={row.hidden}
+      >
+        View terms and conditions
+      </button>
+    );
+  }
+
   return (
     <section>
       <div className="admin-fade-up flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-bold tracking-tight text-white">{title}</h2>
-        <button
-          type="button"
-          onClick={openAdd}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-admin-surface px-3.5 py-2 text-sm font-semibold text-slate-300 shadow-sm transition hover:border-white/25 hover:bg-white/5"
-        >
-          <Plus className="h-4 w-4" />
-          Add Wallet
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {onViewModeChange ? <WalletViewSwitch value={viewMode} onChange={onViewModeChange} /> : null}
+          <button
+            type="button"
+            onClick={openAdd}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-admin-surface px-3.5 py-2 text-sm font-semibold text-slate-300 shadow-sm transition hover:border-white/25 hover:bg-white/5"
+          >
+            <Plus className="h-4 w-4" />
+            Add Wallet
+          </button>
+        </div>
       </div>
 
+      {rows.length > 0 && viewMode === "table" ? (
+        <div className="admin-table-wrap mt-5">
+          <div className="overflow-x-auto">
+            <table className="min-w-[980px] w-full text-left text-[13px]">
+              <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
+                <tr>
+                  <th className="px-3 py-3">Wallet</th>
+                  <th className="px-3 py-3">Payment methods</th>
+                  <th className="px-3 py-3">Pay account</th>
+                  <th className="px-3 py-3">Minimum</th>
+                  <th className="px-3 py-3">Maximum</th>
+                  <th className="px-3 py-3">Currency</th>
+                  <th className="px-3 py-3">Platform</th>
+                  {showVoucherFlag ? <th className="px-3 py-3">Bonus voucher</th> : null}
+                  <th className="px-3 py-3">Navigate</th>
+                  <th className="px-3 py-3">Terms</th>
+                  <th className="px-3 py-3">Activate</th>
+                  <th className="px-3 py-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className={`border-t border-white/10 text-slate-300 ${
+                      row.hidden ? "opacity-60" : ""
+                    }`}
+                  >
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <WalletBadge name={row.name} color={row.badgeColor} logoUrl={row.logoUrl} />
+                        {row.hidden ? (
+                          <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                            Hidden
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="max-w-[180px] px-3 py-3">{paymentMethodsText(row)}</td>
+                    <td className="max-w-[220px] px-3 py-3">{row.payAccountLabel || "None"}</td>
+                    <td className="whitespace-nowrap px-3 py-3">{formatLimit(row.minLimit)}</td>
+                    <td className="whitespace-nowrap px-3 py-3">{formatLimit(row.maxLimit)}</td>
+                    <td className="px-3 py-3">{row.currency}</td>
+                    <td className="px-3 py-3">{platformTypeText(row)}</td>
+                    {showVoucherFlag ? <td className="px-3 py-3">{renderVoucherStatus(row)}</td> : null}
+                    <td className="max-w-[220px] px-3 py-3">{renderNavigateStatus(row)}</td>
+                    <td className="px-3 py-3">{renderTermsLink(row)}</td>
+                    <td className="px-3 py-3">{renderActivateControl(row, true)}</td>
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap justify-end gap-1.5">{renderWalletActions(row, true)}</div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      {rows.length > 0 && viewMode !== "table" ? (
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
         {rows.map((row, i) => (
           <article
@@ -439,29 +702,7 @@ function WalletSection({
                   </span>
                 ) : null}
               </div>
-              <button
-                type="button"
-                disabled={row.hidden}
-                onClick={() => toggleActive(row.id, row.active)}
-                className={`inline-flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium transition ${
-                  row.hidden
-                    ? "cursor-not-allowed text-slate-600"
-                    : row.active
-                      ? "text-theme-green-action"
-                      : "text-slate-500 hover:text-slate-100"
-                }`}
-              >
-                <span
-                  className={`inline-flex h-5 w-5 items-center justify-center rounded border ${
-                    row.active && !row.hidden
-                      ? "border-theme-green-action bg-theme-green-action text-white"
-                      : "border-white/20 bg-admin-surface"
-                  }`}
-                >
-                  {row.active && !row.hidden ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
-                </span>
-                {activateLabel}
-              </button>
+              {renderActivateControl(row)}
             </div>
 
             <dl className={`px-5 py-2 ${row.hidden ? "pointer-events-none" : ""}`}>
@@ -469,9 +710,10 @@ function WalletSection({
                 {row.name}
               </FieldRow>
               <FieldRow label="Payment methods" disabled={row.hidden}>
-                {Array.isArray(row.paymentMethods)
-                  ? row.paymentMethods.join(", ")
-                  : row.paymentMethods}
+                {paymentMethodsText(row)}
+              </FieldRow>
+              <FieldRow label="Pay account" disabled={row.hidden}>
+                {row.payAccountLabel || "None"}
               </FieldRow>
               <FieldRow label="Minimum limit" disabled={row.hidden}>
                 {formatLimit(row.minLimit)}
@@ -483,90 +725,28 @@ function WalletSection({
                 {row.currency}
               </FieldRow>
               <FieldRow label="Platform type" disabled={row.hidden}>
-                {Array.isArray(row.platformTypes) && row.platformTypes.length
-                  ? row.platformTypes.join(", ")
-                  : row.platformType || "—"}
+                {platformTypeText(row)}
               </FieldRow>
               {showVoucherFlag ? (
                 <FieldRow label="Client bonus voucher" disabled={row.hidden}>
-                  <span
-                    className={
-                      row.hidden
-                        ? "text-slate-500"
-                        : row.allowForVoucher
-                          ? "font-semibold text-theme-green-action"
-                          : "text-slate-400"
-                    }
-                  >
-                    {row.allowForVoucher ? "Allowed" : "Not allowed"}
-                  </span>
+                  {renderVoucherStatus(row)}
                 </FieldRow>
               ) : null}
               <FieldRow label="Navigate button" disabled={row.hidden}>
-                {row.allowNavigateButton ? (
-                  <span
-                    className={
-                      row.hidden
-                        ? "break-all text-slate-500"
-                        : "break-all font-semibold text-theme-green-action"
-                    }
-                  >
-                    Enabled · {row.navigateButtonLabel || "—"} · {row.navigateUrl || "—"}
-                  </span>
-                ) : (
-                  <span className="text-slate-500">Disabled</span>
-                )}
+                {renderNavigateStatus(row)}
               </FieldRow>
               <FieldRow label="Terms & Conditions" disabled={row.hidden}>
-                <button
-                  type="button"
-                  onClick={() => setTermsModal(row)}
-                  className={`pointer-events-auto font-semibold underline-offset-2 ${
-                    row.hidden
-                      ? "cursor-default text-slate-500 no-underline"
-                      : "text-admin-teal hover:text-admin-teal-deep hover:underline"
-                  }`}
-                  disabled={row.hidden}
-                >
-                  View terms and conditions
-                </button>
+                {renderTermsLink(row)}
               </FieldRow>
             </dl>
 
             <div className="flex flex-wrap gap-2 border-t border-white/10 px-5 py-3.5">
-              {!row.hidden ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => openEdit(row)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-theme-green-action px-3 py-1.5 text-sm font-semibold text-theme-green-action transition hover:bg-theme-green-action/10"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => hideWallet(row.id)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#E11D48] px-3 py-1.5 text-sm font-semibold text-[#E11D48] transition hover:bg-[#E11D48]/10"
-                  >
-                    <EyeOff className="h-3.5 w-3.5" />
-                    Hide
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => restoreWallet(row.id)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-theme-green-action px-3 py-1.5 text-sm font-semibold text-theme-green-action transition hover:bg-theme-green-action/10"
-                >
-                  <Eye className="h-3.5 w-3.5" />
-                  Unhide
-                </button>
-              )}
+              {renderWalletActions(row)}
             </div>
           </article>
         ))}
       </div>
+      ) : null}
 
       {!loading && rows.length === 0 ? (
         <div className="admin-card mt-5 p-8 text-center text-sm text-slate-400">{emptyMessage}</div>
@@ -635,6 +815,37 @@ function WalletSection({
               ))}
             </div>
           </fieldset>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">Pay account</span>
+            <select
+              value={showVoucherFlag ? "" : modal.payAccountKey || ""}
+              disabled={showVoucherFlag}
+              onChange={(e) => setModal((m) => ({ ...m, payAccountKey: e.target.value }))}
+              className={`${inputCls} ${showVoucherFlag ? "cursor-not-allowed opacity-60" : ""}`}
+            >
+              <option value="">None</option>
+              {!showVoucherFlag &&
+              modal.payAccountKey &&
+              !payAccountChoices.some((choice) => choice.key === modal.payAccountKey) ? (
+                <option value={modal.payAccountKey}>{modal.payAccountKey}</option>
+              ) : null}
+              {payAccountGroups(payAccountChoices).map((group) => (
+                <optgroup key={group.name} label={group.name}>
+                  {group.options.map((choice) => (
+                    <option key={choice.key} value={choice.key}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <span className="mt-1.5 block text-xs text-slate-500">
+              {showVoucherFlag
+                ? "Pay accounts cannot be linked to top-up wallets."
+                : "Optional. Leave as None if this cash-out wallet has no company pay account."}
+            </span>
+          </label>
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-slate-300">Currency</span>
@@ -840,7 +1051,23 @@ export default function WalletsPanel() {
     paymentOptions: [],
     currencyTypes: ["USD"],
     platformTypes: TOPUP_WALLET_PLATFORM_TYPES,
+    payAccounts: [],
   });
+  const [viewMode, setViewMode] = useState("card");
+
+  useEffect(() => {
+    setViewMode(readWalletView());
+  }, []);
+
+  function changeViewMode(nextView) {
+    const view = nextView === "table" ? "table" : "card";
+    setViewMode(view);
+    try {
+      window.localStorage.setItem(WALLET_VIEW_STORAGE_KEY, view);
+    } catch {
+      /* ignore */
+    }
+  }
 
   const refreshPaymentOptions = useCallback(async () => {
     const data = await fetchWalletMeta();
@@ -854,6 +1081,7 @@ export default function WalletsPanel() {
         Array.isArray(data.platformTypes) && data.platformTypes.length > 0
           ? data.platformTypes
           : TOPUP_WALLET_PLATFORM_TYPES,
+      payAccounts: Array.isArray(data.payAccounts) ? data.payAccounts : [],
     });
     return data;
   }, []);
@@ -872,6 +1100,7 @@ export default function WalletsPanel() {
         editTitle="Edit Wallet"
         hideConfirm="Hide this top-up wallet from users?"
         paymentOptionChoices={meta.paymentOptions}
+        payAccountChoices={meta.payAccounts}
         currencyOptions={meta.currencyTypes}
         platformTypes={meta.platformTypes}
         loadRows={fetchTopupWallets}
@@ -884,6 +1113,8 @@ export default function WalletsPanel() {
         toggleRowStatus={toggleTopupWalletStatus}
         fallbackTerms="Standard top-up wallet terms apply. Limits and processing times may vary by payment method."
         showVoucherFlag
+        viewMode={viewMode}
+        onViewModeChange={changeViewMode}
       />
 
       <WalletSection
@@ -895,6 +1126,7 @@ export default function WalletsPanel() {
         addSubtitle="Fill the below details to add a wallet."
         hideConfirm="Hide this cash-out wallet from users?"
         paymentOptionChoices={meta.paymentOptions}
+        payAccountChoices={meta.payAccounts}
         currencyOptions={meta.currencyTypes}
         platformTypes={meta.platformTypes}
         loadRows={fetchCashoutWallets}
@@ -906,6 +1138,8 @@ export default function WalletsPanel() {
         unhideRow={unhideCashoutWallet}
         toggleRowStatus={toggleCashoutWalletStatus}
         fallbackTerms="Standard cash-out wallet terms apply. Limits and processing times may vary by payment method."
+        viewMode={viewMode}
+        onViewModeChange={changeViewMode}
       />
     </div>
   );
