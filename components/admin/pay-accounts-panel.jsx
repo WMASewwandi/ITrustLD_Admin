@@ -7,16 +7,26 @@ import { useAppDialog } from "@/components/admin/app-dialog";
 import {
   createBankAccount,
   createBinanceAccount,
+  createCustomPayAccount,
   createNetellerAccount,
+  createPayAccountCategory,
+  createPayAccountField,
   createPmAccount,
   createSkrillAccount,
   createXmAccount,
+  deleteCustomPayAccount,
   deletePayAccount,
+  deletePayAccountCategory,
+  deletePayAccountField,
   fetchPayAccounts,
+  toggleCustomPayAccountStatus,
   togglePayAccountStatus,
   updateBankAccount,
   updateBinanceAccount,
+  updateCustomPayAccount,
   updateNetellerAccount,
+  updatePayAccountCategory,
+  updatePayAccountField,
   updatePmAccount,
   updateSkrillAccount,
   updateXmAccount,
@@ -65,20 +75,25 @@ function ActionButtons({ onEdit, onDelete, disabled }) {
   );
 }
 
-function SectionCard({ title, actionLabel, onAdd, children, delay, addDisabled }) {
+function SectionCard({ title, actionLabel, onAdd, children, delay, addDisabled, actions }) {
   return (
     <section className={`admin-card admin-fade-up overflow-visible p-0 ${delay || ""}`}>
       <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-lg font-semibold text-white">{title}</h2>
-        <button
-          type="button"
-          onClick={onAdd}
-          disabled={addDisabled}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          {actionLabel}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {actions}
+          {onAdd ? (
+            <button
+              type="button"
+              onClick={onAdd}
+              disabled={addDisabled}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {actionLabel}
+            </button>
+          ) : null}
+        </div>
       </div>
       <div className="overflow-x-auto">{children}</div>
     </section>
@@ -200,6 +215,7 @@ export default function PayAccountsPanel() {
   const [binance, setBinance] = useState([]);
   const [pm, setPm] = useState([]);
   const [xm, setXm] = useState([]);
+  const [customCategories, setCustomCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState(null);
@@ -210,29 +226,40 @@ export default function PayAccountsPanel() {
   const [binanceModal, setBinanceModal] = useState(null);
   const [pmModal, setPmModal] = useState(null);
   const [xmModal, setXmModal] = useState(null);
+  const [categoryModal, setCategoryModal] = useState(null);
+  const [fieldModal, setFieldModal] = useState(null);
+  const [recordModal, setRecordModal] = useState(null);
 
-  const reloadAccounts = useCallback(async () => {
-    setLoading(true);
+  const applyPayAccounts = useCallback((data) => {
+    setBanks(Array.isArray(data?.banks) ? data.banks : []);
+    setSkrill(Array.isArray(data?.skrill) ? data.skrill : []);
+    setNeteller(Array.isArray(data?.neteller) ? data.neteller : []);
+    setBinance(Array.isArray(data?.binance) ? data.binance : []);
+    setPm(Array.isArray(data?.pm) ? data.pm : []);
+    setXm(Array.isArray(data?.xm) ? data.xm : []);
+    setCustomCategories(Array.isArray(data?.customCategories) ? data.customCategories : []);
+  }, []);
+
+  const reloadAccounts = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const data = await fetchPayAccounts();
-      setBanks(Array.isArray(data?.banks) ? data.banks : []);
-      setSkrill(Array.isArray(data?.skrill) ? data.skrill : []);
-      setNeteller(Array.isArray(data?.neteller) ? data.neteller : []);
-      setBinance(Array.isArray(data?.binance) ? data.binance : []);
-      setPm(Array.isArray(data?.pm) ? data.pm : []);
-      setXm(Array.isArray(data?.xm) ? data.xm : []);
+      applyPayAccounts(data);
     } catch (error) {
       console.error(error);
-      setBanks([]);
-      setSkrill([]);
-      setNeteller([]);
-      setBinance([]);
-      setPm([]);
-      setXm([]);
+      if (!silent) {
+        setBanks([]);
+        setSkrill([]);
+        setNeteller([]);
+        setBinance([]);
+        setPm([]);
+        setXm([]);
+        setCustomCategories([]);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  }, []);
+  }, [applyPayAccounts]);
 
   useEffect(() => {
     reloadAccounts();
@@ -420,6 +447,200 @@ export default function PayAccountsPanel() {
     }
   }
 
+  async function saveCategory() {
+    if (!categoryModal || saving) return;
+    const name = String(categoryModal.name || "").trim();
+    if (!name) return;
+
+    setSaving(true);
+    try {
+      if (categoryModal.mode === "edit") {
+        await updatePayAccountCategory(categoryModal.id, { name });
+      } else {
+        await createPayAccountCategory({ name });
+      }
+      setCategoryModal(null);
+      await reloadAccounts({ silent: true });
+    } catch (error) {
+      await alert(error?.message || "Could not save category.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveField() {
+    if (!fieldModal || saving) return;
+    const label = String(fieldModal.label || "").trim();
+    if (!label) return;
+
+    setSaving(true);
+    try {
+      const payload = {
+        label,
+        type: fieldModal.type || "text",
+        required: Boolean(fieldModal.required),
+      };
+      if (fieldModal.mode === "edit") {
+        await updatePayAccountField(fieldModal.id, payload);
+      } else {
+        await createPayAccountField(fieldModal.categoryId, payload);
+      }
+      setFieldModal(null);
+      await reloadAccounts({ silent: true });
+    } catch (error) {
+      await alert(error?.message || "Could not save field.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveRecord() {
+    if (!recordModal || saving) return;
+    const category = customCategories.find(
+      (item) => Number(item.id) === Number(recordModal.categoryId),
+    );
+    const fields = category?.fields || [];
+    const missing = fields.find(
+      (field) => field.required && !String(recordModal.values?.[field.key] || "").trim(),
+    );
+    if (missing) {
+      await alert(`${missing.label} is required.`);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = { values: recordModal.values || {} };
+      if (recordModal.mode === "edit") {
+        await updateCustomPayAccount(recordModal.id, payload);
+      } else {
+        await createCustomPayAccount(recordModal.categoryId, payload);
+      }
+      setRecordModal(null);
+      await reloadAccounts({ silent: true });
+    } catch (error) {
+      await alert(error?.message || "Could not save account.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteCategory(category) {
+    if (
+      !(await confirm(`Delete category “${category.name}” and all of its accounts?`, {
+        title: "Delete category",
+        confirmLabel: "Delete",
+      }))
+    ) {
+      return;
+    }
+    try {
+      await deletePayAccountCategory(category.id);
+      await reloadAccounts({ silent: true });
+    } catch (error) {
+      await alert(error?.message || "Could not delete category.");
+    }
+  }
+
+  async function handleDeleteField(field) {
+    if (!(await confirm(`Delete field “${field.label}”?`, { title: "Delete field", confirmLabel: "Delete" }))) {
+      return;
+    }
+    try {
+      await deletePayAccountField(field.id);
+      await reloadAccounts({ silent: true });
+    } catch (error) {
+      await alert(error?.message || "Could not delete field.");
+    }
+  }
+
+  async function handleToggleCustomRecord(row) {
+    const toggleKey = `custom-${row.id}`;
+    if (togglingId === toggleKey) return;
+    const nextActive = !row.active;
+    setCustomCategories((prev) =>
+      prev.map((category) =>
+        Number(category.id) === Number(row.categoryId)
+          ? {
+              ...category,
+              accounts: category.accounts.map((item) =>
+                item.id === row.id ? { ...item, active: nextActive } : item,
+              ),
+            }
+          : category,
+      ),
+    );
+    setTogglingId(toggleKey);
+    try {
+      const data = await toggleCustomPayAccountStatus(row.id, nextActive);
+      if (data?.account) {
+        setCustomCategories((prev) =>
+          prev.map((category) =>
+            Number(category.id) === Number(row.categoryId)
+              ? {
+                  ...category,
+                  accounts: category.accounts.map((item) =>
+                    item.id === row.id ? data.account : item,
+                  ),
+                }
+              : category,
+          ),
+        );
+      }
+    } catch (error) {
+      setCustomCategories((prev) =>
+        prev.map((category) =>
+          Number(category.id) === Number(row.categoryId)
+            ? {
+                ...category,
+                accounts: category.accounts.map((item) =>
+                  item.id === row.id ? { ...item, active: row.active } : item,
+                ),
+              }
+            : category,
+        ),
+      );
+      await alert(error?.message || "Could not update account status.");
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
+  async function handleDeleteCustomRecord(row) {
+    if (!(await confirm("Delete this pay account?", { title: "Delete account", confirmLabel: "Delete" }))) return;
+    try {
+      await deleteCustomPayAccount(row.id);
+      setCustomCategories((prev) =>
+        prev.map((category) =>
+          Number(category.id) === Number(row.categoryId)
+            ? { ...category, accounts: category.accounts.filter((item) => item.id !== row.id) }
+            : category,
+        ),
+      );
+    } catch (error) {
+      await alert(error?.message || "Could not delete pay account.");
+    }
+  }
+
+  function openAddRecordModal(category) {
+    if (!category.fields?.length) {
+      setFieldModal({
+        mode: "add",
+        categoryId: category.id,
+        label: "",
+        type: "text",
+        required: true,
+      });
+      return;
+    }
+    setRecordModal({
+      mode: "add",
+      categoryId: category.id,
+      categoryName: category.name,
+      values: Object.fromEntries(category.fields.map((field) => [field.key, ""])),
+    });
+  }
+
   async function handleToggleStatus(accountType, row, setRows) {
     const toggleKey = `${accountType}-${row.id}`;
     if (togglingId === toggleKey) return;
@@ -456,6 +677,18 @@ export default function PayAccountsPanel() {
 
   return (
     <div className="mt-5 space-y-5">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setCategoryModal({ mode: "add", name: "" })}
+          disabled={busy}
+          className="inline-flex items-center gap-1.5 rounded-xl bg-theme-green-action px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add Category
+        </button>
+      </div>
+
       <SectionCard
         title="Bank Account"
         actionLabel="Add Account"
@@ -737,6 +970,178 @@ export default function PayAccountsPanel() {
         </table>
       </SectionCard>
 
+      {customCategories.map((category) => {
+        const fields = category.fields || [];
+        const accounts = category.accounts || [];
+        const colSpan = Math.max(fields.length, 1) + 2;
+        return (
+          <SectionCard
+            key={category.id}
+            title={category.name}
+            addDisabled={busy}
+            actions={
+              <>
+                <button
+                  type="button"
+                  onClick={() => setCategoryModal({ mode: "edit", id: category.id, name: category.name })}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:opacity-60"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFieldModal({
+                      mode: "add",
+                      categoryId: category.id,
+                      label: "",
+                      type: "text",
+                      required: true,
+                    })
+                  }
+                  disabled={busy}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:opacity-60"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Field
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteCategory(category)}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#E11D48] px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </button>
+              </>
+            }
+            actionLabel="Add Account"
+            onAdd={() => openAddRecordModal(category)}
+          >
+            <div className="border-b border-white/10 px-4 py-3">
+              {fields.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {fields.map((field) => (
+                    <span
+                      key={field.id}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200"
+                    >
+                      {field.label}
+                      {field.required ? <span className="text-rose-300">*</span> : null}
+                      <span className="text-slate-500">{field.type}</span>
+                      <button
+                        type="button"
+                        title="Edit field"
+                        disabled={busy}
+                        onClick={() =>
+                          setFieldModal({
+                            mode: "edit",
+                            id: field.id,
+                            categoryId: category.id,
+                            label: field.label,
+                            type: field.type,
+                            required: field.required,
+                          })
+                        }
+                        className="text-slate-400 hover:text-white disabled:opacity-60"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Delete field"
+                        disabled={busy}
+                        onClick={() => handleDeleteField(field)}
+                        className="text-slate-400 hover:text-rose-300 disabled:opacity-60"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400">
+                  Add fields for this category, then add accounts.
+                </p>
+              )}
+            </div>
+            <table className="min-w-[480px] w-full text-left text-[13px]">
+              <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
+                <tr>
+                  {fields.length ? (
+                    fields.map((field) => (
+                      <th key={field.id} className="px-4 py-3">
+                        {field.label}
+                      </th>
+                    ))
+                  ) : (
+                    <th className="px-4 py-3">Account</th>
+                  )}
+                  <th className="px-4 py-3">Set as Active</th>
+                  <th className="px-4 py-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={colSpan} className="px-4 py-8 text-center text-sm text-slate-400">
+                      Loading {category.name} accounts…
+                    </td>
+                  </tr>
+                ) : null}
+                {!loading
+                  ? accounts.map((row) => (
+                      <tr key={row.id} className="border-t border-white/10 text-slate-300">
+                        {fields.length ? (
+                          fields.map((field) => (
+                            <td key={field.key} className="px-4 py-3 font-medium text-white">
+                              {row.values?.[field.key] || "—"}
+                            </td>
+                          ))
+                        ) : (
+                          <td className="px-4 py-3 text-slate-400">{row.summary || `Account #${row.id}`}</td>
+                        )}
+                        <td className="px-4 py-3">
+                          <ActiveCheckbox
+                            checked={row.active}
+                            disabled={togglingId === `custom-${row.id}`}
+                            onChange={() => handleToggleCustomRecord(row)}
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <ActionButtons
+                            disabled={busy || togglingId === `custom-${row.id}`}
+                            onEdit={() =>
+                              setRecordModal({
+                                mode: "edit",
+                                id: row.id,
+                                categoryId: category.id,
+                                categoryName: category.name,
+                                values: { ...(row.values || {}) },
+                              })
+                            }
+                            onDelete={() => handleDeleteCustomRecord(row)}
+                          />
+                        </td>
+                      </tr>
+                    ))
+                  : null}
+                {!loading && accounts.length === 0 ? (
+                  <tr>
+                    <td colSpan={colSpan} className="px-4 py-8 text-center text-sm text-slate-400">
+                      No {category.name} accounts yet. Click Add Account to create one.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </SectionCard>
+        );
+      })}
+
       {bankModal ? (
         <ModalShell
           title={bankModal.mode === "edit" ? "Edit Bank Account" : "Add Bank Account"}
@@ -901,6 +1306,102 @@ export default function PayAccountsPanel() {
               placeholder="XM account ID"
             />
           </label>
+        </ModalShell>
+      ) : null}
+
+      {categoryModal ? (
+        <ModalShell
+          title={categoryModal.mode === "edit" ? "Rename Category" : "Add Category"}
+          onClose={() => setCategoryModal(null)}
+          onSave={saveCategory}
+          saving={saving}
+        >
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">Category name</span>
+            <input
+              required
+              value={categoryModal.name}
+              onChange={(e) => setCategoryModal((m) => ({ ...m, name: e.target.value }))}
+              className={inputCls}
+              placeholder="e.g. Payoneer"
+            />
+          </label>
+        </ModalShell>
+      ) : null}
+
+      {fieldModal ? (
+        <ModalShell
+          title={fieldModal.mode === "edit" ? "Edit Field" : "Add Field"}
+          onClose={() => setFieldModal(null)}
+          onSave={saveField}
+          saving={saving}
+        >
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">Field name</span>
+            <input
+              required
+              value={fieldModal.label}
+              onChange={(e) => setFieldModal((m) => ({ ...m, label: e.target.value }))}
+              className={inputCls}
+              placeholder="e.g. Email"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">Type</span>
+            <select
+              value={fieldModal.type}
+              onChange={(e) => setFieldModal((m) => ({ ...m, type: e.target.value }))}
+              className={inputCls}
+            >
+              <option value="text">Text</option>
+              <option value="email">Email</option>
+              <option value="number">Number</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={Boolean(fieldModal.required)}
+              onChange={(e) => setFieldModal((m) => ({ ...m, required: e.target.checked }))}
+              className="h-4 w-4 rounded border-white/20 accent-theme-green-action"
+            />
+            Required
+          </label>
+        </ModalShell>
+      ) : null}
+
+      {recordModal ? (
+        <ModalShell
+          title={
+            recordModal.mode === "edit"
+              ? `Edit ${recordModal.categoryName || "Account"}`
+              : `Add ${recordModal.categoryName || "Account"}`
+          }
+          onClose={() => setRecordModal(null)}
+          onSave={saveRecord}
+          saving={saving}
+        >
+          {(customCategories.find((item) => Number(item.id) === Number(recordModal.categoryId))?.fields || []).map((field) => (
+            <label key={field.key} className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-300">
+                {field.label}
+                {field.required ? " *" : ""}
+              </span>
+              <input
+                required={field.required}
+                type={field.type === "email" ? "email" : field.type === "number" ? "number" : "text"}
+                value={recordModal.values?.[field.key] || ""}
+                onChange={(e) =>
+                  setRecordModal((m) => ({
+                    ...m,
+                    values: { ...(m.values || {}), [field.key]: e.target.value },
+                  }))
+                }
+                className={inputCls}
+                placeholder={field.label}
+              />
+            </label>
+          ))}
         </ModalShell>
       ) : null}
     </div>
