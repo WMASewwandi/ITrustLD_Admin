@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocationSearchParams } from "@/lib/location-search";
 import {
   Bell,
@@ -34,6 +34,7 @@ import { useAdminPermissions } from "@/contexts/admin-permissions";
 import { filterBookmarksByPermissions, filterNavByPermissions, hasPermission, resolveAdminHomeHref } from "@/lib/permissions";
 import { hasAnyLoyaltyRead } from "@/lib/loyalty-permissions";
 import { readStoredBookmarks, writeStoredBookmarks } from "@/lib/admin-bookmarks";
+import { fetchRatePaymentOptions, withDynamicRateNavItems } from "@/lib/rates";
 
 function pathMatches(pathname, search, href) {
   if (!href) return false;
@@ -100,9 +101,14 @@ export default function AdminMainNav({ user, roleLabel }) {
   const permissions = useAdminPermissions();
   const homeHref = resolveAdminHomeHref(permissions);
   const [navCounts, setNavCounts] = useState(null);
+  const [rateMethods, setRateMethods] = useState(null);
   const navItems = useMemo(
-    () => applyNavBadges(filterNavByPermissions(TOP_NAV, permissions), navCounts),
-    [permissions, navCounts]
+    () =>
+      applyNavBadges(
+        filterNavByPermissions(withDynamicRateNavItems(TOP_NAV, rateMethods), permissions),
+        navCounts,
+      ),
+    [permissions, navCounts, rateMethods]
   );
   const notifItems = useMemo(() => {
     return buildNotificationItems(navCounts).filter((item) => {
@@ -166,6 +172,21 @@ export default function AdminMainNav({ user, roleLabel }) {
     bookmarksHydratedRef.current = true;
     setBookmarksReady(true);
   }, [permissions]);
+
+  const loadRateMethods = useCallback(async () => {
+    if (!hasPermission(permissions, "view_currency_configs")) return;
+    try {
+      const data = await fetchRatePaymentOptions();
+      const names = data.customCategories || [];
+      setRateMethods(names);
+    } catch {
+      /* keep static fallback links */
+    }
+  }, [permissions]);
+
+  useEffect(() => {
+    loadRateMethods();
+  }, [loadRateMethods]);
 
   useEffect(() => {
     if (!bookmarksReady) return;
@@ -449,6 +470,7 @@ export default function AdminMainNav({ user, roleLabel }) {
                       if (nextOpen) {
                         prefetchNavCategory(router, cat);
                         notifyAdminNavCountsRefresh();
+                        if (nextOpen === "configs") loadRateMethods();
                       }
                     }}
                     className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 py-2 text-[12.5px] font-medium transition ${

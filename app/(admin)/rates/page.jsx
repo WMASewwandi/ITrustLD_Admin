@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Breadcrumb from "@/components/admin/breadcrumb";
 import RatesPanel from "@/components/admin/rates-panel";
-import { fetchRatePaymentOptions } from "@/lib/rates";
+import { appendUniqueRateMethods, fetchRatePaymentOptions } from "@/lib/rates";
 import { RATES } from "@/lib/mock-data";
 
 const FALLBACK_METHODS = RATES.map((row) => row.method);
@@ -25,11 +25,11 @@ function RatesContent() {
   const loadMethods = useCallback(async () => {
     try {
       const data = await fetchRatePaymentOptions();
-      const names = (data.paymentOptions || []).map((option) => option.name).filter(Boolean);
-      if (names.length) {
-        setMethods(names);
-        setMethod((current) => resolveMethod(params.get("method") || current, names));
-      }
+      const extra = data.customCategories || [];
+      setMethods(appendUniqueRateMethods(FALLBACK_METHODS, extra));
+      setMethod((current) =>
+        resolveMethod(params.get("method") || current, appendUniqueRateMethods(FALLBACK_METHODS, extra)),
+      );
     } catch {
       setMethods(FALLBACK_METHODS);
     }
