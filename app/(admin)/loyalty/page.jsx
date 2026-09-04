@@ -95,6 +95,10 @@ function formatActionHelpText(actions) {
   return `You can ${list.slice(0, -1).join(", ")}, or ${list[list.length - 1]}.`;
 }
 
+function isBankTransferLoyaltyOrder(record) {
+  return String(record?.method || "").trim().toUpperCase() === "BANK TRANSFER";
+}
+
 function getOrderActionFlags(record, {
   isAdmin = false,
   canUpdate = false,
@@ -122,6 +126,8 @@ function getOrderActionFlags(record, {
   const isPendingAuth = record.status === "Pending Authorization";
   const isRejected = record.status === "Rejected";
   const isCompleted = record.status === "Completed";
+  const requiresAuthorization = isBankTransferLoyaltyOrder(record);
+  const authRequired = makerCheckerEnabled && requiresAuthorization;
 
   return {
     canReject:
@@ -129,12 +135,12 @@ function getOrderActionFlags(record, {
       (isPendingAuth && (mayUpdate || mayAuthorize)),
     canSendForAuthorization:
       isPending &&
-      makerCheckerEnabled &&
+      authRequired &&
       mayUpdate &&
       (isAdmin || isExecutive || !isAuthorizerOnly),
     canApprove:
-      (isPending && mayUpdate && (isAdmin || !makerCheckerEnabled)) ||
-      (isPendingAuth && mayAuthorize) ||
+      (isPending && mayUpdate && (isAdmin || !authRequired)) ||
+      (isPendingAuth && (mayAuthorize || (mayUpdate && !requiresAuthorization))) ||
       (isRejected && mayUpdate),
     canReopen: (isRejected || isCompleted) && mayUpdate,
   };
