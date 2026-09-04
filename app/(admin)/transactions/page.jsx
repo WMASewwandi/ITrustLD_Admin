@@ -1693,6 +1693,9 @@ function TransactionsContent() {
 
   function canMutateRow(row) {
     if (!row) return false;
+    if (tab === "withdrawals" && isWithdrawalAuthorizer && row.status === "Pending") {
+      return false;
+    }
     if (tab === "withdrawals" && row.status === "Pending Authorization") {
       if (!canAuthorizeCurrentUser) return false;
     } else if (tab === "withdrawals" && !canUpdateWithdrawals && !withdrawalIsAdmin) {
@@ -3270,8 +3273,12 @@ function TransactionsContent() {
             ) : !canMutateRow(proof) ? (
               <div className="border-t border-white/10 bg-white/[0.03] px-5 py-4 text-sm text-slate-400">
                 {tab === "withdrawals" &&
-                proof.status === "Pending Authorization" &&
-                !canAuthorizeCurrentUser
+                isWithdrawalAuthorizer &&
+                proof.status === "Pending"
+                  ? "Pending withdrawals are view-only. You can take action after they are sent for authorization."
+                  : tab === "withdrawals" &&
+                    proof.status === "Pending Authorization" &&
+                    !canAuthorizeCurrentUser
                   ? "You do not have permission to authorize withdrawals."
                   : canMutateCurrentTab
                   ? `You can only update ${tab === "deposits" ? "deposit" : "withdrawal"} records with status: ${(allowedStatusesForTab || []).join(", ") || "none"}.`

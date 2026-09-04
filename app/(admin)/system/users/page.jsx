@@ -57,6 +57,14 @@ function canUpdateLoyaltyOrders(permissions = []) {
   );
 }
 
+function isWithdrawalAuthorizerRoleName(roleName) {
+  const slug = String(roleName || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_ ]+/g, "-");
+  return slug === "withdrawal-authorizer" || slug === "withdrawal-authorization";
+}
+
 function rolePermissions(roles, roleName) {
   return roles.find((role) => role.name === roleName)?.permissions || [];
 }
@@ -788,6 +796,7 @@ export default function SystemUsersPage() {
                 </select>
               </label>
 
+              {!isWithdrawalAuthorizerRoleName(editUser.role) ? (
               <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Pending show count
                 <input
@@ -810,6 +819,7 @@ export default function SystemUsersPage() {
                   stays unchanged. Blank = load all.
                 </span>
               </label>
+              ) : null}
 
               <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
                 <div>
@@ -991,6 +1001,7 @@ export default function SystemUsersPage() {
                 </select>
               </label>
 
+              {!isWithdrawalAuthorizerRoleName(createForm.role) ? (
               <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Pending show count
                 <input
@@ -1013,6 +1024,7 @@ export default function SystemUsersPage() {
                   stays unchanged. Blank = load all.
                 </span>
               </label>
+              ) : null}
 
               <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
                 <div>
