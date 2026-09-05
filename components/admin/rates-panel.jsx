@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import AdminPagination from "@/components/admin/admin-pagination";
 import { FormError, inputCls } from "@/components/admin/queue-ui";
 import { useCan } from "@/contexts/admin-permissions";
 import { useAppDialog } from "@/components/admin/app-dialog";
@@ -59,7 +60,27 @@ function ActionButtons({ onEdit, onDelete, disabled }) {
   );
 }
 
+const RATE_PAGE_SIZE = 5;
+
 function RatesTable({ title, columns, rows, emptyLabel, renderCells, onEdit, onDelete, canMutate, busy }) {
+  const [page, setPage] = useState(1);
+  const total = Array.isArray(rows) ? rows.length : 0;
+  const totalPages = Math.max(1, Math.ceil(total / RATE_PAGE_SIZE) || 1);
+  const currentPage = Math.min(page, totalPages);
+  const start = (currentPage - 1) * RATE_PAGE_SIZE;
+  const paginated = useMemo(
+    () => (Array.isArray(rows) ? rows.slice(start, start + RATE_PAGE_SIZE) : []),
+    [rows, start],
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [rows]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
   return (
     <section className="admin-card admin-fade-up overflow-visible p-0">
       {title ? (
@@ -82,7 +103,7 @@ function RatesTable({ title, columns, rows, emptyLabel, renderCells, onEdit, onD
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {paginated.map((row) => (
               <tr key={row.id} className="border-t border-white/10 text-slate-300">
                 {renderCells(row)}
                 <td className="px-4 py-3 text-right">
@@ -94,7 +115,7 @@ function RatesTable({ title, columns, rows, emptyLabel, renderCells, onEdit, onD
                 </td>
               </tr>
             ))}
-            {rows.length === 0 ? (
+            {total === 0 ? (
               <tr>
                 <td colSpan={columns.length} className="px-4 py-8 text-center text-sm text-slate-400">
                   {emptyLabel}
@@ -103,6 +124,13 @@ function RatesTable({ title, columns, rows, emptyLabel, renderCells, onEdit, onD
             ) : null}
           </tbody>
         </table>
+      </div>
+      <div className="flex flex-col gap-3 border-t border-white/10 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-slate-400">
+          Showing {total === 0 ? 0 : start + 1} to {Math.min(start + RATE_PAGE_SIZE, total)} of {total}{" "}
+          entries
+        </p>
+        <AdminPagination page={currentPage} totalPages={totalPages} onPageChange={setPage} />
       </div>
     </section>
   );
