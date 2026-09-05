@@ -180,6 +180,16 @@ export default function RatesPanel({ method }) {
     setSuccess("");
   }, [load]);
 
+  const rateWalletOptions = useMemo(() => {
+    const list = Array.isArray(wallets) ? [...wallets] : [];
+    if (!modal?.walletId) return list;
+    if (list.some((wallet) => String(wallet.id) === String(modal.walletId))) return list;
+    return [
+      { id: modal.walletId, name: modal.walletName || "Selected wallet" },
+      ...list,
+    ];
+  }, [modal, wallets]);
+
   function openAdd() {
     setModal({
       mode: "add",
@@ -197,6 +207,7 @@ export default function RatesPanel({ method }) {
       id: row.id,
       walletId: row.walletId ? String(row.walletId) : "",
       topupMethodId: row.topupMethodId,
+      walletName: row.topupMethod,
       depositRate: String(row.depositRate),
       notifyUsersByEmail: false,
     });
@@ -209,6 +220,7 @@ export default function RatesPanel({ method }) {
       id: row.id,
       walletId: row.walletId ? String(row.walletId) : "",
       cashoutMethodId: row.cashoutMethodId,
+      walletName: row.cashoutMethod,
       withdrawRate: String(row.withdrawRate),
       notifyUsersByEmail: false,
     });
@@ -510,7 +522,7 @@ export default function RatesPanel({ method }) {
                   className={inputCls}
                   disabled={busy}
                 >
-                  {wallets.map((wallet) => (
+                  {rateWalletOptions.map((wallet) => (
                     <option key={wallet.id} value={wallet.id}>
                       {wallet.name}
                     </option>
