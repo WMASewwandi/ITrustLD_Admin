@@ -7,6 +7,7 @@ import { useAppDialog } from "@/components/admin/app-dialog";
 import {
   createBankAccount,
   createBinanceAccount,
+  createBuiltinPayAccountField,
   createCustomPayAccount,
   createNetellerAccount,
   createPayAccountCategory,
@@ -14,15 +15,18 @@ import {
   createPmAccount,
   createSkrillAccount,
   createXmAccount,
+  deleteBuiltinPayAccountField,
   deleteCustomPayAccount,
   deletePayAccount,
   deletePayAccountCategory,
   deletePayAccountField,
   fetchPayAccounts,
+  renameBuiltinPayAccount,
   toggleCustomPayAccountStatus,
   togglePayAccountStatus,
   updateBankAccount,
   updateBinanceAccount,
+  updateBuiltinPayAccountField,
   updateCustomPayAccount,
   updateNetellerAccount,
   updatePayAccountCategory,
@@ -31,6 +35,15 @@ import {
   updateSkrillAccount,
   updateXmAccount,
 } from "@/lib/pay-accounts";
+
+const DEFAULT_BUILTIN_TITLES = {
+  bank: "Bank Account",
+  skrill: "Skrill Wallet",
+  neteller: "Neteller Wallet",
+  binance: "Crypto Wallet (Binance)",
+  pm: "Perfect Money Account",
+  xm: "XM Local Deposit Account",
+};
 
 const emptyBank = { accountNumber: "", name: "", bank: "", branch: "" };
 const emptyWallet = { email: "" };
@@ -47,6 +60,105 @@ function ActiveCheckbox({ checked, onChange, disabled }) {
       className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action disabled:cursor-not-allowed disabled:opacity-60"
       title={checked ? "Active" : "Set as active"}
     />
+  );
+}
+
+function ExtraHeaderCells({ fields }) {
+  return (fields || []).map((field) => (
+    <th key={field.id || field.key} className="px-4 py-3">
+      {field.label}
+    </th>
+  ));
+}
+
+function ExtraValueCells({ fields, values }) {
+  return (fields || []).map((field) => (
+    <td key={field.key} className="px-4 py-3">
+      {values?.[field.key] || "—"}
+    </td>
+  ));
+}
+
+function ExtraFieldsBar({ fields, busy, onEdit, onDelete }) {
+  if (!fields?.length) return null;
+  return (
+    <div className="border-b border-white/10 px-4 py-3">
+      <div className="flex flex-wrap gap-2">
+        {fields.map((field) => (
+          <span
+            key={field.id}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200"
+          >
+            {field.label}
+            {field.required ? <span className="text-rose-300">*</span> : null}
+            <span className="text-slate-500">{field.type}</span>
+            <button
+              type="button"
+              title="Edit extra field"
+              disabled={busy}
+              onClick={() => onEdit(field)}
+              className="text-slate-400 hover:text-white disabled:opacity-60"
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              title="Delete extra field"
+              disabled={busy}
+              onClick={() => onDelete(field)}
+              className="text-slate-400 hover:text-rose-300 disabled:opacity-60"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ExtraFieldInputs({ fields, values, onChange }) {
+  if (!fields?.length) return null;
+  return fields.map((field) => (
+    <label key={field.key} className="block">
+      <span className="mb-1.5 block text-sm font-medium text-slate-300">
+        {field.label}
+        {field.required ? " *" : ""}
+      </span>
+      <input
+        required={Boolean(field.required)}
+        type={field.type === "email" ? "email" : field.type === "number" ? "number" : "text"}
+        value={values?.[field.key] || ""}
+        onChange={(e) => onChange(field.key, e.target.value)}
+        className={inputCls}
+        placeholder={field.label}
+      />
+    </label>
+  ));
+}
+
+function BuiltinHeaderActions({ busy, onRename, onAddField }) {
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onRename}
+        disabled={busy}
+        className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:opacity-60"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+        Rename
+      </button>
+      <button
+        type="button"
+        onClick={onAddField}
+        disabled={busy}
+        className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:opacity-60"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Add Field
+      </button>
+    </>
   );
 }
 
@@ -150,17 +262,31 @@ function EmailWalletSection({
   delay,
   busy,
   togglingId,
+  extraFields = [],
+  actions,
   onAdd,
   onEdit,
   onToggle,
   onDelete,
+  onEditField,
+  onDeleteField,
 }) {
+  const colSpan = 3 + extraFields.length;
   return (
-    <SectionCard title={title} actionLabel="Add Wallet" onAdd={onAdd} delay={delay} addDisabled={busy}>
+    <SectionCard
+      title={title}
+      actionLabel="Add Wallet"
+      onAdd={onAdd}
+      delay={delay}
+      addDisabled={busy}
+      actions={actions}
+    >
+      <ExtraFieldsBar fields={extraFields} busy={busy} onEdit={onEditField} onDelete={onDeleteField} />
       <table className="min-w-[480px] w-full text-left text-[13px]">
         <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
           <tr>
             <th className="px-4 py-3">{emailLabel}</th>
+            <ExtraHeaderCells fields={extraFields} />
             <th className="px-4 py-3">Set as Active</th>
             <th className="px-4 py-3 text-right">Action</th>
           </tr>
@@ -168,7 +294,7 @@ function EmailWalletSection({
         <tbody>
           {loading ? (
             <tr>
-              <td colSpan={3} className="px-4 py-8 text-center text-sm text-slate-400">
+              <td colSpan={colSpan} className="px-4 py-8 text-center text-sm text-slate-400">
                 {loadingLabel}
               </td>
             </tr>
@@ -177,6 +303,7 @@ function EmailWalletSection({
             ? rows.map((row) => (
                 <tr key={row.id} className="border-t border-white/10 text-slate-300">
                   <td className="px-4 py-3 font-medium text-white">{row.email}</td>
+                  <ExtraValueCells fields={extraFields} values={row.extraValues} />
                   <td className="px-4 py-3">
                     <ActiveCheckbox
                       checked={row.active}
@@ -196,7 +323,7 @@ function EmailWalletSection({
             : null}
           {!loading && rows.length === 0 ? (
             <tr>
-              <td colSpan={3} className="px-4 py-8 text-center text-sm text-slate-400">
+              <td colSpan={colSpan} className="px-4 py-8 text-center text-sm text-slate-400">
                 {emptyLabel}
               </td>
             </tr>
@@ -216,6 +343,7 @@ export default function PayAccountsPanel() {
   const [pm, setPm] = useState([]);
   const [xm, setXm] = useState([]);
   const [customCategories, setCustomCategories] = useState([]);
+  const [builtinMeta, setBuiltinMeta] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState(null);
@@ -227,6 +355,7 @@ export default function PayAccountsPanel() {
   const [pmModal, setPmModal] = useState(null);
   const [xmModal, setXmModal] = useState(null);
   const [categoryModal, setCategoryModal] = useState(null);
+  const [builtinRenameModal, setBuiltinRenameModal] = useState(null);
   const [fieldModal, setFieldModal] = useState(null);
   const [recordModal, setRecordModal] = useState(null);
 
@@ -238,6 +367,7 @@ export default function PayAccountsPanel() {
     setPm(Array.isArray(data?.pm) ? data.pm : []);
     setXm(Array.isArray(data?.xm) ? data.xm : []);
     setCustomCategories(Array.isArray(data?.customCategories) ? data.customCategories : []);
+    setBuiltinMeta(data?.builtinMeta && typeof data.builtinMeta === "object" ? data.builtinMeta : {});
   }, []);
 
   const reloadAccounts = useCallback(async ({ silent = false } = {}) => {
@@ -255,6 +385,7 @@ export default function PayAccountsPanel() {
         setPm([]);
         setXm([]);
         setCustomCategories([]);
+        setBuiltinMeta({});
       }
     } finally {
       if (!silent) setLoading(false);
@@ -275,6 +406,7 @@ export default function PayAccountsPanel() {
       name: name.trim(),
       bank: bank.trim(),
       branch: branch.trim(),
+      extraValues: bankModal.extraValues || {},
     };
 
     setSaving(true);
@@ -326,7 +458,7 @@ export default function PayAccountsPanel() {
 
     if (!config?.modal?.email?.trim() || saving) return;
 
-    const payload = { email: config.modal.email.trim() };
+    const payload = { email: config.modal.email.trim(), extraValues: config.modal.extraValues || {} };
 
     setSaving(true);
     try {
@@ -360,11 +492,12 @@ export default function PayAccountsPanel() {
   async function saveBinance() {
     if (!binanceModal || saving) return;
     const { mode, id, trc20WalletAddress, binanceEmail } = binanceModal;
-    if (!trc20WalletAddress.trim() || !binanceEmail.trim()) return;
+    if (!trc20WalletAddress.trim()) return;
 
     const payload = {
       trc20WalletAddress: trc20WalletAddress.trim(),
-      binanceEmail: binanceEmail.trim(),
+      binanceEmail: String(binanceEmail || "").trim(),
+      extraValues: binanceModal.extraValues || {},
     };
 
     setSaving(true);
@@ -416,7 +549,7 @@ export default function PayAccountsPanel() {
 
     if (!config?.modal?.accountId?.trim() || saving) return;
 
-    const payload = { accountId: config.modal.accountId.trim() };
+    const payload = { accountId: config.modal.accountId.trim(), extraValues: config.modal.extraValues || {} };
 
     setSaving(true);
     try {
@@ -481,7 +614,13 @@ export default function PayAccountsPanel() {
         required: Boolean(fieldModal.required),
       };
       if (fieldModal.mode === "edit") {
-        await updatePayAccountField(fieldModal.id, payload);
+        if (fieldModal.source === "builtin") {
+          await updateBuiltinPayAccountField(fieldModal.id, payload);
+        } else {
+          await updatePayAccountField(fieldModal.id, payload);
+        }
+      } else if (fieldModal.source === "builtin") {
+        await createBuiltinPayAccountField(fieldModal.accountType, payload);
       } else {
         await createPayAccountField(fieldModal.categoryId, payload);
       }
@@ -522,6 +661,35 @@ export default function PayAccountsPanel() {
       await alert(error?.message || "Could not save account.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveBuiltinRename() {
+    if (!builtinRenameModal || saving) return;
+    const displayName = String(builtinRenameModal.displayName || "").trim();
+    if (!displayName) return;
+
+    setSaving(true);
+    try {
+      await renameBuiltinPayAccount(builtinRenameModal.accountType, { displayName });
+      setBuiltinRenameModal(null);
+      await reloadAccounts({ silent: true });
+    } catch (error) {
+      await alert(error?.message || "Could not rename this account type.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteBuiltinField(field) {
+    if (!(await confirm(`Delete extra field “${field.label}”? Original account fields stay unchanged.`, { title: "Delete extra field", confirmLabel: "Delete" }))) {
+      return;
+    }
+    try {
+      await deleteBuiltinPayAccountField(field.id);
+      await reloadAccounts({ silent: true });
+    } catch (error) {
+      await alert(error?.message || "Could not delete extra field.");
     }
   }
 
@@ -673,7 +841,42 @@ export default function PayAccountsPanel() {
     }
   }
 
+  const extraFieldsFor = (accountType) => builtinMeta?.[accountType]?.fields || [];
+  const titleFor = (accountType) =>
+    builtinMeta?.[accountType]?.displayName || DEFAULT_BUILTIN_TITLES[accountType] || accountType;
+  const openBuiltinRename = (accountType) =>
+    setBuiltinRenameModal({
+      accountType,
+      displayName: titleFor(accountType),
+    });
+  const openBuiltinAddField = (accountType) =>
+    setFieldModal({
+      mode: "add",
+      source: "builtin",
+      accountType,
+      label: "",
+      type: "text",
+      required: false,
+    });
+  const openBuiltinEditField = (accountType, field) =>
+    setFieldModal({
+      mode: "edit",
+      source: "builtin",
+      accountType,
+      id: field.id,
+      label: field.label,
+      type: field.type,
+      required: Boolean(field.required),
+    });
+
   const busy = loading || saving;
+  const builtinActions = (accountType) => (
+    <BuiltinHeaderActions
+      busy={busy}
+      onRename={() => openBuiltinRename(accountType)}
+      onAddField={() => openBuiltinAddField(accountType)}
+    />
+  );
 
   return (
     <div className="mt-5 space-y-5">
@@ -690,11 +893,18 @@ export default function PayAccountsPanel() {
       </div>
 
       <SectionCard
-        title="Bank Account"
+        title={titleFor("bank")}
         actionLabel="Add Account"
-        onAdd={() => setBankModal({ mode: "add", ...emptyBank })}
+        onAdd={() => setBankModal({ mode: "add", ...emptyBank, extraValues: {} })}
         addDisabled={busy}
+        actions={builtinActions("bank")}
       >
+        <ExtraFieldsBar
+          fields={extraFieldsFor("bank")}
+          busy={busy}
+          onEdit={(field) => openBuiltinEditField("bank", field)}
+          onDelete={handleDeleteBuiltinField}
+        />
         <table className="min-w-[720px] w-full text-left text-[13px]">
           <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
             <tr>
@@ -702,6 +912,7 @@ export default function PayAccountsPanel() {
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Bank</th>
               <th className="px-4 py-3">Branch</th>
+              <ExtraHeaderCells fields={extraFieldsFor("bank")} />
               <th className="px-4 py-3">Set as Active</th>
               <th className="px-4 py-3 text-right">Action</th>
             </tr>
@@ -709,7 +920,7 @@ export default function PayAccountsPanel() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-400">
+                <td colSpan={6 + extraFieldsFor("bank").length} className="px-4 py-8 text-center text-sm text-slate-400">
                   Loading bank accounts…
                 </td>
               </tr>
@@ -721,6 +932,7 @@ export default function PayAccountsPanel() {
                     <td className="px-4 py-3">{row.name}</td>
                     <td className="px-4 py-3">{row.bank}</td>
                     <td className="px-4 py-3">{row.branch}</td>
+                    <ExtraValueCells fields={extraFieldsFor("bank")} values={row.extraValues} />
                     <td className="px-4 py-3">
                       <ActiveCheckbox
                         checked={row.active}
@@ -739,6 +951,7 @@ export default function PayAccountsPanel() {
                             name: row.name,
                             bank: row.bank,
                             branch: row.branch,
+                            extraValues: { ...(row.extraValues || {}) },
                           })
                         }
                         onDelete={() => handleDelete("bank", row, setBanks)}
@@ -749,7 +962,7 @@ export default function PayAccountsPanel() {
               : null}
             {!loading && banks.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-400">
+                <td colSpan={6 + extraFieldsFor("bank").length} className="px-4 py-8 text-center text-sm text-slate-400">
                   No bank accounts yet. Click Add Account to create one.
                 </td>
               </tr>
@@ -759,7 +972,7 @@ export default function PayAccountsPanel() {
       </SectionCard>
 
       <EmailWalletSection
-        title="Skrill Wallet"
+        title={titleFor("skrill")}
         emailLabel="Skrill Email"
         accountType="skrill"
         rows={skrill}
@@ -769,14 +982,25 @@ export default function PayAccountsPanel() {
         delay="admin-fade-up-delay-1"
         busy={busy}
         togglingId={togglingId}
-        onAdd={() => setSkrillModal({ mode: "add", ...emptyWallet })}
-        onEdit={(row) => setSkrillModal({ mode: "edit", id: row.id, email: row.email })}
+        extraFields={extraFieldsFor("skrill")}
+        actions={builtinActions("skrill")}
+        onAdd={() => setSkrillModal({ mode: "add", ...emptyWallet, extraValues: {} })}
+        onEdit={(row) =>
+          setSkrillModal({
+            mode: "edit",
+            id: row.id,
+            email: row.email,
+            extraValues: { ...(row.extraValues || {}) },
+          })
+        }
         onToggle={(row) => handleToggleStatus("skrill", row, setSkrill)}
         onDelete={(row) => handleDelete("skrill", row, setSkrill)}
+        onEditField={(field) => openBuiltinEditField("skrill", field)}
+        onDeleteField={handleDeleteBuiltinField}
       />
 
       <EmailWalletSection
-        title="Neteller Wallet"
+        title={titleFor("neteller")}
         emailLabel="Neteller Email"
         accountType="neteller"
         rows={neteller}
@@ -786,24 +1010,43 @@ export default function PayAccountsPanel() {
         delay="admin-fade-up-delay-2"
         busy={busy}
         togglingId={togglingId}
-        onAdd={() => setNetellerModal({ mode: "add", ...emptyWallet })}
-        onEdit={(row) => setNetellerModal({ mode: "edit", id: row.id, email: row.email })}
+        extraFields={extraFieldsFor("neteller")}
+        actions={builtinActions("neteller")}
+        onAdd={() => setNetellerModal({ mode: "add", ...emptyWallet, extraValues: {} })}
+        onEdit={(row) =>
+          setNetellerModal({
+            mode: "edit",
+            id: row.id,
+            email: row.email,
+            extraValues: { ...(row.extraValues || {}) },
+          })
+        }
         onToggle={(row) => handleToggleStatus("neteller", row, setNeteller)}
         onDelete={(row) => handleDelete("neteller", row, setNeteller)}
+        onEditField={(field) => openBuiltinEditField("neteller", field)}
+        onDeleteField={handleDeleteBuiltinField}
       />
 
       <SectionCard
-        title="Crypto Wallet (Binance)"
+        title={titleFor("binance")}
         actionLabel="Add Wallet"
-        onAdd={() => setBinanceModal({ mode: "add", ...emptyBinance })}
+        onAdd={() => setBinanceModal({ mode: "add", ...emptyBinance, extraValues: {} })}
         delay="admin-fade-up-delay-3"
         addDisabled={busy}
+        actions={builtinActions("binance")}
       >
+        <ExtraFieldsBar
+          fields={extraFieldsFor("binance")}
+          busy={busy}
+          onEdit={(field) => openBuiltinEditField("binance", field)}
+          onDelete={handleDeleteBuiltinField}
+        />
         <table className="min-w-[720px] w-full text-left text-[13px]">
           <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
             <tr>
               <th className="px-4 py-3">TRC20 Wallet Address</th>
               <th className="px-4 py-3">Binance Email</th>
+              <ExtraHeaderCells fields={extraFieldsFor("binance")} />
               <th className="px-4 py-3">Set as Active</th>
               <th className="px-4 py-3 text-right">Action</th>
             </tr>
@@ -811,7 +1054,7 @@ export default function PayAccountsPanel() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-400">
+                <td colSpan={4 + extraFieldsFor("binance").length} className="px-4 py-8 text-center text-sm text-slate-400">
                   Loading Binance wallets…
                 </td>
               </tr>
@@ -820,7 +1063,8 @@ export default function PayAccountsPanel() {
               ? binance.map((row) => (
                   <tr key={row.id} className="border-t border-white/10 text-slate-300">
                     <td className="px-4 py-3 font-medium text-white">{row.trc20WalletAddress}</td>
-                    <td className="px-4 py-3">{row.binanceEmail}</td>
+                    <td className="px-4 py-3">{row.binanceEmail || "—"}</td>
+                    <ExtraValueCells fields={extraFieldsFor("binance")} values={row.extraValues} />
                     <td className="px-4 py-3">
                       <ActiveCheckbox
                         checked={row.active}
@@ -836,7 +1080,8 @@ export default function PayAccountsPanel() {
                             mode: "edit",
                             id: row.id,
                             trc20WalletAddress: row.trc20WalletAddress,
-                            binanceEmail: row.binanceEmail,
+                            binanceEmail: row.binanceEmail || "",
+                            extraValues: { ...(row.extraValues || {}) },
                           })
                         }
                         onDelete={() => handleDelete("binance", row, setBinance)}
@@ -847,7 +1092,7 @@ export default function PayAccountsPanel() {
               : null}
             {!loading && binance.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-400">
+                <td colSpan={4 + extraFieldsFor("binance").length} className="px-4 py-8 text-center text-sm text-slate-400">
                   No Binance wallets yet. Click Add Wallet to create one.
                 </td>
               </tr>
@@ -857,16 +1102,24 @@ export default function PayAccountsPanel() {
       </SectionCard>
 
       <SectionCard
-        title="Perfect Money Account"
+        title={titleFor("pm")}
         actionLabel="Add Account"
-        onAdd={() => setPmModal({ mode: "add", ...emptyAccountId })}
+        onAdd={() => setPmModal({ mode: "add", ...emptyAccountId, extraValues: {} })}
         delay="admin-fade-up-delay-4"
         addDisabled={busy}
+        actions={builtinActions("pm")}
       >
+        <ExtraFieldsBar
+          fields={extraFieldsFor("pm")}
+          busy={busy}
+          onEdit={(field) => openBuiltinEditField("pm", field)}
+          onDelete={handleDeleteBuiltinField}
+        />
         <table className="min-w-[480px] w-full text-left text-[13px]">
           <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
             <tr>
               <th className="px-4 py-3">PM Account ID</th>
+              <ExtraHeaderCells fields={extraFieldsFor("pm")} />
               <th className="px-4 py-3">Set as Active</th>
               <th className="px-4 py-3 text-right">Action</th>
             </tr>
@@ -874,7 +1127,7 @@ export default function PayAccountsPanel() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={3} className="px-4 py-8 text-center text-sm text-slate-400">
+                <td colSpan={3 + extraFieldsFor("pm").length} className="px-4 py-8 text-center text-sm text-slate-400">
                   Loading Perfect Money accounts…
                 </td>
               </tr>
@@ -883,6 +1136,7 @@ export default function PayAccountsPanel() {
               ? pm.map((row) => (
                   <tr key={row.id} className="border-t border-white/10 text-slate-300">
                     <td className="px-4 py-3 font-medium text-white">{row.accountId}</td>
+                    <ExtraValueCells fields={extraFieldsFor("pm")} values={row.extraValues} />
                     <td className="px-4 py-3">
                       <ActiveCheckbox
                         checked={row.active}
@@ -894,7 +1148,12 @@ export default function PayAccountsPanel() {
                       <ActionButtons
                         disabled={busy || togglingId === `pm-${row.id}`}
                         onEdit={() =>
-                          setPmModal({ mode: "edit", id: row.id, accountId: row.accountId })
+                          setPmModal({
+                            mode: "edit",
+                            id: row.id,
+                            accountId: row.accountId,
+                            extraValues: { ...(row.extraValues || {}) },
+                          })
                         }
                         onDelete={() => handleDelete("pm", row, setPm)}
                       />
@@ -904,7 +1163,7 @@ export default function PayAccountsPanel() {
               : null}
             {!loading && pm.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-4 py-8 text-center text-sm text-slate-400">
+                <td colSpan={3 + extraFieldsFor("pm").length} className="px-4 py-8 text-center text-sm text-slate-400">
                   No Perfect Money accounts yet. Click Add Account to create one.
                 </td>
               </tr>
@@ -914,16 +1173,24 @@ export default function PayAccountsPanel() {
       </SectionCard>
 
       <SectionCard
-        title="XM Local Deposit Account"
+        title={titleFor("xm")}
         actionLabel="Add Account"
-        onAdd={() => setXmModal({ mode: "add", ...emptyAccountId })}
+        onAdd={() => setXmModal({ mode: "add", ...emptyAccountId, extraValues: {} })}
         delay="admin-fade-up-delay-5"
         addDisabled={busy}
+        actions={builtinActions("xm")}
       >
+        <ExtraFieldsBar
+          fields={extraFieldsFor("xm")}
+          busy={busy}
+          onEdit={(field) => openBuiltinEditField("xm", field)}
+          onDelete={handleDeleteBuiltinField}
+        />
         <table className="min-w-[480px] w-full text-left text-[13px]">
           <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
             <tr>
               <th className="px-4 py-3">XM Account ID</th>
+              <ExtraHeaderCells fields={extraFieldsFor("xm")} />
               <th className="px-4 py-3">Set as Active</th>
               <th className="px-4 py-3 text-right">Action</th>
             </tr>
@@ -931,7 +1198,7 @@ export default function PayAccountsPanel() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={3} className="px-4 py-8 text-center text-sm text-slate-400">
+                <td colSpan={3 + extraFieldsFor("xm").length} className="px-4 py-8 text-center text-sm text-slate-400">
                   Loading XM accounts…
                 </td>
               </tr>
@@ -940,6 +1207,7 @@ export default function PayAccountsPanel() {
               ? xm.map((row) => (
                   <tr key={row.id} className="border-t border-white/10 text-slate-300">
                     <td className="px-4 py-3 font-medium text-white">{row.accountId}</td>
+                    <ExtraValueCells fields={extraFieldsFor("xm")} values={row.extraValues} />
                     <td className="px-4 py-3">
                       <ActiveCheckbox
                         checked={row.active}
@@ -951,7 +1219,12 @@ export default function PayAccountsPanel() {
                       <ActionButtons
                         disabled={busy || togglingId === `xm-${row.id}`}
                         onEdit={() =>
-                          setXmModal({ mode: "edit", id: row.id, accountId: row.accountId })
+                          setXmModal({
+                            mode: "edit",
+                            id: row.id,
+                            accountId: row.accountId,
+                            extraValues: { ...(row.extraValues || {}) },
+                          })
                         }
                         onDelete={() => handleDelete("xm", row, setXm)}
                       />
@@ -961,7 +1234,7 @@ export default function PayAccountsPanel() {
               : null}
             {!loading && xm.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-4 py-8 text-center text-sm text-slate-400">
+                <td colSpan={3 + extraFieldsFor("xm").length} className="px-4 py-8 text-center text-sm text-slate-400">
                   No XM accounts yet. Click Add Account to create one.
                 </td>
               </tr>
@@ -1189,6 +1462,13 @@ export default function PayAccountsPanel() {
               placeholder="Branch"
             />
           </label>
+          <ExtraFieldInputs
+            fields={extraFieldsFor("bank")}
+            values={bankModal.extraValues}
+            onChange={(key, value) =>
+              setBankModal((m) => ({ ...m, extraValues: { ...(m.extraValues || {}), [key]: value } }))
+            }
+          />
         </ModalShell>
       ) : null}
 
@@ -1210,6 +1490,13 @@ export default function PayAccountsPanel() {
               placeholder="wallet@example.com"
             />
           </label>
+          <ExtraFieldInputs
+            fields={extraFieldsFor("skrill")}
+            values={skrillModal.extraValues}
+            onChange={(key, value) =>
+              setSkrillModal((m) => ({ ...m, extraValues: { ...(m.extraValues || {}), [key]: value } }))
+            }
+          />
         </ModalShell>
       ) : null}
 
@@ -1231,6 +1518,13 @@ export default function PayAccountsPanel() {
               placeholder="wallet@example.com"
             />
           </label>
+          <ExtraFieldInputs
+            fields={extraFieldsFor("neteller")}
+            values={netellerModal.extraValues}
+            onChange={(key, value) =>
+              setNetellerModal((m) => ({ ...m, extraValues: { ...(m.extraValues || {}), [key]: value } }))
+            }
+          />
         </ModalShell>
       ) : null}
 
@@ -1256,16 +1550,24 @@ export default function PayAccountsPanel() {
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-300">Binance Email</span>
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">
+              Binance Email <span className="font-normal text-slate-500">(optional)</span>
+            </span>
             <input
-              required
               type="email"
               value={binanceModal.binanceEmail}
               onChange={(e) => setBinanceModal((m) => ({ ...m, binanceEmail: e.target.value }))}
               className={inputCls}
-              placeholder="binance@example.com"
+              placeholder="Leave empty to hide on customer side"
             />
           </label>
+          <ExtraFieldInputs
+            fields={extraFieldsFor("binance")}
+            values={binanceModal.extraValues}
+            onChange={(key, value) =>
+              setBinanceModal((m) => ({ ...m, extraValues: { ...(m.extraValues || {}), [key]: value } }))
+            }
+          />
         </ModalShell>
       ) : null}
 
@@ -1286,6 +1588,13 @@ export default function PayAccountsPanel() {
               placeholder="Perfect Money account ID"
             />
           </label>
+          <ExtraFieldInputs
+            fields={extraFieldsFor("pm")}
+            values={pmModal.extraValues}
+            onChange={(key, value) =>
+              setPmModal((m) => ({ ...m, extraValues: { ...(m.extraValues || {}), [key]: value } }))
+            }
+          />
         </ModalShell>
       ) : null}
 
@@ -1304,6 +1613,36 @@ export default function PayAccountsPanel() {
               onChange={(e) => setXmModal((m) => ({ ...m, accountId: e.target.value }))}
               className={inputCls}
               placeholder="XM account ID"
+            />
+          </label>
+          <ExtraFieldInputs
+            fields={extraFieldsFor("xm")}
+            values={xmModal.extraValues}
+            onChange={(key, value) =>
+              setXmModal((m) => ({ ...m, extraValues: { ...(m.extraValues || {}), [key]: value } }))
+            }
+          />
+        </ModalShell>
+      ) : null}
+
+      {builtinRenameModal ? (
+        <ModalShell
+          title="Rename display name"
+          onClose={() => setBuiltinRenameModal(null)}
+          onSave={saveBuiltinRename}
+          saving={saving}
+        >
+          <p className="text-sm text-slate-400">
+            This only changes the label staff see. The original payment type and required fields stay the same.
+          </p>
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">Display name</span>
+            <input
+              required
+              value={builtinRenameModal.displayName}
+              onChange={(e) => setBuiltinRenameModal((m) => ({ ...m, displayName: e.target.value }))}
+              className={inputCls}
+              placeholder="Display name"
             />
           </label>
         </ModalShell>
@@ -1331,11 +1670,24 @@ export default function PayAccountsPanel() {
 
       {fieldModal ? (
         <ModalShell
-          title={fieldModal.mode === "edit" ? "Edit Field" : "Add Field"}
+          title={
+            fieldModal.source === "builtin"
+              ? fieldModal.mode === "edit"
+                ? "Edit extra field"
+                : "Add extra field"
+              : fieldModal.mode === "edit"
+                ? "Edit Field"
+                : "Add Field"
+          }
           onClose={() => setFieldModal(null)}
           onSave={saveField}
           saving={saving}
         >
+          {fieldModal.source === "builtin" ? (
+            <p className="text-sm text-slate-400">
+              Extra fields only. Original required fields for this account type cannot be changed.
+            </p>
+          ) : null}
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-slate-300">Field name</span>
             <input
