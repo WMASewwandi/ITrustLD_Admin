@@ -172,19 +172,25 @@ function transactionRowClassName(record) {
     : "border-t border-white/10 text-slate-300 transition hover:bg-admin-teal/[0.05]";
 }
 
+function isAccPlaceholder(value) {
+  const line = String(value || "").trim();
+  return !line || line === "—" || line === "-";
+}
+
 function withdrawalAccLines(record) {
   const bank = String(record?.bankName || "").trim();
   const accNo = String(record?.bankAccountNo || "").trim();
   const name = String(record?.accountName || "").trim();
-  if (bank || accNo || name) {
-    return [bank || "—", accNo || "—", name || "—"];
-  }
+  const fromFields = [bank, accNo, name].filter((line) => !isAccPlaceholder(line));
+  if (fromFields.length) return fromFields;
   const raw = String(record?.account || "").trim();
   if (raw.includes(" · ")) {
-    const parts = raw.split(" · ").map((part) => part.trim()).filter(Boolean);
-    return [parts[0] || "—", parts[1] || "—", parts[2] || "—"];
+    return raw
+      .split(" · ")
+      .map((part) => part.trim())
+      .filter((part) => !isAccPlaceholder(part));
   }
-  return [raw || "—"];
+  return isAccPlaceholder(raw) ? [] : [raw];
 }
 
 function WithdrawalAccCell({ record }) {
