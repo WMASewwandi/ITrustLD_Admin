@@ -1655,6 +1655,11 @@ export default function PayAccountsPanel() {
           onSave={saveCategory}
           saving={saving}
         >
+          {categoryModal.mode === "add" ? (
+            <p className="text-sm text-slate-400">
+              Built-in names like Binance or XM can be used after you rename that original category.
+            </p>
+          ) : null}
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-slate-300">Category name</span>
             <input
