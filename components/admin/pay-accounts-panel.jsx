@@ -1633,7 +1633,7 @@ export default function PayAccountsPanel() {
           saving={saving}
         >
           <p className="text-sm text-slate-400">
-            This only changes the label staff see. The original payment type and required fields stay the same.
+            This only changes the label staff see. The original payment type stays the same. The name cannot match another category.
           </p>
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-slate-300">Display name</span>
@@ -1657,9 +1657,11 @@ export default function PayAccountsPanel() {
         >
           {categoryModal.mode === "add" ? (
             <p className="text-sm text-slate-400">
-              Built-in names like Binance or XM can be used after you rename that original category.
+              Category names must be unique. A built-in name like Binance can be used only after that original category is renamed.
             </p>
-          ) : null}
+          ) : (
+            <p className="text-sm text-slate-400">Category names must be unique.</p>
+          )}
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-slate-300">Category name</span>
             <input
