@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLocationSearchParams } from "@/lib/location-search";
 import Breadcrumb from "@/components/admin/breadcrumb";
@@ -16,7 +16,7 @@ import {
   fetchVoucherClaims,
   rejectVoucherClaim,
 } from "@/lib/loyalty-voucher-claims";
-import { notifyAdminNavCountsRefresh } from "@/lib/notifications";
+import { notifyAdminNavCountsRefresh, ADMIN_NAV_COUNTS_REVISION_EVENT } from "@/lib/notifications";
 import { useAdminPermissions } from "@/contexts/admin-permissions";
 import { hasLoyaltyTabRead, hasLoyaltyTabUpdate, hasLoyaltyGiftsCatalogUpdate, canAuthorizeLoyaltyOrders } from "@/lib/loyalty-permissions";
 import LoyaltyManagementPanel from "@/components/admin/loyalty-management-panel";
@@ -599,9 +599,43 @@ function LoyaltyContent() {
     router.replace(`/loyalty?${params.toString()}`, { scroll: false });
   }
 
-  const loadOrders = useCallback(async () => {
-    setOrdersLoading(true);
-    setOrdersError("");
+  const tabRef = useRef(tab);
+  const loadOrdersRef = useRef(null);
+  const loadBonusClaimsRef = useRef(null);
+  const loadVoucherClaimsRef = useRef(null);
+  const ordersInFlightRef = useRef(false);
+  const bonusInFlightRef = useRef(false);
+  const voucherInFlightRef = useRef(false);
+  const actionBusyRef = useRef(false);
+
+  useEffect(() => {
+    tabRef.current = tab;
+  }, [tab]);
+
+  useEffect(() => {
+    actionBusyRef.current =
+      orderStatusBusy ||
+      bonusStatusBusy ||
+      voucherStatusBusy ||
+      assignOpen ||
+      Boolean(approveConfirmId || rejectId || authorizeConfirmId || reopenConfirmId);
+  }, [
+    orderStatusBusy,
+    bonusStatusBusy,
+    voucherStatusBusy,
+    assignOpen,
+    approveConfirmId,
+    rejectId,
+    authorizeConfirmId,
+    reopenConfirmId,
+  ]);
+
+  const loadOrders = useCallback(async (overrides = {}) => {
+    const silent = Boolean(overrides.silent);
+    if (silent && ordersInFlightRef.current) return;
+    ordersInFlightRef.current = true;
+    if (!silent) setOrdersLoading(true);
+    if (!silent) setOrdersError("");
     try {
       const data = await fetchLoyaltyOrders({
         status: appliedOrderFilters.status,
@@ -611,6 +645,7 @@ function LoyaltyContent() {
         duration: appliedOrderFilters.duration,
         from: appliedOrderFilters.from,
         to: appliedOrderFilters.to,
+        cacheBust: overrides.cacheBust,
       });
       setOrders(data.orders || []);
       if (typeof data.isAdmin === "boolean") setLoyaltyIsAdmin(data.isAdmin);
@@ -628,16 +663,22 @@ function LoyaltyContent() {
         },
       );
     } catch (err) {
-      setOrdersError(err.message || "Failed to load loyalty orders.");
-      setOrders([]);
+      if (!silent) {
+        setOrdersError(err.message || "Failed to load loyalty orders.");
+        setOrders([]);
+      }
     } finally {
-      setOrdersLoading(false);
+      ordersInFlightRef.current = false;
+      if (!silent) setOrdersLoading(false);
     }
   }, [appliedOrderFilters, ordersPage, ordersPerPage]);
 
-  const loadBonusClaims = useCallback(async () => {
-    setBonusLoading(true);
-    setBonusError("");
+  const loadBonusClaims = useCallback(async (overrides = {}) => {
+    const silent = Boolean(overrides.silent);
+    if (silent && bonusInFlightRef.current) return;
+    bonusInFlightRef.current = true;
+    if (!silent) setBonusLoading(true);
+    if (!silent) setBonusError("");
     try {
       const data = await fetchBonusClaims({
         status: appliedBonusFilters.status,
@@ -647,6 +688,7 @@ function LoyaltyContent() {
         duration: appliedBonusFilters.duration,
         from: appliedBonusFilters.from,
         to: appliedBonusFilters.to,
+        cacheBust: overrides.cacheBust,
       });
       setBonuses(data.claims || []);
       if (typeof data.isAdmin === "boolean") setLoyaltyIsAdmin(data.isAdmin);
@@ -659,16 +701,22 @@ function LoyaltyContent() {
         },
       );
     } catch (err) {
-      setBonusError(err.message || "Failed to load bonus claims.");
-      setBonuses([]);
+      if (!silent) {
+        setBonusError(err.message || "Failed to load bonus claims.");
+        setBonuses([]);
+      }
     } finally {
-      setBonusLoading(false);
+      bonusInFlightRef.current = false;
+      if (!silent) setBonusLoading(false);
     }
   }, [appliedBonusFilters, bonusPage, bonusPerPage]);
 
-  const loadVoucherClaims = useCallback(async () => {
-    setVoucherLoading(true);
-    setVoucherError("");
+  const loadVoucherClaims = useCallback(async (overrides = {}) => {
+    const silent = Boolean(overrides.silent);
+    if (silent && voucherInFlightRef.current) return;
+    voucherInFlightRef.current = true;
+    if (!silent) setVoucherLoading(true);
+    if (!silent) setVoucherError("");
     try {
       const data = await fetchVoucherClaims({
         status: appliedVoucherFilters.status,
@@ -678,6 +726,7 @@ function LoyaltyContent() {
         duration: appliedVoucherFilters.duration,
         from: appliedVoucherFilters.from,
         to: appliedVoucherFilters.to,
+        cacheBust: overrides.cacheBust,
       });
       setVouchers(data.claims || []);
       if (typeof data.isAdmin === "boolean") setLoyaltyIsAdmin(data.isAdmin);
@@ -690,12 +739,19 @@ function LoyaltyContent() {
         },
       );
     } catch (err) {
-      setVoucherError(err.message || "Failed to load voucher claims.");
-      setVouchers([]);
+      if (!silent) {
+        setVoucherError(err.message || "Failed to load voucher claims.");
+        setVouchers([]);
+      }
     } finally {
-      setVoucherLoading(false);
+      voucherInFlightRef.current = false;
+      if (!silent) setVoucherLoading(false);
     }
   }, [appliedVoucherFilters, voucherPage, voucherPerPage]);
+
+  loadOrdersRef.current = loadOrders;
+  loadBonusClaimsRef.current = loadBonusClaims;
+  loadVoucherClaimsRef.current = loadVoucherClaims;
 
   const ordersRangeStart =
     ordersPagination.total === 0 ? 0 : (ordersPagination.page - 1) * ordersPagination.per_page + 1;
@@ -757,6 +813,39 @@ function LoyaltyContent() {
     loadVoucherClaims();
     return undefined;
   }, [tab, loadVoucherClaims]);
+
+  useEffect(() => {
+    function silentReload() {
+      if (actionBusyRef.current) return;
+      const currentTab = tabRef.current;
+      const payload = { silent: true, cacheBust: Date.now() };
+      if (currentTab === "orders") {
+        if (ordersInFlightRef.current) return;
+        loadOrdersRef.current?.(payload);
+        return;
+      }
+      if (currentTab === "bonus") {
+        if (bonusInFlightRef.current) return;
+        loadBonusClaimsRef.current?.(payload);
+        return;
+      }
+      if (currentTab === "vouchers") {
+        if (voucherInFlightRef.current) return;
+        loadVoucherClaimsRef.current?.(payload);
+      }
+    }
+
+    function onRevision() {
+      silentReload();
+    }
+
+    window.addEventListener(ADMIN_NAV_COUNTS_REVISION_EVENT, onRevision);
+    const id = window.setInterval(silentReload, 8000);
+    return () => {
+      window.removeEventListener(ADMIN_NAV_COUNTS_REVISION_EVENT, onRevision);
+      window.clearInterval(id);
+    };
+  }, []);
 
   useEffect(() => {
     if (tab !== "orders") return undefined;
