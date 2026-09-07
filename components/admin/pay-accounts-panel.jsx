@@ -22,7 +22,9 @@ import {
   deletePayAccountField,
   fetchPayAccounts,
   renameBuiltinPayAccount,
+  toggleBuiltinPayAccountCategoryStatus,
   toggleCustomPayAccountStatus,
+  togglePayAccountCategoryStatus,
   togglePayAccountStatus,
   updateBankAccount,
   updateBinanceAccount,
@@ -50,7 +52,7 @@ const emptyWallet = { email: "" };
 const emptyBinance = { trc20WalletAddress: "", binanceEmail: "" };
 const emptyAccountId = { accountId: "" };
 
-function ActiveCheckbox({ checked, onChange, disabled }) {
+function ActiveCheckbox({ checked, onChange, disabled, title }) {
   return (
     <input
       type="checkbox"
@@ -58,8 +60,35 @@ function ActiveCheckbox({ checked, onChange, disabled }) {
       onChange={onChange}
       disabled={disabled}
       className="h-4 w-4 cursor-pointer rounded border-white/20 accent-theme-green-action disabled:cursor-not-allowed disabled:opacity-60"
-      title={checked ? "Active" : "Set as active"}
+      title={title || (checked ? "Active" : "Set as active")}
     />
+  );
+}
+
+function CategoryActiveToggle({ checked, disabled, onChange }) {
+  return (
+    <label className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white">
+      <ActiveCheckbox
+        checked={checked}
+        disabled={disabled}
+        onChange={onChange}
+        title={checked ? "Category is active" : "Set category as active"}
+      />
+      Active
+    </label>
+  );
+}
+
+function categoryHeading(name, isActive) {
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <span>{name}</span>
+      {!isActive ? (
+        <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200/90">
+          Inactive
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -830,6 +859,65 @@ export default function PayAccountsPanel() {
     }
   }
 
+  async function handleToggleBuiltinCategory(accountType, nextActive) {
+    const toggleKey = `category-${accountType}`;
+    if (togglingId === toggleKey) return;
+
+    const previous = builtinMeta?.[accountType]?.isActive !== false;
+    setBuiltinMeta((prev) => ({
+      ...prev,
+      [accountType]: {
+        ...(prev?.[accountType] || {}),
+        isActive: nextActive,
+      },
+    }));
+    setTogglingId(toggleKey);
+
+    try {
+      const data = await toggleBuiltinPayAccountCategoryStatus(accountType, nextActive);
+      if (data?.meta) {
+        setBuiltinMeta((prev) => ({ ...prev, [accountType]: data.meta }));
+      }
+    } catch (error) {
+      setBuiltinMeta((prev) => ({
+        ...prev,
+        [accountType]: {
+          ...(prev?.[accountType] || {}),
+          isActive: previous,
+        },
+      }));
+      await alert(error?.message || "Could not update category status.");
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
+  async function handleToggleCustomCategory(category, nextActive) {
+    const toggleKey = `category-custom-${category.id}`;
+    if (togglingId === toggleKey) return;
+
+    setCustomCategories((prev) =>
+      prev.map((item) => (item.id === category.id ? { ...item, isActive: nextActive } : item)),
+    );
+    setTogglingId(toggleKey);
+
+    try {
+      const data = await togglePayAccountCategoryStatus(category.id, nextActive);
+      if (data?.category) {
+        setCustomCategories((prev) =>
+          prev.map((item) => (item.id === category.id ? data.category : item)),
+        );
+      }
+    } catch (error) {
+      setCustomCategories((prev) =>
+        prev.map((item) => (item.id === category.id ? { ...item, isActive: category.isActive !== false } : item)),
+      );
+      await alert(error?.message || "Could not update category status.");
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
   async function handleDelete(accountType, row, setRows) {
     if (!(await confirm("Delete this pay account?", { title: "Delete account", confirmLabel: "Delete" }))) return;
 
@@ -844,6 +932,7 @@ export default function PayAccountsPanel() {
   const extraFieldsFor = (accountType) => builtinMeta?.[accountType]?.fields || [];
   const titleFor = (accountType) =>
     builtinMeta?.[accountType]?.displayName || DEFAULT_BUILTIN_TITLES[accountType] || accountType;
+  const isBuiltinCategoryActive = (accountType) => builtinMeta?.[accountType]?.isActive !== false;
   const openBuiltinRename = (accountType) =>
     setBuiltinRenameModal({
       accountType,
@@ -871,11 +960,20 @@ export default function PayAccountsPanel() {
 
   const busy = loading || saving;
   const builtinActions = (accountType) => (
-    <BuiltinHeaderActions
-      busy={busy}
-      onRename={() => openBuiltinRename(accountType)}
-      onAddField={() => openBuiltinAddField(accountType)}
-    />
+    <>
+      <CategoryActiveToggle
+        checked={isBuiltinCategoryActive(accountType)}
+        disabled={busy || togglingId === `category-${accountType}`}
+        onChange={() =>
+          handleToggleBuiltinCategory(accountType, !isBuiltinCategoryActive(accountType))
+        }
+      />
+      <BuiltinHeaderActions
+        busy={busy}
+        onRename={() => openBuiltinRename(accountType)}
+        onAddField={() => openBuiltinAddField(accountType)}
+      />
+    </>
   );
 
   return (
@@ -893,7 +991,7 @@ export default function PayAccountsPanel() {
       </div>
 
       <SectionCard
-        title={titleFor("bank")}
+        title={categoryHeading(titleFor("bank"), isBuiltinCategoryActive("bank"))}
         actionLabel="Add Account"
         onAdd={() => setBankModal({ mode: "add", ...emptyBank, extraValues: {} })}
         addDisabled={busy}
@@ -972,7 +1070,7 @@ export default function PayAccountsPanel() {
       </SectionCard>
 
       <EmailWalletSection
-        title={titleFor("skrill")}
+        title={categoryHeading(titleFor("skrill"), isBuiltinCategoryActive("skrill"))}
         emailLabel="Skrill Email"
         accountType="skrill"
         rows={skrill}
@@ -1000,7 +1098,7 @@ export default function PayAccountsPanel() {
       />
 
       <EmailWalletSection
-        title={titleFor("neteller")}
+        title={categoryHeading(titleFor("neteller"), isBuiltinCategoryActive("neteller"))}
         emailLabel="Neteller Email"
         accountType="neteller"
         rows={neteller}
@@ -1028,7 +1126,7 @@ export default function PayAccountsPanel() {
       />
 
       <SectionCard
-        title={titleFor("binance")}
+        title={categoryHeading(titleFor("binance"), isBuiltinCategoryActive("binance"))}
         actionLabel="Add Wallet"
         onAdd={() => setBinanceModal({ mode: "add", ...emptyBinance, extraValues: {} })}
         delay="admin-fade-up-delay-3"
@@ -1102,7 +1200,7 @@ export default function PayAccountsPanel() {
       </SectionCard>
 
       <SectionCard
-        title={titleFor("pm")}
+        title={categoryHeading(titleFor("pm"), isBuiltinCategoryActive("pm"))}
         actionLabel="Add Account"
         onAdd={() => setPmModal({ mode: "add", ...emptyAccountId, extraValues: {} })}
         delay="admin-fade-up-delay-4"
@@ -1173,7 +1271,7 @@ export default function PayAccountsPanel() {
       </SectionCard>
 
       <SectionCard
-        title={titleFor("xm")}
+        title={categoryHeading(titleFor("xm"), isBuiltinCategoryActive("xm"))}
         actionLabel="Add Account"
         onAdd={() => setXmModal({ mode: "add", ...emptyAccountId, extraValues: {} })}
         delay="admin-fade-up-delay-5"
@@ -1250,10 +1348,17 @@ export default function PayAccountsPanel() {
         return (
           <SectionCard
             key={category.id}
-            title={category.name}
+            title={categoryHeading(category.name, category.isActive !== false)}
             addDisabled={busy}
             actions={
               <>
+                <CategoryActiveToggle
+                  checked={category.isActive !== false}
+                  disabled={busy || togglingId === `category-custom-${category.id}`}
+                  onChange={() =>
+                    handleToggleCustomCategory(category, category.isActive === false)
+                  }
+                />
                 <button
                   type="button"
                   onClick={() => setCategoryModal({ mode: "edit", id: category.id, name: category.name })}
