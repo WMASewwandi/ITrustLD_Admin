@@ -14,7 +14,7 @@ import {
 import Breadcrumb from "@/components/admin/breadcrumb";
 import { useAdminPermissions } from "@/contexts/admin-permissions";
 import { formatRoleLabel, getAdminUser } from "@/lib/auth";
-import { hasAnyLoyaltyRead, resolveFirstLoyaltyHref } from "@/lib/loyalty-permissions";
+import { hasAnyLoyaltyRead, loyaltyPendingCount, resolveFirstLoyaltyHref } from "@/lib/loyalty-permissions";
 import { fetchNavCounts } from "@/lib/notifications";
 import { hasPermission } from "@/lib/permissions";
 
@@ -79,12 +79,7 @@ const QUEUE_CARDS = [
     detail: "Pending claims and orders",
     href: "/loyalty?tab=vouchers&status=Pending",
     loyalty: true,
-    count: (c) =>
-      (c?.loyalty?.orders || 0) +
-      (c?.loyalty?.orders_pending_authorization || 0) +
-      (c?.loyalty?.bonus || 0) +
-      (c?.loyalty?.vouchers || 0) +
-      (c?.loyalty?.gifts || 0),
+    count: (c, permissions) => loyaltyPendingCount(c, permissions),
     icon: Gift,
   },
 ];
@@ -127,7 +122,7 @@ export default function AdminHomePage() {
     }).map((card) => ({
       ...card,
       href: card.loyalty ? resolveFirstLoyaltyHref(permissions) || card.href : card.href,
-      value: counts == null ? "—" : Number(card.count(counts) || 0),
+      value: counts == null ? "—" : Number(card.count(counts, permissions) || 0),
     }));
   }, [permissions, counts]);
 

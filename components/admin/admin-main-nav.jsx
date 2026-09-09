@@ -111,7 +111,7 @@ export default function AdminMainNav({ user, roleLabel }) {
     [permissions, navCounts, rateMethods]
   );
   const notifItems = useMemo(() => {
-    return buildNotificationItems(navCounts).filter((item) => {
+    return buildNotificationItems(navCounts, permissions).filter((item) => {
       if (item.checkLoyaltyRead) return hasAnyLoyaltyRead(permissions);
       return !item.permission || hasPermission(permissions, item.permission);
     });
