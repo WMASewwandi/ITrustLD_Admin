@@ -199,15 +199,15 @@ function LoyaltyDetailModal({
   const canReject = isOrders
     ? orderFlags.canReject
     : canMutate &&
-      (tab === "vouchers"
-        ? record.status === "Pending"
-        : record.status === "Pending" || record.status === "Completed" || record.status === "Claimed");
+    (tab === "vouchers"
+      ? record.status === "Pending"
+      : record.status === "Pending" || record.status === "Completed" || record.status === "Claimed");
   const canReopen = isOrders
     ? orderFlags.canReopen
     : canMutate &&
-      (tab === "vouchers"
-        ? false
-        : record.status === "Rejected" || record.status === "Completed" || record.status === "Claimed");
+    (tab === "vouchers"
+      ? false
+      : record.status === "Rejected" || record.status === "Completed" || record.status === "Claimed");
   const canSendForAuthorization = Boolean(orderFlags?.canSendForAuthorization);
   const helpText = isOrders
     ? formatActionHelpText([
@@ -303,8 +303,8 @@ function LoyaltyDetailModal({
                       <NameCell
                         value={record.authorizedBy}
                         unassigned={record.status === "Pending Authorization"}
-                      />
-                    </DetailField>
+                  />
+                </DetailField>
                   </>
                 )}
               </>
@@ -664,8 +664,8 @@ function LoyaltyContent() {
       );
     } catch (err) {
       if (!silent) {
-        setOrdersError(err.message || "Failed to load loyalty orders.");
-        setOrders([]);
+      setOrdersError(err.message || "Failed to load loyalty orders.");
+      setOrders([]);
       }
     } finally {
       ordersInFlightRef.current = false;
@@ -702,8 +702,8 @@ function LoyaltyContent() {
       );
     } catch (err) {
       if (!silent) {
-        setBonusError(err.message || "Failed to load bonus claims.");
-        setBonuses([]);
+      setBonusError(err.message || "Failed to load bonus claims.");
+      setBonuses([]);
       }
     } finally {
       bonusInFlightRef.current = false;
@@ -740,8 +740,8 @@ function LoyaltyContent() {
       );
     } catch (err) {
       if (!silent) {
-        setVoucherError(err.message || "Failed to load voucher claims.");
-        setVouchers([]);
+      setVoucherError(err.message || "Failed to load voucher claims.");
+      setVouchers([]);
       }
     } finally {
       voucherInFlightRef.current = false;
@@ -911,7 +911,7 @@ function LoyaltyContent() {
           ? "Rejected Loyalty Orders"
           : status === "Completed"
             ? "Completed Loyalty Orders"
-            : "Loyalty Orders"
+          : "Loyalty Orders"
       : tab === "bonus"
         ? status === "Rejected"
           ? "Rejected Bonus Claims"
@@ -1301,7 +1301,7 @@ function LoyaltyContent() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-xl font-bold text-white sm:text-2xl">{pageTitle}</h1>
+                <h1 className="text-xl font-bold text-white sm:text-2xl">{pageTitle}</h1>
                   {canManualAssign ? (
                     <button
                       type="button"
@@ -1324,7 +1324,7 @@ function LoyaltyContent() {
                       ? " · approve gift vouchers · reject with reason"
                       : status === "Pending Authorization"
                         ? " · authorize / reject"
-                        : " · approve / reject"}
+                      : " · approve / reject"}
                 </p>
               </div>
               {(tab === "orders" || tab === "bonus" || tab === "vouchers") ? (
