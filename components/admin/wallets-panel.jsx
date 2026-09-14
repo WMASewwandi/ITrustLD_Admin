@@ -491,30 +491,30 @@ function WalletSection({
   }
 
   function renderActivateControl(row, compact = false) {
-    return (
-      <button
-        type="button"
-        disabled={row.hidden}
-        onClick={() => toggleActive(row.id, row.active)}
-        className={`inline-flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium transition ${
-          row.hidden
-            ? "cursor-not-allowed text-slate-600"
-            : row.active
-              ? "text-theme-green-action"
-              : "text-slate-500 hover:text-slate-100"
-        }`}
-      >
-        <span
-          className={`inline-flex h-5 w-5 items-center justify-center rounded border ${
-            row.active && !row.hidden
-              ? "border-theme-green-action bg-theme-green-action text-white"
-              : "border-white/20 bg-admin-surface"
-          }`}
-        >
-          {row.active && !row.hidden ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
-        </span>
+  return (
+              <button
+                type="button"
+                disabled={row.hidden}
+                onClick={() => toggleActive(row.id, row.active)}
+                className={`inline-flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium transition ${
+                  row.hidden
+                    ? "cursor-not-allowed text-slate-600"
+                    : row.active
+                      ? "text-theme-green-action"
+                      : "text-slate-500 hover:text-slate-100"
+                }`}
+              >
+                <span
+                  className={`inline-flex h-5 w-5 items-center justify-center rounded border ${
+                    row.active && !row.hidden
+                      ? "border-theme-green-action bg-theme-green-action text-white"
+                      : "border-white/20 bg-admin-surface"
+                  }`}
+                >
+                  {row.active && !row.hidden ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
+                </span>
         {compact ? null : activateLabel}
-      </button>
+              </button>
     );
   }
 
@@ -560,32 +560,32 @@ function WalletSection({
 
   function renderVoucherStatus(row) {
     return (
-      <span
-        className={
-          row.hidden
-            ? "text-slate-500"
-            : row.allowForVoucher
-              ? "font-semibold text-theme-green-action"
-              : "text-slate-400"
-        }
-      >
-        {row.allowForVoucher ? "Allowed" : "Not allowed"}
-      </span>
+                  <span
+                    className={
+                      row.hidden
+                        ? "text-slate-500"
+                        : row.allowForVoucher
+                          ? "font-semibold text-theme-green-action"
+                          : "text-slate-400"
+                    }
+                  >
+                    {row.allowForVoucher ? "Allowed" : "Not allowed"}
+                  </span>
     );
   }
 
   function renderNavigateStatus(row) {
     if (row.allowNavigateButton) {
       return (
-        <span
-          className={
-            row.hidden
-              ? "break-all text-slate-500"
-              : "break-all font-semibold text-theme-green-action"
-          }
-        >
-          Enabled · {row.navigateButtonLabel || "—"} · {row.navigateUrl || "—"}
-        </span>
+                  <span
+                    className={
+                      row.hidden
+                        ? "break-all text-slate-500"
+                        : "break-all font-semibold text-theme-green-action"
+                    }
+                  >
+                    Enabled · {row.navigateButtonLabel || "—"} · {row.navigateUrl || "—"}
+                  </span>
       );
     }
     return <span className="text-slate-500">Disabled</span>;
@@ -593,18 +593,18 @@ function WalletSection({
 
   function renderTermsLink(row) {
     return (
-      <button
-        type="button"
-        onClick={() => setTermsModal(row)}
-        className={`pointer-events-auto font-semibold underline-offset-2 ${
-          row.hidden
-            ? "cursor-default text-slate-500 no-underline"
-            : "text-admin-teal hover:text-admin-teal-deep hover:underline"
-        }`}
-        disabled={row.hidden}
-      >
-        View terms and conditions
-      </button>
+                <button
+                  type="button"
+                  onClick={() => setTermsModal(row)}
+                  className={`pointer-events-auto font-semibold underline-offset-2 ${
+                    row.hidden
+                      ? "cursor-default text-slate-500 no-underline"
+                      : "text-admin-teal hover:text-admin-teal-deep hover:underline"
+                  }`}
+                  disabled={row.hidden}
+                >
+                  View terms and conditions
+                </button>
     );
   }
 
@@ -614,14 +614,14 @@ function WalletSection({
         <h2 className="text-2xl font-bold tracking-tight text-white">{title}</h2>
         <div className="flex flex-wrap items-center gap-2">
           {onViewModeChange ? <WalletViewSwitch value={viewMode} onChange={onViewModeChange} /> : null}
-          <button
-            type="button"
+                  <button
+                    type="button"
             onClick={openAdd}
             className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-admin-surface px-3.5 py-2 text-sm font-semibold text-slate-300 shadow-sm transition hover:border-white/25 hover:bg-white/5"
-          >
+                  >
             <Plus className="h-4 w-4" />
             Add Wallet
-          </button>
+                  </button>
         </div>
       </div>
 
