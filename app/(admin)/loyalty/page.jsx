@@ -142,7 +142,9 @@ function getOrderActionFlags(record, {
       (isPending && mayUpdate && (isAdmin || !authRequired)) ||
       (isPendingAuth && (mayAuthorize || (mayUpdate && !requiresAuthorization))) ||
       (isRejected && mayUpdate),
-    canReopen: (isRejected || isCompleted) && mayUpdate,
+    canReopen:
+      ((isRejected || isCompleted) && mayUpdate) ||
+      (isPendingAuth && (mayUpdate || mayAuthorize)),
   };
 }
 
@@ -1323,7 +1325,7 @@ function LoyaltyContent() {
                     : tab === "vouchers"
                       ? " · approve gift vouchers · reject with reason"
                       : status === "Pending Authorization"
-                        ? " · authorize / reject"
+                        ? " · authorize / reject / reopen as pending"
                       : " · approve / reject"}
                 </p>
               </div>
