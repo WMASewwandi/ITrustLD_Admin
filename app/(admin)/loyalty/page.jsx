@@ -36,9 +36,9 @@ const TABS = [
 
 function DetailField({ label, children }) {
   return (
-    <div className="rounded-lg bg-white/5 px-3 py-2">
+    <div className="min-w-0 rounded-lg bg-white/5 px-3 py-2">
       <dt className="mb-0.5 text-[11px] text-slate-400">{label}</dt>
-      <dd className="text-sm font-medium text-white">{children}</dd>
+      <dd className="min-w-0 text-sm font-medium text-white">{children}</dd>
     </div>
   );
 }
@@ -267,7 +267,7 @@ function LoyaltyDetailModal({
               <DateTimeCell value={record.date} />
             </DetailField>
             <DetailField label="User">
-              <IdNameCell id={record.userId} name={record.customer} />
+              <IdNameCell id={record.userId} name={record.customer} nowrap={false} />
             </DetailField>
             {tab === "orders" ? (
               <>
