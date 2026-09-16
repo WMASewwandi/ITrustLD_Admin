@@ -94,8 +94,8 @@ function CommissionBar({ members, period }) {
           />
         ))}
       </div>
-      <ul className="space-y-2">
-        {members.slice(0, 6).map((member, index) => (
+      <ul className="max-h-56 space-y-2 overflow-y-auto pr-1">
+        {members.map((member, index) => (
           <li key={member.id} className="flex items-center justify-between text-xs">
             <span className="flex items-center gap-2 text-slate-400">
               <span className="h-2 w-2 rounded-full" style={{ backgroundColor: colors[index % colors.length] }} />
@@ -122,8 +122,14 @@ export default function TeamPerformancePage() {
   const [error, setError] = useState("");
   const [data, setData] = useState(null);
 
-  const { roles, permissions } = getCurrentAdminAccess();
-  const allowed = canViewTeamPerformance(roles, permissions);
+  // Admin roles live in localStorage, so resolve them after mount to keep the
+  // server and first client render identical.
+  const [access, setAccess] = useState(null);
+  const allowed = access ? canViewTeamPerformance(access.roles, access.permissions) : false;
+
+  useEffect(() => {
+    setAccess(getCurrentAdminAccess());
+  }, []);
 
   const loadTeamPerformance = useCallback(async () => {
     if (!allowed) return;
@@ -141,21 +147,22 @@ export default function TeamPerformancePage() {
   }, [allowed, period, from, to]);
 
   useEffect(() => {
+    if (!access) return;
     if (!allowed) {
       router.replace("/performance");
       return;
     }
     loadTeamPerformance();
-  }, [allowed, loadTeamPerformance, router]);
+  }, [access, allowed, loadTeamPerformance, router]);
 
   function toggleRow(id) {
     setExpanded((prev) => (prev === id ? null : id));
   }
 
-  if (!allowed) {
+  if (!access || !allowed) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center text-sm text-slate-400">
-        Redirecting…
+        {access ? "Redirecting…" : "Checking access…"}
       </div>
     );
   }
