@@ -467,6 +467,7 @@ export default function LoyaltyManagementPanel({ canMutate = true }) {
   const [smsSending, setSmsSending] = useState(false);
   const [smsMessage, setSmsMessage] = useState("");
   const smsSectionRef = useRef(null);
+  const requestIdRef = useRef(0);
 
   const setAudience = useCallback(
     (nextParam) => {
@@ -496,20 +497,26 @@ export default function LoyaltyManagementPanel({ canMutate = true }) {
 
   const reload = useCallback(
     async (silent = false) => {
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
       if (!silent) setLoading(true);
       else setRefreshing(true);
       setError("");
       try {
         const response = await fetchLoyaltyManagementConfigs(audienceKey, selectedTier);
+        if (requestId !== requestIdRef.current) return;
         setData(response);
         setSelectedEmails({});
         setRankSelectAll(false);
       } catch (err) {
+        if (requestId !== requestIdRef.current) return;
         setError(err.message || "Failed to load loyalty management data.");
         setData(null);
       } finally {
-        setLoading(false);
-        setRefreshing(false);
+        if (requestId === requestIdRef.current) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     },
     [audienceKey, selectedTier],
@@ -533,6 +540,11 @@ export default function LoyaltyManagementPanel({ canMutate = true }) {
     router.replace(`${pathname}?${params.toString()}`);
   }, [audienceOption.param, pathname, router, searchParams]);
 
+  // A payload fetched for the other audience must never be rendered as this one —
+  // its point/bonus rows belong to the wrong audience and loyalty_levels is null.
+  const dataMatchesAudience = data
+    ? String(data.audience || "") === (isAffiliate ? "partner" : "standard")
+    : false;
   const topEarners = data?.top_earners || [];
   const pointRows = data?.point_collections || [];
   const bonusRows = data?.bonuses || [];
@@ -902,7 +914,7 @@ export default function LoyaltyManagementPanel({ canMutate = true }) {
         </div>
       ) : null}
 
-      {loading ? (
+      {loading || (!error && !dataMatchesAudience) ? (
         <div className="flex items-center justify-center gap-2 py-16 text-slate-400">
           <Loader2 className="h-5 w-5 animate-spin" />
           Loading loyalty management…
